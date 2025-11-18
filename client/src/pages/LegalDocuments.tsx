@@ -265,7 +265,7 @@ export default function LegalDocuments() {
                       {children}
                     </td>
                   ),
-                  code: ({ node, inline, children, ...props }) =>
+                  code: ({ node, inline, children, ...props }: any) =>
                     inline ? (
                       <code
                         className="bg-gradient-to-r from-orange-100 to-blue-100 text-[#0033A0] px-2 py-1 rounded font-mono text-sm font-semibold shadow-sm"

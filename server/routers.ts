@@ -365,7 +365,15 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         try {
-          await db.updateUserProfile(ctx.user.id, input);
+          // Map firstName/lastName to name for updateUserProfile
+          const profileUpdate = {
+            name: input.firstName && input.lastName 
+              ? `${input.firstName} ${input.lastName}`
+              : input.firstName || input.lastName || undefined,
+            phone: input.phoneNumber,
+          };
+          
+          await db.updateUserProfile(ctx.user.id, profileUpdate);
           
           // Log the activity
           await db.logAccountActivity({
@@ -540,10 +548,13 @@ export const appRouter = router({
           });
 
           // Send email notification about deletion request
-          if (ctx.user.email) {
+          if (ctx.user.email && ctx.user.name) {
             await sendLoginNotificationEmail(
               ctx.user.email,
-              `Account deletion request received - ${new Date().toLocaleString()}`
+              ctx.user.name,
+              new Date(),
+              ctx.req?.ip || (ctx.req?.headers?.['x-forwarded-for'] as string) || '',
+              ctx.req?.headers?.['user-agent'] as string || ''
             );
           }
 
@@ -1258,7 +1269,7 @@ export const appRouter = router({
         if (user?.email) {
           await sendApplicationApprovedNotificationEmail(
             user.email,
-            user.fullName || user.email,
+            user.name || user.email,
             application.trackingNumber || `APP-${input.id}`,
             input.approvedAmount,
             processingFeeAmount,
@@ -1283,6 +1294,12 @@ export const appRouter = router({
           throw new TRPCError({ code: "FORBIDDEN" });
         }
 
+        // Get application details
+        const application = await db.getLoanApplicationById(input.id);
+        if (!application) {
+          throw new TRPCError({ code: "NOT_FOUND" });
+        }
+
         await db.updateLoanApplicationStatus(input.id, "rejected", {
           rejectionReason: input.rejectionReason,
         });
@@ -1292,7 +1309,7 @@ export const appRouter = router({
         if (user?.email) {
           await sendApplicationRejectedNotificationEmail(
             user.email,
-            user.fullName || user.email,
+            user.name || user.email,
             application.trackingNumber || `APP-${input.id}`,
             input.rejectionReason
           ).catch((error) => {
@@ -1446,6 +1463,13 @@ export const appRouter = router({
         if (input.paymentMethod === "card" && input.opaqueData) {
           // Create payment record first (for audit trail and retry logic)
           const payment = await db.createPayment(paymentData);
+          
+          if (!payment) {
+            throw new TRPCError({ 
+              code: "INTERNAL_SERVER_ERROR", 
+              message: "Failed to create payment record" 
+            });
+          }
 
           const result = await createAuthorizeNetTransaction(
             application.processingFeeAmount,
@@ -1455,7 +1479,7 @@ export const appRouter = router({
 
           if (!result.success) {
             // Update payment to failed (don't throw immediately)
-            await db.updatePaymentStatus(payment[0].id, "failed", {
+            await db.updatePaymentStatus(payment.id, "failed", {
               failureReason: result.error || "Card payment failed",
             });
             
@@ -1473,7 +1497,7 @@ export const appRouter = router({
           }
 
           // Payment succeeded - update record
-          await db.updatePaymentStatus(payment[0].id, "succeeded", {
+          await db.updatePaymentStatus(payment.id, "succeeded", {
             paymentIntentId: result.transactionId,
             cardLast4: result.cardLast4,
             cardBrand: result.cardBrand,
@@ -1485,7 +1509,7 @@ export const appRouter = router({
 
           const cardResponse = { 
             success: true, 
-            paymentId: payment[0].id,
+            paymentId: payment.id,
             amount: application.processingFeeAmount,
             transactionId: result.transactionId,
             message: "Payment processed successfully"
@@ -1495,7 +1519,7 @@ export const appRouter = router({
           if (input.idempotencyKey) {
             await db.storeIdempotencyResult(
               input.idempotencyKey,
-              payment[0].id,
+              payment.id,
               cardResponse,
               "success"
             ).catch(err => console.warn("[Idempotency] Failed to cache card payment result:", err));
@@ -1530,13 +1554,20 @@ export const appRouter = router({
 
           // Create payment record
           const cryptoPayment = await db.createPayment(paymentData);
+          
+          if (!cryptoPayment) {
+            throw new TRPCError({ 
+              code: "INTERNAL_SERVER_ERROR", 
+              message: "Failed to create payment record" 
+            });
+          }
 
           // Update loan status to fee_pending
           await db.updateLoanApplicationStatus(input.loanApplicationId, "fee_pending");
 
           const cryptoResponse = { 
             success: true,
-            paymentId: cryptoPayment[0]?.id,
+            paymentId: cryptoPayment?.id,
             amount: application.processingFeeAmount,
             cryptoAddress: charge.paymentAddress,
             cryptoAmount: charge.cryptoAmount,
@@ -1546,7 +1577,7 @@ export const appRouter = router({
           if (input.idempotencyKey) {
             await db.storeIdempotencyResult(
               input.idempotencyKey,
-              cryptoPayment[0]?.id || 0,
+              cryptoPayment?.id || 0,
               cryptoResponse,
               "success"
             ).catch(err => console.warn("[Idempotency] Failed to cache crypto payment result:", err));
@@ -1885,7 +1916,7 @@ export const appRouter = router({
           estimatedDate.setDate(estimatedDate.getDate() + 2); // Estimated 2 business days
           await sendApplicationDisbursedNotificationEmail(
             user.email,
-            user.fullName || user.email,
+            user.name || user.email,
             application.trackingNumber || `APP-${input.loanApplicationId}`,
             application.approvedAmount || 0,
             estimatedDate.toLocaleDateString("en-US", { 
@@ -2162,7 +2193,7 @@ export const appRouter = router({
               // Get most recent application for current status
               const application = applications[0];
               supportContext.loanStatus = application.status;
-              supportContext.loanAmount = application.loanAmount;
+              supportContext.loanAmount = application.requestedAmount;
               
               // Determine customer relationship duration
               if (applications.length === 1) {
@@ -2319,11 +2350,19 @@ export const appRouter = router({
       )
       .mutation(async ({ input }) => {
         try {
-          const application = await db.getDb()
+          const dbInstance = await getDb();
+          if (!dbInstance) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Database connection failed",
+            });
+          }
+          
+          const application = await (dbInstance as any)
             .query.loanApplications
             .findFirst({
               where: and(
-                eq(loanApplications.id, input.applicationId),
+                eq(loanApplications.trackingNumber, input.applicationId),
                 eq(loanApplications.email, input.email)
               ),
             });
@@ -2538,7 +2577,7 @@ APPLICANT INFO:
 - Monthly Income: $${application.monthlyIncome || "Not provided"}
 
 DOCUMENTS:
-- Submitted at: ${application.documentSubmittedAt ? new Date(application.documentSubmittedAt).toLocaleDateString() : "Not submitted"}
+- Submitted at: ${application.createdAt ? new Date(application.createdAt).toLocaleDateString() : "Not submitted"}
 
 Provide:
 1. Risk Level (LOW/MEDIUM/HIGH)
@@ -2567,7 +2606,7 @@ Be concise and data-driven.`;
           return {
             success: true,
             applicationId: input.applicationId,
-            applicantName: user?.fullName || "Unknown",
+            applicantName: user?.name || "Unknown",
             recommendation: recommendation,
             timestamp: new Date(),
           };

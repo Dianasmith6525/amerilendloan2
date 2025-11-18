@@ -94,7 +94,7 @@ export default function Settings() {
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [showBackupCodes, setShowBackupCodes] = useState(false);
   const [deleteReason, setDeleteReason] = useState("");
-  const [activeTab, setActiveTab] = useState<"password" | "email" | "bank" | "notifications" | "profile" | "2fa" | "devices" | "danger">("password");
+  const [activeTab, setActiveTab] = useState<"password" | "email" | "bank" | "notifications" | "profile" | "2fa" | "devices" | "activity" | "danger">("password");
   const [activityLog, setActivityLog] = useState<any[]>([]);
   const [twoFAEnabled, setTwoFAEnabled] = useState(false);
   const [trustedDevices, setTrustedDevices] = useState<any[]>([]);
@@ -175,16 +175,19 @@ export default function Settings() {
     },
   });
 
-  const getTrustedDevicesMutation = trpc.auth.getTrustedDevices.useMutation({
-    onSuccess: (data) => {
-      setTrustedDevices(data);
-    },
+  const getTrustedDevicesQuery = trpc.auth.getTrustedDevices.useQuery(undefined, {
+    enabled: isAuthenticated,
   });
+
+  // Update trusted devices when query succeeds
+  if (getTrustedDevicesQuery.data) {
+    setTrustedDevices(getTrustedDevicesQuery.data);
+  }
 
   const removeTrustedDeviceMutation = trpc.auth.removeTrustedDevice.useMutation({
     onSuccess: () => {
       toast.success("Device removed successfully!");
-      getTrustedDevicesMutation.mutate();
+      getTrustedDevicesQuery.refetch();
     },
     onError: (error) => {
       toast.error(error.message || "Failed to remove device");
@@ -225,8 +228,10 @@ export default function Settings() {
   if (getUserProfileQuery.data && activeTab === "profile") {
     setProfileForm(prev => ({
       ...prev,
-      ...getUserProfileQuery.data,
-    }));
+      ...Object.fromEntries(
+        Object.entries(getUserProfileQuery.data || {}).filter(([key]) => key in prev)
+      ),
+    } as typeof profileForm));
   }
 
   if (get2FAQuery.data && activeTab === "2fa") {
@@ -934,7 +939,7 @@ export default function Settings() {
                 </div>
 
                 <Button
-                  onClick={() => getTrustedDevicesMutation.mutate()}
+                  onClick={() => getTrustedDevicesQuery.refetch()}
                   variant="outline"
                   className="w-full"
                 >

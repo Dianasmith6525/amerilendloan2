@@ -566,8 +566,8 @@ export async function createPayment(data: InsertPayment) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(payments).values(data);
-  return result;
+  const result = await db.insert(payments).values(data).returning();
+  return result.length > 0 ? result[0] : null;
 }
 
 export async function getPaymentById(id: number) {
