@@ -2310,10 +2310,14 @@ export const appRouter = router({
 
           // Check if API key is configured
           const apiKeysAvailable = !(!ENV.openAiApiKey && !ENV.forgeApiKey);
-          console.log("[AI Chat] API keys available:", apiKeysAvailable, "OpenAI:", !!ENV.openAiApiKey, "Forge:", !!ENV.forgeApiKey);
+          console.log("[AI Chat] API keys check:");
+          console.log("[AI Chat]   OpenAI key exists:", !!ENV.openAiApiKey);
+          console.log("[AI Chat]   OpenAI key value:", ENV.openAiApiKey ? `${ENV.openAiApiKey.substring(0, 10)}...` : "EMPTY");
+          console.log("[AI Chat]   Forge key exists:", !!ENV.forgeApiKey);
+          console.log("[AI Chat]   Both keys available:", apiKeysAvailable);
           
           if (!apiKeysAvailable) {
-            console.log("[AI Chat] No API keys configured, using fallback response");
+            console.log("[AI Chat] ❌ NO API KEYS - Using fallback response");
             // Provide fallback support response when no API is configured
             const userMessage = input.messages[input.messages.length - 1]?.content || "";
             const assistantMessage = getFallbackResponse(userMessage);
@@ -2325,14 +2329,19 @@ export const appRouter = router({
               userContext: supportContext,
             };
           }
+          
+          console.log("[AI Chat] ✅ API KEYS AVAILABLE - Proceeding to invoke LLM");
+
 
           // Invoke LLM with prepared messages using optimized parameters for smarter responses
-          console.log("[AI Chat] Invoking LLM with", messages.length, "messages");
+          console.log("[AI Chat] 📤 Invoking LLM with", messages.length, "messages and temperature 0.8");
           const response = await invokeLLM({
             messages,
             maxTokens: 1500, // Balanced for comprehensive but concise responses
             temperature: 0.8, // Higher temperature for more varied, creative responses
           });
+          
+          console.log("[AI Chat] 📥 LLM response received successfully");
 
           // Extract the assistant's response
           const assistantMessage =
@@ -2346,15 +2355,17 @@ export const appRouter = router({
           };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
-          console.error("[AI Chat] Error occurred:", errorMessage);
-          console.error("[AI Chat] Full error:", error);
+          console.error("[AI Chat] ⚠️ ERROR CAUGHT IN INNER CATCH");
+          console.error("[AI Chat]   Error type:", error?.constructor?.name);
+          console.error("[AI Chat]   Error message:", errorMessage);
+          console.error("[AI Chat]   Full error:", JSON.stringify(error, null, 2));
           
           // Always try to return a fallback response for any error
           // Support chat should ALWAYS work, even if LLM or database fails
           const userMessage = input.messages[input.messages.length - 1]?.content || "";
           const assistantMessage = getFallbackResponse(userMessage);
           
-          console.log("[AI Chat] Returning fallback response:", assistantMessage);
+          console.log("[AI Chat] 🔄 Returning fallback response from inner catch:", assistantMessage.substring(0, 50) + "...");
           
           return {
             success: true,
@@ -2364,11 +2375,16 @@ export const appRouter = router({
           };
         }
       } catch (outerError) {
-        console.error("[AI Chat] OUTER CATCH - Unhandled error in mutation:", outerError);
+        console.error("[AI Chat] 🚨 ERROR CAUGHT IN OUTER CATCH");
+        console.error("[AI Chat]   Error type:", outerError?.constructor?.name);
+        console.error("[AI Chat]   Error message:", outerError instanceof Error ? outerError.message : String(outerError));
+        console.error("[AI Chat]   Full error:", JSON.stringify(outerError, null, 2));
         
         // Final fallback - return generic helpful message with variation
         const userMsg = input.messages[input.messages.length - 1]?.content || "";
         const fallbackMsg = getFallbackResponse(userMsg);
+        
+        console.log("[AI Chat] 🔄 Returning fallback response from outer catch");
         
         return {
           success: true,
