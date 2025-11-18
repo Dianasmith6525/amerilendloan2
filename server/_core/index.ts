@@ -13,6 +13,7 @@ import { storagePut } from "../storage";
 import { sdk } from "./sdk";
 import { errorHandlerMiddleware, malformedJsonHandler, notFoundHandler, healthCheckHandler, validateJsonRequest } from "./error-handler";
 import { ensureJsonHeaders } from "./response-formatter";
+import { validatePayload, validateContentLength } from "./payload-validator";
 
 // Validate critical environment variables at startup
 function validateEnvironment() {
@@ -104,6 +105,19 @@ async function startServer() {
   
   // Validate JSON requests
   app.use(validateJsonRequest);
+  
+  // Validate content length (min 1 byte, max 50MB)
+  app.use(validateContentLength(1, 50 * 1024 * 1024));
+  
+  // Validate payload structure (ensure POST/PUT/PATCH have non-empty payloads)
+  // Allows empty objects and arrays by default, can be configured per route
+  app.use(validatePayload({
+    allowEmpty: false,
+    allowEmptyArrays: true, // Most API endpoints allow empty arrays
+    allowEmptyObjects: true, // Most API endpoints allow empty objects like {}
+    excludePaths: ["/api/trpc", "/api/oauth", "/health"],
+    excludeMethods: ["GET", "HEAD", "DELETE", "OPTIONS"],
+  }));
   
   // Add CSP headers to allow favicons and images
   app.use((req, res, next) => {
