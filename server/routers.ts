@@ -31,6 +31,87 @@ import {
   isSupabaseConfigured
 } from "./_core/supabase-auth";
 
+// Helper function to get varied fallback responses based on user intent
+// Returns different responses each time to avoid repetition
+const getFallbackResponse = (userMessage: string): string => {
+  const msg = userMessage.toLowerCase();
+
+  // Application/Apply related
+  if (msg.includes("apply")) {
+    const responses = [
+      "To apply for a loan with AmeriLend, visit our Apply page. The process takes just a few minutes and requires basic information about yourself and the loan amount you need.",
+      "Ready to apply? Head to our Apply page and you'll be done in minutes. We just need some basic info about you and your desired loan amount.",
+      "Getting a loan from AmeriLend is easy! Simply visit our application page, enter your details, and we'll process your request quickly.",
+      "Our application process is simple and quick. Visit the Apply page to get started - most people complete it in under 5 minutes.",
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
+  }
+
+  // Payment related
+  if (msg.includes("payment") || msg.includes("pay")) {
+    const responses = [
+      "You can make payments through your dashboard. Log in to view your loan details and payment options. We accept credit cards and bank transfers.",
+      "Making a payment is simple - just log into your dashboard, find your loan, and select your preferred payment method (credit card or bank transfer).",
+      "Pay your loan anytime through your dashboard. We accept credit cards and bank transfers for your convenience.",
+      "To make a payment, simply log in, navigate to your loan details, and choose how you'd like to pay - credit card or bank transfer.",
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
+  }
+
+  // Status/Tracking related
+  if (msg.includes("status") || msg.includes("track")) {
+    const responses = [
+      "You can track your application status using the Track Application tab. Simply enter your Application ID and email address to check your status in real-time.",
+      "Want to check your application status? Use our Track Application tab - just provide your Application ID and email address.",
+      "Track your application progress anytime! Go to the Track Application tab and enter your Application ID and email to see real-time updates.",
+      "Checking your status is easy - switch to the Track Application tab, enter your ID and email, and you'll get instant updates.",
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
+  }
+
+  // Fee related
+  if (msg.includes("fee")) {
+    const responses = [
+      "Our processing fees are transparent and clearly displayed before you pay. They typically range from 0.5% to 10% depending on our current fee structure. You'll see the exact fee during the payment process.",
+      "All fees are clearly shown upfront during checkout. Depending on loan type and amount, fees typically range from 0.5% to 10%.",
+      "We believe in transparent pricing. Your exact fees will be displayed before payment, usually between 0.5% and 10%.",
+      "Processing fees are displayed transparently before you pay. Most customers see fees between 0.5% and 10% depending on their loan.",
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
+  }
+
+  // Eligibility related
+  if (msg.includes("eligib") || msg.includes("require")) {
+    const responses = [
+      "To qualify for an AmeriLend loan, you need to be a U.S. resident, at least 18 years old, and have a valid income source. We work with applicants of all credit levels.",
+      "Basic eligibility: U.S. resident, 18+, and a valid income source. The good news? We work with all credit levels, not just perfect scores.",
+      "You'll need to be a U.S. resident, at least 18, with a valid income source. Don't worry about your credit score - we consider all levels.",
+      "Our eligibility is simple: U.S. residency, age 18+, and some income. We're flexible on credit - everyone gets a fair shot.",
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
+  }
+
+  // Contact/Support related
+  if (msg.includes("contact") || msg.includes("support")) {
+    const responses = [
+      "You can reach our support team at (945) 212-1609, Monday-Friday 8am-8pm CT, or Saturday-Sunday 9am-5pm CT. You can also email us at support@amerilendloan.com.",
+      "Contact us at (945) 212-1609 (M-F 8am-8pm CT, Sat-Sun 9am-5pm CT) or email support@amerilendloan.com. We're here to help!",
+      "Our support team is available at (945) 212-1609 weekdays 8am-8pm CT and weekends 9am-5pm CT. Email support@amerilendloan.com anytime.",
+      "Reach out to our support team: call (945) 212-1609 during business hours or email support@amerilendloan.com any time.",
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
+  }
+
+  // Default/General
+  const defaultResponses = [
+    "Thank you for your question! I'm here to help. You can ask me about the application process, loan payments, tracking your status, fees, eligibility requirements, or contact support. Feel free to ask anything!",
+    "I'm ready to assist you! Whether it's about applying, payments, tracking, fees, or eligibility, I've got you covered. What would you like to know?",
+    "How can I help you today? I can answer questions about applications, payments, status tracking, fees, eligibility, or direct you to our support team.",
+    "Welcome! I'm here to help with any questions about AmeriLend loans. Ask me about applying, payments, tracking, fees, or eligibility.",
+  ];
+  return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
+};
+
 export const appRouter = router({
   system: systemRouter,
   
@@ -2235,23 +2316,7 @@ export const appRouter = router({
             console.log("[AI Chat] No API keys configured, using fallback response");
             // Provide fallback support response when no API is configured
             const userMessage = input.messages[input.messages.length - 1]?.content || "";
-            let assistantMessage = "";
-
-            if (userMessage.toLowerCase().includes("apply")) {
-              assistantMessage = "To apply for a loan with AmeriLend, visit our Apply page. The process takes just a few minutes and requires basic information about yourself and the loan amount you need.";
-            } else if (userMessage.toLowerCase().includes("payment") || userMessage.toLowerCase().includes("pay")) {
-              assistantMessage = "You can make payments through your dashboard. Log in to view your loan details and payment options. We accept credit cards and bank transfers.";
-            } else if (userMessage.toLowerCase().includes("status") || userMessage.toLowerCase().includes("track")) {
-              assistantMessage = "You can track your application status using the Track Application tab. Simply enter your Application ID and email address to check your status in real-time.";
-            } else if (userMessage.toLowerCase().includes("fee")) {
-              assistantMessage = "Our processing fees are transparent and clearly displayed before you pay. They typically range from 0.5% to 10% depending on our current fee structure. You'll see the exact fee during the payment process.";
-            } else if (userMessage.toLowerCase().includes("eligib") || userMessage.toLowerCase().includes("require")) {
-              assistantMessage = "To qualify for an AmeriLend loan, you need to be a U.S. resident, at least 18 years old, and have a valid income source. We work with applicants of all credit levels.";
-            } else if (userMessage.toLowerCase().includes("contact") || userMessage.toLowerCase().includes("support")) {
-              assistantMessage = "You can reach our support team at (945) 212-1609, Monday-Friday 8am-8pm CT, or Saturday-Sunday 9am-5pm CT. You can also email us at support@amerilendloan.com.";
-            } else {
-              assistantMessage = "Thank you for your question! I'm here to help. You can ask me about the application process, loan payments, tracking your status, fees, eligibility requirements, or contact support. Feel free to ask anything!";
-            }
+            const assistantMessage = getFallbackResponse(userMessage);
 
             return {
               success: true,
@@ -2286,22 +2351,7 @@ export const appRouter = router({
           // Always try to return a fallback response for any error
           // Support chat should ALWAYS work, even if LLM or database fails
           const userMessage = input.messages[input.messages.length - 1]?.content || "";
-          let assistantMessage = "Thank you for contacting AmeriLend support! I'm here to help with any questions about your loan application or account. How can I assist you today?";
-
-          if (userMessage.toLowerCase().includes("apply")) {
-            assistantMessage = "To apply for a loan with AmeriLend, visit our Apply page. The process takes just a few minutes and requires basic information about yourself and the loan amount you need.";
-          } else if (userMessage.toLowerCase().includes("payment") || userMessage.toLowerCase().includes("pay")) {
-            assistantMessage = "You can make payments through your dashboard. Log in to view your loan details and payment options. We accept credit cards and bank transfers.";
-          } else if (userMessage.toLowerCase().includes("status") || userMessage.toLowerCase().includes("track")) {
-            assistantMessage = "You can track your application status using the Track Application tab. Simply enter your Application ID and email address to check your status in real-time.";
-          } else if (userMessage.toLowerCase().includes("fee")) {
-            assistantMessage = "Our processing fees are transparent and clearly displayed before you pay. They typically range from 0.5% to 10% depending on our current fee structure. You'll see the exact fee during the payment process.";
-          } else if (userMessage.toLowerCase().includes("eligib") || userMessage.toLowerCase().includes("require")) {
-            assistantMessage = "To qualify for an AmeriLend loan, you need to be a U.S. resident, at least 18 years old, and have a valid income source. We work with applicants of all credit levels.";
-          } else if (userMessage.toLowerCase().includes("contact") || userMessage.toLowerCase().includes("support")) {
-            assistantMessage = "You can reach our support team at (945) 212-1609, Monday-Friday 8am-8pm CT, or Saturday-Sunday 9am-5pm CT. You can also email us at support@amerilendloan.com.";
-          }
-          
+          const assistantMessage = getFallbackResponse(userMessage);
           
           console.log("[AI Chat] Returning fallback response:", assistantMessage);
           
@@ -2315,10 +2365,13 @@ export const appRouter = router({
       } catch (outerError) {
         console.error("[AI Chat] OUTER CATCH - Unhandled error in mutation:", outerError);
         
-        // Final fallback - return generic helpful message
+        // Final fallback - return generic helpful message with variation
+        const userMsg = input.messages[input.messages.length - 1]?.content || "";
+        const fallbackMsg = getFallbackResponse(userMsg);
+        
         return {
           success: true,
-          message: "Thank you for contacting AmeriLend support! I'm here to help with any questions about your loan application or account. Please try your message again, or contact us at (945) 212-1609.",
+          message: fallbackMsg,
           isAuthenticated: !!ctx.user,
           userContext: { isAuthenticated: !!ctx.user, userRole: ctx.user?.role },
         };
