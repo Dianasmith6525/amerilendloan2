@@ -4,6 +4,8 @@
  */
 
 import { ENV } from "./env";
+import { getEmailHeader, getEmailFooter, COMPANY_INFO } from "./companyConfig";
+import { getLocationFromIP } from "./geolocation";
 
 export type EmailPayload = {
   to: string;
@@ -104,11 +106,9 @@ export async function sendOTPEmail(email: string, code: string, purpose: "signup
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${subject}</title>
       </head>
-      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background-color: #0033A0; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">AmeriLend</h1>
-        </div>
-        <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #ddd;">
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
           <h2 style="color: #0033A0; margin-top: 0;">${title}</h2>
           <p>${message}</p>
           <div style="background-color: #0033A0; color: white; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
@@ -118,9 +118,7 @@ export async function sendOTPEmail(email: string, code: string, purpose: "signup
           <p style="color: #999; font-size: 12px; text-align: center;">This code will expire in 10 minutes.</p>
           <p style="color: #999; font-size: 12px; text-align: center;">If you didn't request this code, please ignore this email.</p>
         </div>
-        <div style="background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-          <p style="margin: 0;">© 2025 AmeriLend. All rights reserved.</p>
-        </div>
+        ${getEmailFooter()}
       </body>
     </html>
   `;
@@ -149,11 +147,9 @@ export async function sendLoanApplicationReceivedEmail(
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${subject}</title>
       </head>
-      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background-color: #0033A0; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">AmeriLend</h1>
-        </div>
-        <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #ddd;">
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
           <h2 style="color: #0033A0; margin-top: 0;">Application Received!</h2>
           <p>Dear ${fullName},</p>
           <p>Thank you for submitting your loan application to AmeriLend. We've received your application and our team is reviewing it.</p>
@@ -172,11 +168,9 @@ export async function sendLoanApplicationReceivedEmail(
             <li>You can track your application status in your dashboard</li>
           </ul>
 
-          <p style="margin-top: 30px;">If you have any questions, please don't hesitate to contact our support team at <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a> or call us at +1 945 212-1609.</p>
+          <p style="margin-top: 30px;">If you have any questions, please don't hesitate to contact our support team at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or call us at ${COMPANY_INFO.contact.phone}.</p>
         </div>
-        <div style="background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-          <p style="margin: 0;">© 2025 AmeriLend. All rights reserved.</p>
-        </div>
+        ${getEmailFooter()}
       </body>
     </html>
   `;
@@ -207,11 +201,9 @@ export async function sendLoanApplicationApprovedEmail(
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${subject}</title>
       </head>
-      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background-color: #0033A0; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">AmeriLend</h1>
-        </div>
-        <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #ddd;">
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
           <div style="text-align: center; margin-bottom: 20px;">
             <div style="background-color: #28a745; color: white; display: inline-block; padding: 10px 20px; border-radius: 5px; font-size: 18px; font-weight: bold;">
               ✓ APPROVED
@@ -238,11 +230,9 @@ export async function sendLoanApplicationApprovedEmail(
             <a href="https://amerilendloan.com/dashboard" style="background-color: #FFA500; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Go to Dashboard</a>
           </div>
 
-          <p style="margin-top: 30px;">Questions? Contact us at <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a> or +1 945 212-1609.</p>
+          <p style="margin-top: 30px;">Questions? Contact us at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
         </div>
-        <div style="background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-          <p style="margin: 0;">© 2025 AmeriLend. All rights reserved.</p>
-        </div>
+        ${getEmailFooter()}
       </body>
     </html>
   `;
@@ -269,11 +259,9 @@ export async function sendLoanApplicationRejectedEmail(
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${subject}</title>
       </head>
-      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background-color: #0033A0; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">AmeriLend</h1>
-        </div>
-        <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #ddd;">
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
           <h2 style="color: #0033A0; margin-top: 0;">Application Update</h2>
           <p>Dear ${fullName},</p>
           <p>Thank you for your interest in AmeriLend and for taking the time to submit your loan application.</p>
@@ -292,11 +280,9 @@ export async function sendLoanApplicationRejectedEmail(
             <li>Work on improving your credit profile and financial standing</li>
           </ul>
 
-          <p style="margin-top: 30px;">If you have questions about this decision or would like to discuss alternative options, please contact our support team at <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a> or call +1 945 212-1609.</p>
+          <p style="margin-top: 30px;">If you have questions about this decision or would like to discuss alternative options, please contact our support team at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or call ${COMPANY_INFO.contact.phone}.</p>
         </div>
-        <div style="background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-          <p style="margin: 0;">© 2025 AmeriLend. All rights reserved.</p>
-        </div>
+        ${getEmailFooter()}
       </body>
     </html>
   `;
@@ -325,11 +311,9 @@ export async function sendLoanApplicationProcessingEmail(
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${subject}</title>
       </head>
-      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background-color: #0033A0; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">AmeriLend</h1>
-        </div>
-        <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #ddd;">
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
           <h2 style="color: #0033A0; margin-top: 0;">Action Required: Complete Payment</h2>
           <p>Dear ${fullName},</p>
           <p>Your loan application is currently being processed and we're almost ready to disburse your funds!</p>
@@ -348,11 +332,9 @@ export async function sendLoanApplicationProcessingEmail(
             <a href="https://amerilendloan.com/dashboard" style="background-color: #FFA500; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Pay Processing Fee</a>
           </div>
 
-          <p style="margin-top: 30px;">Questions? Contact us at <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a> or +1 945 212-1609.</p>
+          <p style="margin-top: 30px;">Questions? Contact us at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
         </div>
-        <div style="background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-          <p style="margin: 0;">© 2025 AmeriLend. All rights reserved.</p>
-        </div>
+        ${getEmailFooter()}
       </body>
     </html>
   `;
@@ -379,6 +361,12 @@ export async function sendLoginNotificationEmail(
     minute: '2-digit',
     timeZone: 'America/New_York'
   });
+
+  // Get location from IP address
+  let locationInfo = 'Unknown';
+  if (ipAddress && ipAddress !== 'Unknown') {
+    locationInfo = await getLocationFromIP(ipAddress);
+  }
   
   // Parse user agent for device/browser info
   let deviceInfo = 'Unknown device';
@@ -398,7 +386,7 @@ export async function sendLoginNotificationEmail(
   }
   
   const subject = "New Login to Your AmeriLend Account";
-  const text = `Dear ${fullName},\n\nWe detected a new login to your AmeriLend account.\n\nLogin Details:\nTime: ${formattedTime} EST\nIP Address: ${ipAddress || 'Unknown'}\nDevice: ${deviceInfo}\nBrowser: ${browserInfo}\n\nIf this was you, no action is needed.\n\nIf you did not log in, please secure your account immediately by contacting our support team at support@amerilendloan.com or +1 945 212-1609.\n\nBest regards,\nThe AmeriLend Security Team`;
+  const text = `Dear ${fullName},\n\nWe detected a new login to your AmeriLend account.\n\nLogin Details:\nTime: ${formattedTime} EST\nLocation: ${locationInfo}\nIP Address: ${ipAddress || 'Unknown'}\nDevice: ${deviceInfo}\nBrowser: ${browserInfo}\n\nIf this was you, no action is needed.\n\nIf you did not log in, please secure your account immediately by contacting our support team at support@amerilendloan.com or +1 (945) 212-1609.\n\nBest regards,\nThe AmeriLend Security Team`;
   
   const html = `
     <!DOCTYPE html>
@@ -408,11 +396,9 @@ export async function sendLoginNotificationEmail(
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${subject}</title>
       </head>
-      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background-color: #0033A0; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">AmeriLend</h1>
-        </div>
-        <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #ddd;">
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
           <div style="background-color: #d1ecf1; border-left: 4px solid #0c5460; padding: 15px; margin-bottom: 20px;">
             <h2 style="color: #0c5460; margin-top: 0; font-size: 18px;">
               🔒 Security Alert: New Login Detected
@@ -428,6 +414,10 @@ export async function sendLoginNotificationEmail(
               <tr>
                 <td style="padding: 8px 0; color: #666; width: 120px;"><strong>Time:</strong></td>
                 <td style="padding: 8px 0;">${formattedTime} EST</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #666;"><strong>Location:</strong></td>
+                <td style="padding: 8px 0;">📍 ${locationInfo}</td>
               </tr>
               <tr>
                 <td style="padding: 8px 0; color: #666;"><strong>IP Address:</strong></td>
@@ -466,15 +456,12 @@ export async function sendLoginNotificationEmail(
 
           <div style="text-align: center; margin: 30px 0;">
             <p style="margin-bottom: 10px;">Need help? Contact our security team:</p>
-            <a href="mailto:support@amerilendloan.com" style="color: #0033A0; text-decoration: none; font-weight: bold;">support@amerilendloan.com</a>
+            <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0; text-decoration: none; font-weight: bold;">${COMPANY_INFO.contact.email}</a>
             <br>
-            <span style="color: #0033A0; font-weight: bold;">+1 945 212-1609</span>
+            <span style="color: #0033A0; font-weight: bold;">${COMPANY_INFO.contact.phone}</span>
           </div>
         </div>
-        <div style="background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-          <p style="margin: 0;">© 2025 AmeriLend. All rights reserved.</p>
-          <p style="margin: 5px 0 0 0;">This is an automated security notification.</p>
-        </div>
+        ${getEmailFooter()}
       </body>
     </html>
   `;
@@ -498,11 +485,9 @@ export async function sendLoanApplicationMoreInfoEmail(
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${subject}</title>
       </head>
-      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background-color: #0033A0; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">AmeriLend</h1>
-        </div>
-        <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #ddd;">
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
           <h2 style="color: #0033A0; margin-top: 0;">Additional Information Required</h2>
           <p>Dear ${fullName},</p>
           <p>We're reviewing your loan application and need some additional information to proceed with the approval process.</p>
@@ -524,11 +509,9 @@ export async function sendLoanApplicationMoreInfoEmail(
             <a href="https://amerilendloan.com/dashboard" style="background-color: #0033A0; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Go to Dashboard</a>
           </div>
 
-          <p style="margin-top: 30px;">If you have any questions or need clarification, please contact our support team at <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a> or call +1 945 212-1609.</p>
+          <p style="margin-top: 30px;">If you have any questions or need clarification, please contact our support team at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or call ${COMPANY_INFO.contact.phone}.</p>
         </div>
-        <div style="background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-          <p style="margin: 0;">© 2025 AmeriLend. All rights reserved.</p>
-        </div>
+        ${getEmailFooter()}
       </body>
     </html>
   `;
@@ -544,10 +527,687 @@ export async function sendNotificationEmail(
   subject: string,
   message: string
 ): Promise<{ success: boolean; error?: string }> {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <p>${message.replace(/\n/g, "<br>")}</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+  
   return sendEmail({
     to,
     subject,
     text: message,
-    html: `<p>${message.replace(/\n/g, "<br>")}</p>`,
+    html,
   });
 }
+
+/**
+ * Send email change notification
+ */
+export async function sendEmailChangeNotification(
+  oldEmail: string,
+  newEmail: string,
+  userName: string
+): Promise<void> {
+  const subject = "Email Address Change Notification";
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <h2 style="color: #0033A0; margin-top: 0;">Email Address Change</h2>
+          <p>Dear ${userName},</p>
+          <p>Your email address on your AmeriLend account has been successfully changed.</p>
+          
+          <div style="background-color: white; border-left: 4px solid #0033A0; padding: 15px; margin: 20px 0;">
+            <p style="margin: 5px 0;"><strong>Previous Email:</strong> ${oldEmail}</p>
+            <p style="margin: 5px 0;"><strong>New Email:</strong> ${newEmail}</p>
+            <p style="margin: 5px 0; font-size: 12px; color: #666;">This change was made on ${new Date().toLocaleDateString()}</p>
+          </div>
+
+          <div style="background-color: #d4edda; border: 1px solid #c3e6cb; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <p style="margin: 0; color: #155724;"><strong>If you did not make this change,</strong> please contact our support team immediately at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #155724;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
+          </div>
+
+          <p>This is a security notification. Please do not reply to this email.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  const text = `Email Address Changed\n\nPrevious Email: ${oldEmail}\nNew Email: ${newEmail}\n\nIf you did not make this change, please contact support immediately.`;
+
+  // Send to old email
+  await sendEmail({
+    to: oldEmail,
+    subject,
+    text,
+    html,
+  });
+
+  // Send to new email
+  await sendEmail({
+    to: newEmail,
+    subject,
+    text,
+    html,
+  });
+}
+
+/**
+ * Send bank info change notification
+ */
+export async function sendBankInfoChangeNotification(
+  email: string,
+  userName: string
+): Promise<void> {
+  const subject = "Bank Account Information Updated";
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <h2 style="color: #0033A0; margin-top: 0;">Bank Account Information Updated</h2>
+          <p>Dear ${userName},</p>
+          <p>Your bank account information has been successfully updated for loan disbursement.</p>
+          
+          <div style="background-color: white; border-left: 4px solid #FFA500; padding: 15px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #0033A0;">Account Update Details</h3>
+            <p style="margin: 5px 0;">Your new bank account information is now active and will be used for any future loan disbursements.</p>
+            <p style="margin: 5px 0; font-size: 12px; color: #666;">Update time: ${new Date().toLocaleDateString()}</p>
+          </div>
+
+          <div style="background-color: #d4edda; border: 1px solid #c3e6cb; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <p style="margin: 0; color: #155724;"><strong>Security Notice:</strong> If you did not make this change, please contact our support team immediately at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #155724;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
+          </div>
+
+          <p>This is a security notification. Please do not reply to this email.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  const text = `Bank Account Information Updated\n\nYour bank account information has been successfully updated. If you did not make this change, please contact support immediately.`;
+
+  await sendEmail({
+    to: email,
+    subject,
+    text,
+    html,
+  });
+}
+
+/**
+ * Send suspicious activity alert
+ */
+export async function sendSuspiciousActivityAlert(
+  email: string,
+  userName: string,
+  activityDescription: string,
+  ipAddress?: string
+): Promise<void> {
+  const subject = "Security Alert: Unusual Account Activity";
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        <div style="background-color: #dc3545; color: white; padding: 20px; text-align: center;">
+          <h1 style="margin: 0;">⚠️ Security Alert</h1>
+        </div>
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <h2 style="color: #dc3545; margin-top: 0;">Unusual Account Activity Detected</h2>
+          <p>Dear ${userName},</p>
+          <p>We detected unusual activity on your AmeriLend account. Please review the details below:</p>
+          
+          <div style="background-color: #ffe6e6; border: 2px solid #dc3545; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #dc3545;">Activity Details</h3>
+            <p style="margin: 5px 0;"><strong>Activity:</strong> ${activityDescription}</p>
+            ${ipAddress ? `<p style="margin: 5px 0;"><strong>IP Address:</strong> ${ipAddress}</p>` : ''}
+            <p style="margin: 5px 0;"><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+          </div>
+
+          <div style="background-color: #fff3cd; border: 1px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #856404;">What Should You Do?</h3>
+            <ul style="margin: 10px 0; padding-left: 20px; color: #856404;">
+              <li>Review your recent account activity</li>
+              <li>If this wasn't you, change your password immediately</li>
+              <li>Contact our support team if you have concerns</li>
+            </ul>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="https://amerilendloan.com/settings" style="background-color: #0033A0; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Review Account Settings</a>
+          </div>
+
+          <p>If you believe this activity is unauthorized, please contact our support team immediately at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  const text = `Security Alert: Unusual Account Activity\n\n${activityDescription}\n\nIf this wasn't you, please change your password and contact support immediately.`;
+
+  await sendEmail({
+    to: email,
+    subject,
+    text,
+    html,
+  });
+}
+
+/**
+ * Send admin decision notification - Application Approved
+ */
+export async function sendApplicationApprovedNotificationEmail(
+  email: string,
+  fullName: string,
+  trackingNumber: string,
+  approvedAmount: number,
+  processingFee: number,
+  adminNotes?: string
+): Promise<void> {
+  const formattedAmount = (approvedAmount / 100).toFixed(2);
+  const formattedFee = (processingFee / 100).toFixed(2);
+  const subject = "✓ Loan Application Approved - Action Required - AmeriLend";
+  
+  const text = `Dear ${fullName},\n\nGreat news! Your loan application has been approved!\n\nApplication Details:\nTracking Number: ${trackingNumber}\nApproved Amount: $${formattedAmount}\nProcessing Fee: $${formattedFee}\n\n${adminNotes ? `Admin Notes: ${adminNotes}\n\n` : ''}Next Steps:\n1. Log in to your dashboard\n2. Review and sign the loan agreement\n3. Pay the processing fee ($${formattedFee})\n4. Once fee is paid, funds will be disbursed within 1-2 business days\n\nPlease complete these steps to proceed with your loan.\n\nBest regards,\nThe AmeriLend Team`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div style="background-color: #28a745; color: white; display: inline-block; padding: 15px 25px; border-radius: 5px; font-size: 20px; font-weight: bold;">
+              ✓ APPLICATION APPROVED
+            </div>
+          </div>
+          <h2 style="color: #0033A0; margin-top: 10px;">Congratulations, ${fullName}!</h2>
+          <p style="font-size: 16px; color: #555;">Your loan application has been approved and we're ready to move forward!</p>
+          
+          <div style="background-color: white; border-left: 6px solid #28a745; padding: 20px; margin: 30px 0;">
+            <h3 style="margin-top: 0; color: #0033A0; border-bottom: 2px solid #0033A0; padding-bottom: 10px;">Approval Details</h3>
+            <table style="width: 100%; margin-top: 15px;">
+              <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Tracking Number:</strong></td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #eee; text-align: right; font-family: monospace;">${trackingNumber}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Approved Amount:</strong></td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #eee; text-align: right; color: #28a745;"><strong>$${formattedAmount}</strong></td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0;"><strong>Processing Fee:</strong></td>
+                <td style="padding: 8px 0; text-align: right;">$${formattedFee}</td>
+              </tr>
+            </table>
+          </div>
+
+          ${adminNotes ? `<div style="background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 15px; margin: 20px 0;">
+            <p style="margin-top: 0; color: #0033A0;"><strong>Admin Notes:</strong></p>
+            <p style="margin-bottom: 0; color: #555;">${adminNotes}</p>
+          </div>` : ''}
+
+          <h3 style="color: #0033A0; margin-top: 30px;">What's Next?</h3>
+          <div style="background-color: #f0f8ff; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <ol style="margin: 0; padding-left: 20px; line-height: 2;">
+              <li style="margin: 10px 0;"><strong>Log in to your dashboard</strong> to review your loan details</li>
+              <li style="margin: 10px 0;"><strong>Review and sign</strong> the loan agreement</li>
+              <li style="margin: 10px 0;"><strong>Pay the processing fee</strong> of $${formattedFee}</li>
+              <li style="margin: 10px 0;"><strong>Wait for disbursement</strong> - funds will arrive in 1-2 business days</li>
+            </ol>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="https://amerilendloan.com/dashboard" style="background-color: #FFA500; color: white; padding: 14px 40px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">Go to Dashboard</a>
+          </div>
+
+          <div style="background-color: #fff9e6; border: 1px solid #ffe680; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <p style="margin: 0; color: #856404; font-size: 14px;">⏰ <strong>Time-sensitive:</strong> Please complete the payment within 7 days to maintain this approval.</p>
+          </div>
+
+          <p style="margin-top: 30px; color: #666; font-size: 14px;">Questions? Contact us at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
+ * Send admin decision notification - Application Rejected
+ */
+export async function sendApplicationRejectedNotificationEmail(
+  email: string,
+  fullName: string,
+  trackingNumber: string,
+  rejectionReason: string
+): Promise<void> {
+  const subject = "Loan Application Decision - AmeriLend";
+  
+  const text = `Dear ${fullName},\n\nThank you for your interest in AmeriLend.\n\nAfter careful review of your application (Tracking #${trackingNumber}), we regret to inform you that we are unable to approve your loan request at this time.\n\nReason:\n${rejectionReason}\n\nNext Steps:\n- You may reapply after 30 days\n- Consider addressing the issues mentioned above before reapplying\n- Explore our other loan products that might better suit your current situation\n\nIf you have questions about this decision or would like to discuss alternative options, please contact our support team.\n\nBest regards,\nThe AmeriLend Team`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div style="background-color: #dc3545; color: white; display: inline-block; padding: 15px 25px; border-radius: 5px; font-size: 18px; font-weight: bold;">
+              APPLICATION DECISION
+            </div>
+          </div>
+          <h2 style="color: #0033A0; margin-top: 10px;">Application Decision Update</h2>
+          <p>Dear ${fullName},</p>
+          <p>Thank you for your interest in AmeriLend and for submitting your loan application. We appreciate the opportunity to review your request.</p>
+          
+          <div style="background-color: #f8d7da; border-left: 6px solid #dc3545; padding: 20px; margin: 30px 0; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #dc3545;">Application Tracking Number</h3>
+            <p style="margin: 0; font-family: monospace; font-size: 18px; font-weight: bold;">${trackingNumber}</p>
+          </div>
+
+          <div style="background-color: white; border-left: 4px solid #dc3545; padding: 20px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #dc3545;">Decision Reason</h3>
+            <p style="margin: 0; line-height: 1.8; color: #555;">${rejectionReason}</p>
+          </div>
+
+          <h3 style="color: #0033A0; margin-top: 30px;">What You Can Do</h3>
+          <ul style="padding-left: 20px; line-height: 1.8;">
+            <li><strong>Reapply after 30 days</strong> - You may submit a new application after this period</li>
+            <li><strong>Address the issues</strong> mentioned above before your next application</li>
+            <li><strong>Explore alternatives</strong> - We have other loan products that may be suitable for you</li>
+            <li><strong>Build your profile</strong> - Work on improving your credit score and financial standing</li>
+          </ul>
+
+          <div style="background-color: #e7f3ff; border: 1px solid #b3d9ff; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <h4 style="margin-top: 0; color: #0033A0;">We Value Your Business</h4>
+            <p style="margin-bottom: 0; color: #555;">We'd love to help you in the future. Our support team is here if you'd like to discuss your options or have questions about our other loan products.</p>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="https://amerilendloan.com/loans" style="background-color: #0033A0; color: white; padding: 14px 40px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">Explore Our Products</a>
+          </div>
+
+          <p style="margin-top: 30px; color: #666; font-size: 14px;">Have questions? Contact our support team at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
+ * Send admin decision notification - Loan Disbursed
+ */
+export async function sendApplicationDisbursedNotificationEmail(
+  email: string,
+  fullName: string,
+  trackingNumber: string,
+  disbursedAmount: number,
+  estimatedArrivalDate: string
+): Promise<void> {
+  const formattedAmount = (disbursedAmount / 100).toFixed(2);
+  const subject = "🎉 Your Loan Has Been Disbursed! - AmeriLend";
+  
+  const text = `Dear ${fullName},\n\nExciting news! Your loan funds have been disbursed and are on their way to your account!\n\nDisbursement Details:\nTracking Number: ${trackingNumber}\nDisbursed Amount: $${formattedAmount}\nEstimated Arrival: ${estimatedArrivalDate}\n\nYour funds should appear in your bank account within 1-2 business days. Please note that your bank may take an additional day to process the deposit.\n\nWhat's Next:\n- Monitor your bank account for the deposit\n- Contact us if you don't receive the funds within 2 business days\n- Log in to your dashboard to view your loan details and payment schedule\n\nThank you for choosing AmeriLend!\n\nBest regards,\nThe AmeriLend Team`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div style="background-color: #28a745; color: white; display: inline-block; padding: 15px 25px; border-radius: 5px; font-size: 20px; font-weight: bold;">
+              🎉 FUNDS DISBURSED!
+            </div>
+          </div>
+          <h2 style="color: #0033A0; margin-top: 10px;">Your Loan Has Been Disbursed!</h2>
+          <p style="font-size: 16px; color: #555;">Dear ${fullName}, we're excited to let you know that your loan funds have been sent to your bank account!</p>
+          
+          <div style="background-color: #d4edda; border-left: 6px solid #28a745; padding: 20px; margin: 30px 0; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #28a745;">Disbursement Confirmed</h3>
+            <table style="width: 100%; margin-top: 15px;">
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #c3e6cb;"><strong>Tracking Number:</strong></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #c3e6cb; text-align: right; font-family: monospace;">${trackingNumber}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #c3e6cb;"><strong>Amount Disbursed:</strong></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #c3e6cb; text-align: right; font-size: 18px; font-weight: bold; color: #28a745;">$${formattedAmount}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0;"><strong>Estimated Arrival:</strong></td>
+                <td style="padding: 10px 0; text-align: right;">${estimatedArrivalDate}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <p style="margin: 0; color: #856404;"><strong>📌 Important:</strong> Your funds should appear in your bank account within 1-2 business days. Some banks may take an additional day to process deposits.</p>
+          </div>
+
+          <h3 style="color: #0033A0; margin-top: 30px;">What You Should Know</h3>
+          <div style="background-color: #f0f8ff; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <ul style="margin: 0; padding-left: 20px; line-height: 2;">
+              <li><strong>Monitor your account</strong> - Check your bank account for the deposit</li>
+              <li><strong>Payment schedule</strong> - Your loan payments will begin according to your agreement</li>
+              <li><strong>View your dashboard</strong> - Log in to see your payment schedule and account details</li>
+              <li><strong>Contact us</strong> - If funds don't arrive within 2 business days, reach out immediately</li>
+            </ul>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="https://amerilendloan.com/dashboard" style="background-color: #FFA500; color: white; padding: 14px 40px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">View Your Account</a>
+          </div>
+
+          <div style="background-color: #e7f3ff; border: 1px solid #b3d9ff; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <h4 style="margin-top: 0; color: #0033A0;">Thank You for Choosing AmeriLend!</h4>
+            <p style="margin-bottom: 0; color: #555;">We're committed to supporting your financial goals. If you have any questions about your loan or need assistance, our support team is always here to help.</p>
+          </div>
+
+          <p style="margin-top: 30px; color: #666; font-size: 14px;">Need help? Contact us at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
+ * Send admin notification for new loan application submission
+ */
+export async function sendAdminNewApplicationNotification(
+  fullName: string,
+  email: string,
+  trackingNumber: string,
+  requestedAmount: number,
+  loanType: string,
+  phone: string,
+  employmentStatus: string
+): Promise<void> {
+  const formattedAmount = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+  }).format(requestedAmount / 100);
+
+  const subject = `New Loan Application - AmeriLend [${trackingNumber}]`;
+  const text = `A new loan application has been submitted.\n\nApplicant Information:\nName: ${fullName}\nEmail: ${email}\nPhone: ${phone}\nTracking Number: ${trackingNumber}\n\nApplication Details:\nLoan Type: ${loanType}\nRequested Amount: ${formattedAmount}\nEmployment Status: ${employmentStatus}\n\nAction Required:\nPlease review this application in your admin dashboard.`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; background-color: #f9f9f9; }
+          .container { max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+          .header { text-align: center; margin-bottom: 30px; }
+          .section { margin: 20px 0; }
+          .label { color: #0033A0; font-weight: bold; }
+          .alert { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px; }
+          table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+          th, td { text-align: left; padding: 10px; border-bottom: 1px solid #ddd; }
+          th { background-color: #f5f5f5; font-weight: bold; color: #0033A0; }
+          .cta-button { display: inline-block; background-color: #0033A0; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; margin-top: 15px; }
+        </style>
+      </head>
+      <body>
+        ${getEmailHeader()}
+        <div class="container">
+          <div class="header">
+            <h1 style="color: #0033A0; margin: 0;">New Loan Application Received</h1>
+            <p style="color: #666; margin-top: 5px;">Action required from administration</p>
+          </div>
+
+          <div class="alert">
+            <strong>⚠️ A new loan application has been submitted and requires review.</strong>
+          </div>
+
+          <div class="section">
+            <h2 style="color: #0033A0; border-bottom: 2px solid #0033A0; padding-bottom: 10px;">Applicant Information</h2>
+            <table>
+              <tr>
+                <td><span class="label">Name:</span></td>
+                <td>${fullName}</td>
+              </tr>
+              <tr>
+                <td><span class="label">Email:</span></td>
+                <td>${email}</td>
+              </tr>
+              <tr>
+                <td><span class="label">Phone:</span></td>
+                <td>${phone}</td>
+              </tr>
+              <tr>
+                <td><span class="label">Tracking Number:</span></td>
+                <td><strong>${trackingNumber}</strong></td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="section">
+            <h2 style="color: #0033A0; border-bottom: 2px solid #0033A0; padding-bottom: 10px;">Loan Application Details</h2>
+            <table>
+              <tr>
+                <td><span class="label">Loan Type:</span></td>
+                <td>${loanType.replace("_", " ").charAt(0).toUpperCase() + loanType.slice(1).replace("_", " ")}</td>
+              </tr>
+              <tr>
+                <td><span class="label">Requested Amount:</span></td>
+                <td><strong>${formattedAmount}</strong></td>
+              </tr>
+              <tr>
+                <td><span class="label">Employment Status:</span></td>
+                <td>${employmentStatus.replace("_", " ")}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="section" style="background-color: #f9f9f9; padding: 20px; border-radius: 4px; margin-top: 20px;">
+            <h3 style="margin-top: 0; color: #0033A0;">Next Steps:</h3>
+            <ol style="color: #555;">
+              <li>Review the applicant's information and documentation</li>
+              <li>Conduct credit and employment verification</li>
+              <li>Make an approval/rejection decision</li>
+              <li>Notify the applicant of the decision</li>
+            </ol>
+          </div>
+
+          <div style="text-align: center; margin-top: 30px;">
+            <p>
+              <a href="${COMPANY_INFO.website}/admin" class="cta-button">Review in Admin Dashboard</a>
+            </p>
+          </div>
+
+          <p style="margin-top: 30px; color: #666; font-size: 14px;">This is an automated notification. Please do not reply to this email.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: COMPANY_INFO.admin.email, subject, text, html });
+}
+
+export async function sendAdminDocumentUploadNotification(
+  userName: string,
+  userEmail: string,
+  documentType: string,
+  fileName: string,
+  uploadedAt: Date
+): Promise<void> {
+  const documentTypeLabels: Record<string, string> = {
+    "drivers_license_front": "Driver's License (Front)",
+    "drivers_license_back": "Driver's License (Back)",
+    "passport": "Passport",
+    "national_id_front": "National ID (Front)",
+    "national_id_back": "National ID (Back)",
+    "ssn_card": "Social Security Card",
+    "bank_statement": "Bank Statement",
+    "utility_bill": "Utility Bill",
+    "pay_stub": "Pay Stub",
+    "tax_return": "Tax Return",
+    "other": "Other Document",
+  };
+
+  const documentLabel = documentTypeLabels[documentType] || documentType;
+  const formattedDate = uploadedAt.toLocaleString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZoneName: "short",
+  });
+
+  const subject = `New Document Uploaded - ${documentLabel} [${userName}]`;
+  const text = `A new verification document has been uploaded by ${userName}.\n\nUser Information:\nName: ${userName}\nEmail: ${userEmail}\n\nDocument Details:\nType: ${documentLabel}\nFile Name: ${fileName}\nUploaded: ${formattedDate}\n\nAction Required:\nPlease review this document in your admin dashboard for verification.`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; background-color: #f9f9f9; }
+          .container { max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+          .header { text-align: center; margin-bottom: 30px; }
+          .section { margin: 20px 0; }
+          .label { color: #0033A0; font-weight: bold; }
+          .alert { background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 15px; margin: 20px 0; border-radius: 4px; }
+          table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+          th, td { text-align: left; padding: 10px; border-bottom: 1px solid #ddd; }
+          th { background-color: #f5f5f5; font-weight: bold; color: #0033A0; }
+          .cta-button { display: inline-block; background-color: #0033A0; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; margin-top: 15px; }
+          .badge { display: inline-block; background-color: #28a745; color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        ${getEmailHeader()}
+        <div class="container">
+          <div class="header">
+            <h1 style="color: #0033A0; margin: 0;">New Document Uploaded</h1>
+            <p style="color: #666; margin-top: 5px;">Review and verification required</p>
+          </div>
+
+          <div class="alert">
+            <strong>📄 A new verification document has been submitted by ${userName}.</strong>
+          </div>
+
+          <div class="section">
+            <h2 style="color: #0033A0; border-bottom: 2px solid #0033A0; padding-bottom: 10px;">User Information</h2>
+            <table>
+              <tr>
+                <td><span class="label">Name:</span></td>
+                <td>${userName}</td>
+              </tr>
+              <tr>
+                <td><span class="label">Email:</span></td>
+                <td>${userEmail}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="section">
+            <h2 style="color: #0033A0; border-bottom: 2px solid #0033A0; padding-bottom: 10px;">Document Details</h2>
+            <table>
+              <tr>
+                <td><span class="label">Document Type:</span></td>
+                <td><span class="badge">${documentLabel}</span></td>
+              </tr>
+              <tr>
+                <td><span class="label">File Name:</span></td>
+                <td>${fileName}</td>
+              </tr>
+              <tr>
+                <td><span class="label">Uploaded At:</span></td>
+                <td>${formattedDate}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="section" style="background-color: #f9f9f9; padding: 20px; border-radius: 4px; margin-top: 20px;">
+            <h3 style="margin-top: 0; color: #0033A0;">Verification Checklist:</h3>
+            <ul style="color: #555;">
+              <li>Check document authenticity and clarity</li>
+              <li>Verify document matches applicant information</li>
+              <li>Ensure document is current and valid</li>
+              <li>Approve or reject with appropriate feedback</li>
+            </ul>
+          </div>
+
+          <div style="text-align: center; margin-top: 30px;">
+            <p>
+              <a href="${COMPANY_INFO.website}/admin/verification" class="cta-button">Review Documents</a>
+            </p>
+          </div>
+
+          <p style="margin-top: 30px; color: #666; font-size: 14px;">This is an automated notification. Please do not reply to this email.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: COMPANY_INFO.admin.email, subject, text, html });
+}
+

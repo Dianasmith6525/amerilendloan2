@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { getLoginUrl } from "@/const";
+import { SubmissionAnimationOverlay } from "@/components/SubmissionAnimationOverlay";
 import { trpc } from "@/lib/trpc";
 import { CheckCircle2, Loader2, Phone, ArrowLeft, Save } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -69,8 +69,29 @@ const US_STATES = [
 export default function ApplyLoan() {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
+
+  // Prevent admins from applying for loans
+  if (!authLoading && isAuthenticated && user?.role === "admin") {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-muted/30">
+        <Card className="max-w-md">
+          <CardContent className="pt-6 space-y-4 text-center">
+            <h2 className="text-lg font-semibold">Admin Account</h2>
+            <p className="text-sm text-muted-foreground">
+              Administrators cannot apply for personal loans. If you need assistance, please contact support.
+            </p>
+            <Link href="/dashboard">
+              <Button className="w-full">Return to Dashboard</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const [currentStep, setCurrentStep] = useState(1);
   const [submittedTrackingNumber, setSubmittedTrackingNumber] = useState<string | null>(null);
+  const [showSubmissionAnimation, setShowSubmissionAnimation] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [addressSuggestions, setAddressSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -101,6 +122,8 @@ export default function ApplyLoan() {
     fullName: "",
     email: "",
     phone: "",
+    password: "",
+    confirmPassword: "",
     dateOfBirth: "",
     ssn: "",
     driversLicense: "",
@@ -162,17 +185,107 @@ export default function ApplyLoan() {
   const submitMutation = trpc.loans.submit.useMutation({
     onSuccess: (data) => {
       setSubmittedTrackingNumber(data.trackingNumber);
+      setShowSubmissionAnimation(true);
       // Clear saved draft on successful submission
       localStorage.removeItem('loanApplicationDraft');
       toast.success("Application submitted successfully!");
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to submit application");
+      console.error("[ApplyLoan] Submit error:", error);
+      const errorMessage = error?.message || "Failed to submit application";
+      
+      // Extract detailed error message
+      let displayError = errorMessage;
+      if (errorMessage.includes("Database")) {
+        displayError = "Server database connection error. Please try again later or contact support.";
+      } else if (errorMessage.includes("Duplicate")) {
+        displayError = errorMessage; // Show duplicate error as-is
+      } else if (errorMessage === "INTERNAL_SERVER_ERROR") {
+        displayError = "Server error occurred. Please try again or contact support.";
+      }
+      
+      toast.error(displayError);
     },
   });
 
+  const checkDuplicateQuery = trpc.loans.checkDuplicate.useQuery(
+    {
+      dateOfBirth: formData.dateOfBirth,
+      ssn: formData.ssn,
+    },
+    {
+      enabled: false,
+    }
+  );
+
+  const checkDuplicateMutation = { mutate: async () => {
+    const data = await checkDuplicateQuery.refetch();
+    if (data.data?.hasDuplicate && !data.data?.canApply) {
+      let errorMsg = `Cannot apply: ${data.data?.message}`;
+      if (data.data?.maskedEmail) {
+        errorMsg = `You have a pending application registered with ${data.data?.maskedEmail}`;
+      }
+      toast.error(errorMsg);
+        return;
+      }
+      // No duplicate or can apply despite previous rejection - proceed with submission
+      proceedWithSubmission();
+    }
+  };
+
+  const proceedWithSubmission = () => {
+    // Convert amounts to cents
+    const monthlyIncome = Math.round(parseFloat(formData.monthlyIncome) * 100);
+    const requestedAmount = Math.round(parseFloat(formData.requestedAmount) * 100);
+
+    if (isNaN(monthlyIncome) || monthlyIncome <= 0) {
+      toast.error("Please enter a valid monthly income");
+      return;
+    }
+
+    if (isNaN(requestedAmount) || requestedAmount <= 0) {
+      toast.error("Please enter a valid loan amount");
+      return;
+    }
+
+    submitMutation.mutate({
+      ...formData,
+      employmentStatus: formData.employmentStatus as "employed" | "self_employed" | "unemployed" | "retired",
+      loanType: formData.loanType as "installment" | "short_term",
+      monthlyIncome,
+      requestedAmount,
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate password fields
+    if (!formData.password || !formData.confirmPassword) {
+      toast.error("Please enter and confirm your password");
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      toast.error("Password must be at least 8 characters long");
+      return;
+    }
+
+    // Password strength validation
+    const hasUpperCase = /[A-Z]/.test(formData.password);
+    const hasLowerCase = /[a-z]/.test(formData.password);
+    const hasNumber = /\d/.test(formData.password);
+    const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password);
+
+    if (!hasUpperCase || !hasLowerCase || !hasNumber || !hasSpecialChar) {
+      toast.error("Password must contain uppercase, lowercase, number, and special character");
+      return;
+    }
 
     // Validate terms and conditions acceptance
     if (!formData.termsAccepted) {
@@ -202,27 +315,8 @@ export default function ApplyLoan() {
       return;
     }
 
-    // Convert amounts to cents
-    const monthlyIncome = Math.round(parseFloat(formData.monthlyIncome) * 100);
-    const requestedAmount = Math.round(parseFloat(formData.requestedAmount) * 100);
-
-    if (isNaN(monthlyIncome) || monthlyIncome <= 0) {
-      toast.error("Please enter a valid monthly income");
-      return;
-    }
-
-    if (isNaN(requestedAmount) || requestedAmount <= 0) {
-      toast.error("Please enter a valid loan amount");
-      return;
-    }
-
-    submitMutation.mutate({
-      ...formData,
-      employmentStatus: formData.employmentStatus as "employed" | "self_employed" | "unemployed" | "retired",
-      loanType: formData.loanType as "installment" | "short_term",
-      monthlyIncome,
-      requestedAmount,
-    });
+    // Check for duplicate account/application before submission
+    checkDuplicateMutation.mutate();
   };
 
   const updateFormData = (field: string, value: string | boolean) => {
@@ -337,79 +431,21 @@ export default function ApplyLoan() {
     );
   }
 
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex flex-col bg-gray-50">
-        {/* Header */}
-        <header className="sticky top-0 z-50 bg-white border-b shadow-sm">
-          <div className="container mx-auto px-4">
-            <div className="flex items-center justify-between h-16">
-              <Link href="/">
-                <a className="text-2xl font-bold">
-                  <span className="text-[#0033A0]">Ameri</span>
-                  <span className="text-[#D4AF37]">Lend</span>
-                </a>
-              </Link>
-              <div className="flex items-center gap-3">
-                                <a
-                  href="tel:+19452121609"
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:text-primary transition-colors"
-                >
-                  <Phone className="w-4 h-4" />
-                  +1 945 212-1609
-                </a>
-                <Button
-                  variant="outline"
-                  className="border-[#0033A0] text-[#0033A0]"
-                  asChild
-                >
-                  <a href={getLoginUrl()}>Log In</a>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <div className="flex-1 flex items-center justify-center py-12">
-          <Card className="max-w-md w-full mx-4">
-            <CardContent className="p-8 text-center">
-              <div className="w-16 h-16 rounded-full bg-[#0033A0]/10 flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-[#0033A0]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-[#0033A0] mb-2">Sign In Required</h2>
-              <p className="text-gray-600 mb-6">
-                Please sign in to your account to apply for a loan. This helps us keep your information secure and allows you to track your application.
-              </p>
-              <Button
-                className="w-full bg-[#FFA500] hover:bg-[#FF8C00] text-white"
-                asChild
-              >
-                <a href={getLoginUrl()}>Sign In to Continue</a>
-              </Button>
-              <p className="text-sm text-gray-500 mt-4">
-                Don't have an account? Signing in will create one automatically.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
   // Show success screen if application was submitted
   if (submittedTrackingNumber) {
     return (
       <div className="min-h-screen flex flex-col bg-gray-50">
         {/* Header */}
         <header className="sticky top-0 z-50 bg-white border-b shadow-sm">
-          <div className="container mx-auto px-4">
-            <div className="flex items-center justify-between h-16">
+          <div className="container mx-auto px-4 py-2 sm:py-2.5 md:py-3">
+            <div className="flex items-center justify-between">
               <Link href="/">
-                <a className="text-2xl font-bold">
-                  <span className="text-[#0033A0]">Ameri</span>
-                  <span className="text-[#D4AF37]">Lend</span>
+                <a className="flex items-center flex-shrink-0">
+                  <img
+                    src="/logo.jpg"
+                    alt="AmeriLend"
+                    className="h-20 sm:h-24 md:h-28 w-auto object-contain brightness-105 contrast-110"
+                  />
                 </a>
               </Link>
             </div>
@@ -477,6 +513,12 @@ export default function ApplyLoan() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Submission Animation Overlay */}
+        <SubmissionAnimationOverlay
+          isVisible={showSubmissionAnimation}
+          onAnimationComplete={() => setShowSubmissionAnimation(false)}
+        />
       </div>
     );
   }
@@ -485,27 +527,32 @@ export default function ApplyLoan() {
     <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white border-b shadow-sm">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between h-16">
+        <div className="container mx-auto px-4 py-2 sm:py-2.5 md:py-3">
+          <div className="flex items-center justify-between">
             <Link href="/">
-              <a className="text-2xl font-bold">
-                <span className="text-[#0033A0]">Ameri</span>
-                <span className="text-[#D4AF37]">Lend</span>
+              <a className="flex items-center flex-shrink-0">
+                <img
+                  src="/logo.jpg"
+                  alt="AmeriLend"
+                  className="h-20 sm:h-24 md:h-28 w-auto object-contain brightness-105 contrast-110"
+                />
               </a>
             </Link>
             <div className="flex items-center gap-3">
-                            <a
+              <a
                 href="tel:+19452121609"
-                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:text-primary transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:text-primary transition-colors"
               >
                 <Phone className="w-4 h-4" />
                 +1 945 212-1609
               </a>
-              <Link href="/dashboard">
-                <Button variant="outline" className="border-[#0033A0] text-[#0033A0]">
-                  Dashboard
-                </Button>
-              </Link>
+              {isAuthenticated && (
+                <Link href="/dashboard">
+                  <Button variant="outline" className="border-[#0033A0] text-[#0033A0] px-3 py-1.5 text-xs">
+                    Dashboard
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
         </div>
@@ -570,78 +617,112 @@ export default function ApplyLoan() {
       </div>
 
       {/* Form Content */}
-      <div className="flex-1 py-12">
-        <div className="container mx-auto px-4 max-w-3xl">
+      <div className="flex-1 py-8 sm:py-12">
+        <div className="container mx-auto px-4 sm:px-6 max-w-3xl">
           <Card>
-            <CardContent className="p-8">
+            <CardContent className="p-4 sm:p-6 md:p-8">
               <form onSubmit={handleSubmit}>
                 {/* Step 1: Personal Information */}
                 {currentStep === 1 && (
                   <div className="space-y-6">
                     <div>
-                      <h2 className="text-2xl font-bold text-[#0033A0] mb-2">
+                      <h2 className="text-xl sm:text-2xl font-bold text-[#0033A0] mb-2">
                         Personal Information
                       </h2>
-                      <p className="text-gray-600">
+                      <p className="text-sm sm:text-base text-gray-600">
                         Let's start with some basic information about you.
                       </p>
                     </div>
 
-                    <div className="grid md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="fullName">Full Name *</Label>
+                        <Label htmlFor="fullName" className="text-sm">Full Name *</Label>
                         <Input
                           id="fullName"
                           value={formData.fullName}
                           onChange={(e) => updateFormData("fullName", e.target.value)}
                           placeholder="John Doe"
+                          className="text-sm"
                           required
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="email">Email Address *</Label>
+                        <Label htmlFor="email" className="text-sm">Email Address *</Label>
                         <Input
                           id="email"
                           type="email"
                           value={formData.email}
                           onChange={(e) => updateFormData("email", e.target.value)}
                           placeholder="john@example.com"
+                          className="text-sm"
                           required
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="phone">Phone Number *</Label>
+                        <Label htmlFor="phone" className="text-sm">Phone Number *</Label>
                         <Input
                           id="phone"
                           type="tel"
                           value={formData.phone}
                           onChange={(e) => updateFormData("phone", e.target.value)}
                           placeholder="(555) 123-4567"
+                          className="text-sm"
                           required
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="dateOfBirth">Date of Birth *</Label>
+                        <Label htmlFor="password" className="text-sm">Create Password *</Label>
+                        <Input
+                          id="password"
+                          type="password"
+                          value={formData.password}
+                          onChange={(e) => updateFormData("password", e.target.value)}
+                          placeholder="Enter a strong password"
+                          className="text-sm"
+                          required
+                        />
+                        <p className="text-xs text-gray-500">
+                          Minimum 8 characters with uppercase, lowercase, number, and special character
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="confirmPassword" className="text-sm">Confirm Password *</Label>
+                        <Input
+                          id="confirmPassword"
+                          type="password"
+                          value={formData.confirmPassword}
+                          onChange={(e) => updateFormData("confirmPassword", e.target.value)}
+                          placeholder="Re-enter your password"
+                          className="text-sm"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="dateOfBirth" className="text-sm">Date of Birth *</Label>
                         <Input
                           id="dateOfBirth"
                           type="date"
                           value={formData.dateOfBirth}
                           onChange={(e) => updateFormData("dateOfBirth", e.target.value)}
+                          className="text-sm"
                           required
                         />
                         <p className="text-xs text-gray-500">Format: YYYY-MM-DD</p>
                       </div>
 
-                      <div className="space-y-2 md:col-span-2">
-                        <Label htmlFor="ssn">Social Security Number *</Label>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="ssn" className="text-sm">Social Security Number *</Label>
                         <Input
                           id="ssn"
                           value={formData.ssn}
                           onChange={(e) => updateFormData("ssn", e.target.value)}
                           placeholder="XXX-XX-XXXX"
+                          className="text-sm"
                           required
                         />
                         <p className="text-xs text-gray-500">
@@ -650,24 +731,25 @@ export default function ApplyLoan() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="driversLicense">Driver's License Number *</Label>
+                        <Label htmlFor="driversLicense" className="text-sm">Driver's License Number *</Label>
                         <Input
                           id="driversLicense"
                           value={formData.driversLicense}
                           onChange={(e) => updateFormData("driversLicense", e.target.value)}
                           placeholder="License Number"
+                          className="text-sm"
                           required
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="licenseState">License State *</Label>
+                        <Label htmlFor="licenseState" className="text-sm">License State *</Label>
                         <Select
                           value={formData.licenseState}
                           onValueChange={(value) => updateFormData("licenseState", value)}
                           required
                         >
-                          <SelectTrigger id="licenseState">
+                          <SelectTrigger id="licenseState" className="text-sm">
                             <SelectValue placeholder="Select state" />
                           </SelectTrigger>
                           <SelectContent>
@@ -681,13 +763,13 @@ export default function ApplyLoan() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="citizenshipStatus">Citizenship Status *</Label>
+                        <Label htmlFor="citizenshipStatus" className="text-sm">Citizenship Status *</Label>
                         <Select
                           value={formData.citizenshipStatus}
                           onValueChange={(value) => updateFormData("citizenshipStatus", value)}
                           required
                         >
-                          <SelectTrigger id="citizenshipStatus">
+                          <SelectTrigger id="citizenshipStatus" className="text-sm">
                             <SelectValue placeholder="Select status" />
                           </SelectTrigger>
                           <SelectContent>
@@ -700,13 +782,13 @@ export default function ApplyLoan() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="housingStatus">Housing Status *</Label>
+                        <Label htmlFor="housingStatus" className="text-sm">Housing Status *</Label>
                         <Select
                           value={formData.housingStatus}
                           onValueChange={(value) => updateFormData("housingStatus", value)}
                           required
                         >
-                          <SelectTrigger id="housingStatus">
+                          <SelectTrigger id="housingStatus" className="text-sm">
                             <SelectValue placeholder="Select status" />
                           </SelectTrigger>
                           <SelectContent>
@@ -1363,14 +1445,37 @@ export default function ApplyLoan() {
       </div>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-8">
-        <div className="container mx-auto px-4 text-center">
-          <p className="text-sm text-gray-400">
-            © 2025 AmeriLend - U.S. Consumer Loan Platform. All rights reserved.
-          </p>
-          <p className="text-xs text-gray-500 mt-2">
-            Loans subject to approval. 3.5% processing fee paid via credit/debit card or cryptocurrency before disbursement.
-          </p>
+      <footer className="bg-gradient-to-r from-[#0033A0] to-[#003366] text-white py-8">
+        <div className="container mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-6">
+            <div>
+              <h4 className="font-semibold mb-3">Need Help?</h4>
+              <div className="space-y-2 text-sm text-white/80">
+                <p>📞 <a href="tel:+19452121609" className="hover:text-[#FFA500] transition-colors">(945) 212-1609</a></p>
+                <p>📧 <a href="mailto:support@amerilendloan.com" className="hover:text-[#FFA500] transition-colors">support@amerilendloan.com</a></p>
+              </div>
+            </div>
+            <div>
+              <h4 className="font-semibold mb-3">Quick Links</h4>
+              <ul className="space-y-2 text-sm text-white/80">
+                <li><a href="/" className="hover:text-[#FFA500] transition-colors">Home</a></li>
+                <li><a href="/auth" className="hover:text-[#FFA500] transition-colors">Sign In</a></li>
+                <li><a href="/#faq" className="hover:text-[#FFA500] transition-colors">FAQ</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold mb-3">Legal</h4>
+              <ul className="space-y-2 text-sm text-white/80">
+                <li><a href="/public/legal/privacy-policy" className="hover:text-[#FFA500] transition-colors">Privacy Policy</a></li>
+                <li><a href="/public/legal/terms-of-service" className="hover:text-[#FFA500] transition-colors">Terms of Service</a></li>
+                <li><a href="/public/legal/loan-agreement" className="hover:text-[#FFA500] transition-colors">Loan Agreement</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className="border-t border-white/20 pt-6 text-center text-xs text-white/70">
+            <p>© 2025 AmeriLend, LLC. All Rights Reserved.</p>
+            <p className="mt-2">Loans subject to approval. 3.5% processing fee paid via credit/debit card or cryptocurrency before disbursement.</p>
+          </div>
         </div>
       </footer>
     </div>

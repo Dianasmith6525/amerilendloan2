@@ -18,9 +18,9 @@ import {
 import { useState, useRef } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
 import { AISupport } from "@/components/AISupport";
 import TestimonialsSection from "@/components/TestimonialsSection";
+import { ApplicationTracking } from "@/components/ApplicationTracking";
 
 export default function Home() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -107,53 +107,44 @@ export default function Home() {
     <div className="min-h-screen bg-white">
       {/* Header/Navigation */}
       <header className="sticky top-0 z-50 bg-white border-b shadow-sm">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between h-32">
+        <div className="container mx-auto px-4 py-2 sm:py-2.5 md:py-3">
+          <div className="flex items-center justify-between gap-4 sm:gap-6">
             {/* Logo */}
             <Link href="/">
-              <a className="flex items-center">
+              <a className="flex items-center flex-shrink-0">
                 <img
                   src="/logo.jpg"
                   alt="AmeriLend"
-                  className="h-28 w-auto"
-                  style={{ mixBlendMode: 'multiply' }}
+                  className="h-24 sm:h-28 md:h-32 w-auto object-contain"
+                  style={{ filter: 'contrast(1.1) brightness(1.05)' }}
                 />
               </a>
             </Link>
 
-            {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center gap-6">
+            {/* Desktop Navigation - Hidden on Mobile */}
+            <nav className="hidden md:flex items-center gap-4 flex-1">
               <Link href="/apply">
-                <a className="text-gray-700 hover:text-[#0033A0] transition-colors">
-                  Loans
-                </a>
+                <a className="text-sm text-gray-700 hover:text-[#0033A0] whitespace-nowrap font-medium">Loans</a>
               </Link>
-              <a href="#about" className="text-gray-700 hover:text-[#0033A0] transition-colors">
-                About Us
-              </a>
-              <a href="#faq" className="text-gray-700 hover:text-[#0033A0] transition-colors">
-                Help
-              </a>
-              <a
-                href="tel:+19452121609"
-                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:text-primary transition-colors"
-              >
+              <a href="#about" className="text-sm text-gray-700 hover:text-[#0033A0] whitespace-nowrap font-medium">About Us</a>
+              <a href="#faq" className="text-sm text-gray-700 hover:text-[#0033A0] whitespace-nowrap font-medium">Help</a>
+              <a href="tel:+19452121609" className="text-sm text-gray-700 hover:text-[#0033A0] whitespace-nowrap font-medium flex items-center gap-1">
                 <Phone className="w-4 h-4" />
                 +1 945 212-1609
               </a>
             </nav>
 
             {/* CTA Buttons */}
-            <div className="hidden md:flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-1.5">
               {isAuthenticated ? (
                 <>
                   <Link href="/apply">
-                    <Button className="bg-[#FFA500] hover:bg-[#FF8C00] text-white font-semibold px-6">
+                    <Button className="bg-[#FFA500] hover:bg-[#FF8C00] text-white font-semibold px-3 py-1.5 text-xs whitespace-nowrap">
                       Apply Now
                     </Button>
                   </Link>
                   <Link href="/dashboard">
-                    <Button variant="outline" className="border-[#0033A0] text-[#0033A0] hover:bg-[#0033A0] hover:text-white">
+                    <Button variant="outline" className="border-[#0033A0] text-[#0033A0] hover:bg-[#0033A0] hover:text-white px-3 py-1.5 text-xs whitespace-nowrap">
                       Dashboard
                     </Button>
                   </Link>
@@ -161,16 +152,16 @@ export default function Home() {
               ) : (
                 <>
                   <Link href="/apply">
-                    <Button className="bg-[#FFA500] hover:bg-[#FF8C00] text-white font-semibold px-6">
+                    <Button className="bg-[#FFA500] hover:bg-[#FF8C00] text-white font-semibold px-3 py-1.5 text-xs whitespace-nowrap">
                       Apply Now
                     </Button>
                   </Link>
                   <Button
                     variant="outline"
-                    className="border-[#0033A0] text-[#0033A0] hover:bg-[#0033A0] hover:text-white"
+                    className="border-[#0033A0] text-[#0033A0] hover:bg-[#0033A0] hover:text-white px-3 py-1.5 text-xs whitespace-nowrap"
                     asChild
                   >
-                    <a href={getLoginUrl()}>Log In</a>
+                    <a href="/login">Log In</a>
                   </Button>
                 </>
               )}
@@ -187,37 +178,43 @@ export default function Home() {
 
           {/* Mobile Menu */}
           {mobileMenuOpen && (
-            <div className="md:hidden py-4 border-t">
+            <div className="md:hidden py-4 border-t mt-4">
               <nav className="flex flex-col gap-4">
                 <Link href="/apply">
-                  <a className="text-gray-700 hover:text-[#0033A0]">Loans</a>
+                  <a className="text-gray-700 hover:text-[#0033A0] text-base font-medium">Loans</a>
                 </Link>
-                <a href="#about" className="text-gray-700 hover:text-[#0033A0]">
+                <a href="#about" className="text-gray-700 hover:text-[#0033A0] text-base font-medium">
                   About Us
                 </a>
-                <a href="#faq" className="text-gray-700 hover:text-[#0033A0]">
+                <a href="#faq" className="text-gray-700 hover:text-[#0033A0] text-base font-medium">
                   Help
                 </a>
-                <Link href="/apply">
-                  <Button className="bg-[#FFA500] hover:bg-[#FF8C00] text-white w-full">
-                    Apply Now
-                  </Button>
-                </Link>
-                {isAuthenticated ? (
-                  <Link href="/dashboard">
-                    <Button variant="outline" className="w-full border-[#0033A0] text-[#0033A0]">
-                      Dashboard
+                <a href="tel:+19452121609" className="text-gray-700 hover:text-[#0033A0] text-base font-medium flex items-center gap-2">
+                  <Phone className="w-5 h-5" />
+                  +1 945 212-1609
+                </a>
+                <div className="border-t pt-4 mt-4 flex flex-col gap-3">
+                  <Link href="/apply">
+                    <Button className="bg-[#FFA500] hover:bg-[#FF8C00] text-white w-full text-base font-semibold py-3">
+                      Apply Now
                     </Button>
                   </Link>
-                ) : (
-                  <Button
-                    variant="outline"
-                    className="w-full border-[#0033A0] text-[#0033A0]"
-                    asChild
-                  >
-                    <a href={getLoginUrl()}>Log In</a>
-                  </Button>
-                )}
+                  {isAuthenticated ? (
+                    <Link href="/dashboard">
+                      <Button variant="outline" className="w-full border-[#0033A0] text-[#0033A0] text-base font-semibold py-3">
+                        Dashboard
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className="w-full border-[#0033A0] text-[#0033A0] text-base font-semibold py-3"
+                      asChild
+                    >
+                      <a href="/login">Log In</a>
+                    </Button>
+                  )}
+                </div>
               </nav>
             </div>
           )}
@@ -225,7 +222,7 @@ export default function Home() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative bg-white py-12 md:py-20 overflow-hidden">
+      <section className="relative bg-white py-8 sm:py-12 md:py-20 overflow-hidden">
         {/* Background Video */}
         <video
           autoPlay
@@ -239,47 +236,49 @@ export default function Home() {
         </video>
         
         {/* Content Overlay */}
-        <div className="container mx-auto px-4 relative z-10">
+        <div className="container mx-auto px-4 sm:px-6 relative z-10">
           <div className="max-w-3xl mx-auto text-center">
             {/* Hero Content */}
             <div>
-              <h1 className="text-6xl md:text-7xl font-bold text-[#0033A0] mb-6">
+              <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-bold text-[#0033A0] mb-4 sm:mb-6 leading-tight">
                 Online Loans
                 <br />
                 Designed for You
               </h1>
 
-              <ul className="space-y-4 mb-8 inline-block text-left">
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-8 h-8 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-lg text-gray-700">
+              <ul className="space-y-3 sm:space-y-4 mb-6 sm:mb-8 inline-block text-left">
+                <li className="flex items-start gap-2 sm:gap-3">
+                  <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-sm sm:text-base md:text-lg text-gray-700">
                     Same-day funding available.<sup>1</sup>
                   </span>
                 </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-8 h-8 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-lg text-gray-700">
+                <li className="flex items-start gap-2 sm:gap-3">
+                  <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-sm sm:text-base md:text-lg text-gray-700">
                     Applying does NOT affect your FICO® credit score.<sup>2</sup>
                   </span>
                 </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-8 h-8 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-lg text-gray-700">No hidden fees.</span>
+                <li className="flex items-start gap-2 sm:gap-3">
+                  <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-sm sm:text-base md:text-lg text-gray-700">No hidden fees.</span>
                 </li>
               </ul>
 
-              <div className="flex justify-center gap-4">
+              <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
                 <Link href="/apply">
-                  <Button className="bg-[#FFA500] hover:bg-[#FF8C00] text-white font-semibold px-8 py-6 text-lg">
+                  <Button className="bg-[#FFA500] hover:bg-[#FF8C00] text-white font-semibold px-6 sm:px-8 py-3 sm:py-6 text-sm sm:text-base md:text-lg w-full sm:w-auto">
                     Apply Now
                   </Button>
                 </Link>
-                <Button className="bg-[#0033A0] hover:bg-[#002080] text-white font-semibold px-8 py-6 text-lg border-2 border-[#0033A0]">
-                  Get Prequalified
-                </Button>
+                <Link href="/prequalify">
+                  <Button className="bg-[#0033A0] hover:bg-[#002080] text-white font-semibold px-6 sm:px-8 py-3 sm:py-6 text-sm sm:text-base md:text-lg border-2 border-[#0033A0] w-full sm:w-auto">
+                    Get Prequalified
+                  </Button>
+                </Link>
               </div>
 
-              <p className="text-sm text-gray-500 mt-4">
+              <p className="text-xs sm:text-sm text-gray-500 mt-3 sm:mt-4">
                 Did you receive a code in the mail?{" "}
                 <Link href="/apply">
                   <a className="text-[#0033A0] underline hover:text-[#002080] cursor-pointer font-medium">
@@ -293,53 +292,53 @@ export default function Home() {
       </section>
 
       {/* Process Section - Blue Background */}
-      <section className="bg-[#0033A0] text-white py-16 md:py-24">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-2 gap-12 items-start">
+      <section className="bg-[#0033A0] text-white py-12 sm:py-16 md:py-24">
+        <div className="container mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-start">
             {/* Process Steps */}
             <div>
-              <h2 className="text-3xl md:text-4xl font-bold mb-6">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 sm:mb-6">
                 Simple Loan Application Process
               </h2>
-              <p className="text-white/90 mb-8">
+              <p className="text-sm sm:text-base text-white/90 mb-6 sm:mb-8">
                 Working with trusted financial partners, the AmeriLend platform offers personal loans designed to fit your needs. The process is simple and built around you:
               </p>
 
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 {/* Step 1 */}
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-12 h-12 rounded-full bg-white text-[#0033A0] flex items-center justify-center text-xl font-bold">
+                <div className="flex gap-3 sm:gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white text-[#0033A0] flex items-center justify-center text-lg sm:text-xl font-bold">
                     1
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg mb-1">Apply Online</h3>
-                    <p className="text-white/90">
+                    <h3 className="font-bold text-base sm:text-lg mb-1">Apply Online</h3>
+                    <p className="text-xs sm:text-sm text-white/90">
                       The application process is quick and easy, with decisions often made in minutes.
                     </p>
                   </div>
                 </div>
 
                 {/* Step 2 */}
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-12 h-12 rounded-full bg-white text-[#0033A0] flex items-center justify-center text-xl font-bold">
+                <div className="flex gap-3 sm:gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white text-[#0033A0] flex items-center justify-center text-lg sm:text-xl font-bold">
                     2
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg mb-1">Approval Process</h3>
-                    <p className="text-white/90">
+                    <h3 className="font-bold text-base sm:text-lg mb-1">Approval Process</h3>
+                    <p className="text-xs sm:text-sm text-white/90">
                       We consider more than just your credit score, so even if you've been turned down by others, you may still qualify.
                     </p>
                   </div>
                 </div>
 
                 {/* Step 3 */}
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-12 h-12 rounded-full bg-white text-[#0033A0] flex items-center justify-center text-xl font-bold">
+                <div className="flex gap-3 sm:gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white text-[#0033A0] flex items-center justify-center text-lg sm:text-xl font-bold">
                     3
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg mb-1">Same-Day Funding Available</h3>
-                    <p className="text-white/90">
+                    <h3 className="font-bold text-base sm:text-lg mb-1">Same-Day Funding Available</h3>
+                    <p className="text-xs sm:text-sm text-white/90">
                       If approved, you may receive money in your account as soon as the same business day!<sup>1</sup>
                     </p>
                   </div>
@@ -347,28 +346,28 @@ export default function Home() {
               </div>
 
               <Link href="/apply">
-                <Button className="bg-[#FFA500] hover:bg-[#FF8C00] text-white font-semibold px-8 py-6 text-lg mt-8">
+                <Button className="bg-[#FFA500] hover:bg-[#FF8C00] text-white font-semibold px-6 sm:px-8 py-3 sm:py-6 text-sm sm:text-base md:text-lg mt-6 sm:mt-8 w-full sm:w-auto">
                   Apply Now
                 </Button>
               </Link>
 
-              <p className="text-sm text-white/80 mt-4">
+              <p className="text-xs sm:text-sm text-white/80 mt-2 sm:mt-4">
                 Applying does NOT affect your FICO® credit score.<sup>2</sup>
               </p>
             </div>
 
             {/* Eligibility Requirements Card - Right Column */}
-            <div className="bg-white text-gray-800 rounded-lg p-6 md:p-8 shadow-xl h-fit">
-              <h3 className="text-lg md:text-xl font-bold text-[#0033A0] mb-6">
+            <div className="bg-white text-gray-800 rounded-lg p-4 sm:p-6 md:p-8 shadow-xl h-fit">
+              <h3 className="text-base sm:text-lg md:text-xl font-bold text-[#0033A0] mb-4 sm:mb-6">
                 Before you get started, let's review our eligibility requirements.
               </h3>
 
-              <ul className="space-y-4">
-                <li className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                    <FileText className="w-5 h-5 text-[#0033A0]" />
+              <ul className="space-y-3 sm:space-y-4">
+                <li className="flex items-start gap-2 sm:gap-3">
+                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-[#0033A0]" />
                   </div>
-                  <span className="text-sm md:text-base">Be at least 18 years old</span>
+                  <span className="text-xs sm:text-sm md:text-base">Be at least 18 years old</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
@@ -867,7 +866,7 @@ export default function Home() {
                   Help customers navigate their loan applications and provide exceptional support throughout the process.
                 </p>
                 <Button asChild className="border-[#0033A0] text-[#0033A0] hover:bg-[#0033A0] hover:text-white" variant="outline">
-                  <a href="mailto:careers@amerilend.com?subject=Loan%20Advocate%20Position" className="no-underline">
+                  <a href="mailto:careers@amerilendloan.com?subject=Loan%20Advocate%20Position" className="no-underline">
                     Learn More
                   </a>
                 </Button>
@@ -884,7 +883,7 @@ export default function Home() {
                   Analyze loan applications and ensure responsible lending practices while helping qualified applicants.
                 </p>
                 <Button asChild className="border-[#0033A0] text-[#0033A0] hover:bg-[#0033A0] hover:text-white" variant="outline">
-                  <a href="mailto:careers@amerilend.com?subject=Risk%20Analyst%20Position" className="no-underline">
+                  <a href="mailto:careers@amerilendloan.com?subject=Risk%20Analyst%20Position" className="no-underline">
                     Learn More
                   </a>
                 </Button>
@@ -901,7 +900,7 @@ export default function Home() {
                   Develop strategies to reach customers and educate them about responsible borrowing options.
                 </p>
                 <Button asChild className="border-[#0033A0] text-[#0033A0] hover:bg-[#0033A0] hover:text-white" variant="outline">
-                  <a href="mailto:careers@amerilend.com?subject=Marketing%20Specialist%20Position" className="no-underline">
+                  <a href="mailto:careers@amerilendloan.com?subject=Marketing%20Specialist%20Position" className="no-underline">
                     Learn More
                   </a>
                 </Button>
@@ -1198,7 +1197,7 @@ export default function Home() {
                 </p>
                 <p className="flex items-center gap-2">
                   <MessageCircle className="w-4 h-4" />
-                  <a href="mailto:support@amerilend.com" className="hover:text-white">support@amerilend.com</a>
+                  <a href="mailto:support@amerilendloan.com" className="hover:text-white">support@amerilendloan.com</a>
                 </p>
               </div>
             </div>
@@ -1212,59 +1211,67 @@ export default function Home() {
             <div>
               <h4 className="font-semibold mb-3">Quick Links</h4>
               <ul className="space-y-2 text-sm text-gray-400">
-                <li><Link href="/"><a className="hover:text-white cursor-pointer">Home</a></Link></li>
-                <li><Link href="/apply"><a className="hover:text-white cursor-pointer">Apply Now</a></Link></li>
-                <li><Link href="/terms"><a className="hover:text-white cursor-pointer">Terms</a></Link></li>
+                <li><a href="/" className="hover:text-white cursor-pointer">Home</a></li>
+                <li><a href="/apply" className="hover:text-white cursor-pointer">Apply Now</a></li>
+                <li><a href="#faq" className="hover:text-white cursor-pointer">FAQ</a></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-3">Company</h4>
               <ul className="space-y-2 text-sm text-gray-400">
-                <li><Link href="/about"><a className="hover:text-white cursor-pointer">About Us</a></Link></li>
-                <li><Link href="/careers"><a className="hover:text-white cursor-pointer">Careers</a></Link></li>
-                <li><Link href="/blog"><a className="hover:text-white cursor-pointer">Blog</a></Link></li>
+                <li><a href="#about" className="hover:text-white cursor-pointer">About Us</a></li>
+                <li><a href="tel:+19452121609" className="hover:text-white cursor-pointer">Contact Support</a></li>
+                <li><a href="mailto:support@amerilendloan.com" className="hover:text-white cursor-pointer">Email Support</a></li>
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-3">Support</h4>
+              <h4 className="font-semibold mb-3">Resources</h4>
               <ul className="space-y-2 text-sm text-gray-400">
-                <li><Link href="/faq"><a className="hover:text-white cursor-pointer">FAQ</a></Link></li>
-                <li><Link href="/help"><a className="hover:text-white cursor-pointer">Help Center</a></Link></li>
-                <li><Link href="/contact"><a className="hover:text-white cursor-pointer">Contact</a></Link></li>
+                <li><a href="#faq" className="hover:text-white cursor-pointer">FAQ</a></li>
+                <li><a href="/dashboard" className="hover:text-white cursor-pointer">Dashboard</a></li>
+                <li><a href="mailto:support@amerilendloan.com" className="hover:text-white cursor-pointer">Help Center</a></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-3">Legal</h4>
               <ul className="space-y-2 text-sm text-gray-400">
-                <li><Link href="/privacy"><a className="hover:text-white cursor-pointer">Privacy</a></Link></li>
-                <li><Link href="/disclosures"><a className="hover:text-white cursor-pointer">Disclosures</a></Link></li>
-                <li><Link href="/licenses"><a className="hover:text-white cursor-pointer">Licenses</a></Link></li>
+                <li><a href="/public/legal/privacy-policy" className="hover:text-[#FFA500] cursor-pointer transition-colors">Privacy Policy</a></li>
+                <li><a href="/public/legal/terms-of-service" className="hover:text-[#FFA500] cursor-pointer transition-colors">Terms of Service</a></li>
+                <li><a href="/public/legal/loan-agreement" className="hover:text-[#FFA500] cursor-pointer transition-colors">Loan Agreement</a></li>
+                <li><a href="/public/legal/esign-consent" className="hover:text-[#FFA500] cursor-pointer transition-colors">E-Sign Consent</a></li>
               </ul>
+            </div>
+          </div>
+
+          {/* Track Application Section */}
+          <div className="flex justify-center py-6 mb-6">
+            <div className="w-fit">
+              <ApplicationTracking />
             </div>
           </div>
 
           <div className="border-t border-gray-800 pt-8 text-center text-gray-400 text-xs space-y-4 max-w-4xl mx-auto">
             <p>
               © 2025 AmeriLend, LLC. All Rights Reserved. Use of AmeriLend, LLC is subject to our{" "}
-              <Link href="/terms"><a className="text-white hover:underline cursor-pointer">
+              <a href="/public/legal/terms-of-service" className="text-[#FFA500] hover:text-orange-300 underline cursor-pointer transition-colors font-medium">
                 Terms of Use
-              </a></Link>{" "}
+              </a>{" "}
               and{" "}
-              <Link href="/privacy"><a className="text-white hover:underline cursor-pointer">
+              <a href="/public/legal/privacy-policy" className="text-[#FFA500] hover:text-orange-300 underline cursor-pointer transition-colors font-medium">
                 Privacy Policy
-              </a></Link>
+              </a>
               .
             </p>
 
             <p>
-              California Disclosures and{" "}
-              <Link href="/privacy"><a className="text-white hover:underline cursor-pointer">
-                Privacy Policy
-              </a></Link>{" "}
-              | California Consumers can opt-out of the sale of personal information by clicking{" "}
-              <Link href="/opt-out"><a className="text-white hover:underline cursor-pointer">
-                Do Not Sell My Personal Information
-              </a></Link>
+              California Consumers can opt-out of the sale of personal information by contacting us at{" "}
+              <a href="mailto:support@amerilendloan.com" className="text-white hover:underline cursor-pointer">
+                support@amerilendloan.com
+              </a>
+              {" "}or calling{" "}
+              <a href="tel:+19452121609" className="text-white hover:underline">
+                (945) 212-1609
+              </a>
               .
             </p>
 
@@ -1303,8 +1310,8 @@ export default function Home() {
                   (945) 212-1609
                 </a>
                 , Monday – Friday, 8 a.m. – 8:00 p.m. and Saturday and Sunday between 9 a.m. – 5:00 p.m. Eastern Time, or by sending an email to{" "}
-                <a href="mailto:support@amerilend.com" className="text-white hover:underline">
-                  support@amerilend.com
+                <a href="mailto:support@amerilendloan.com" className="text-white hover:underline">
+                  support@amerilendloan.com
                 </a>
                 .
               </p>

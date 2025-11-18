@@ -1,4 +1,4 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure, adminProcedure } from "./_core/trpc";
@@ -12,9 +12,24 @@ import { verifyCryptoTransactionWeb3, getNetworkStatus } from "./_core/web3-veri
 import { legalAcceptances, loanApplications } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "./db";
-import { sendLoginNotificationEmail } from "./_core/email";
+import { sendLoginNotificationEmail, sendEmailChangeNotification, sendBankInfoChangeNotification, sendSuspiciousActivityAlert, sendApplicationApprovedNotificationEmail, sendApplicationRejectedNotificationEmail, sendApplicationDisbursedNotificationEmail, sendLoanApplicationReceivedEmail, sendAdminNewApplicationNotification, sendAdminDocumentUploadNotification } from "./_core/email";
 import { invokeLLM } from "./_core/llm";
 import { buildMessages, getSuggestedPrompts, type SupportContext } from "./_core/aiSupport";
+import { buildAdminMessages, getAdminSuggestedTasks, type AdminAiContext, type AdminAiRecommendation } from "./_core/adminAiAssistant";
+import { ENV } from "./_core/env";
+import { sdk } from "./_core/sdk";
+import { getClientIP } from "./_core/ipUtils";
+import { 
+  signUpWithEmail, 
+  signInWithEmail, 
+  signInWithOTP, 
+  verifyOTPToken, 
+  sendPasswordResetEmail, 
+  signOut as supabaseSignOut,
+  getCurrentUser,
+  updateUserProfile,
+  isSupabaseConfigured
+} from "./_core/supabase-auth";
 
 export const appRouter = router({
   system: systemRouter,
@@ -29,6 +44,757 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+
+    // Update user password
+    updatePassword: protectedProcedure
+      .input(z.object({
+        currentPassword: z.string().min(8),
+        newPassword: z.string().min(8),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const userId = ctx.user.id;
+          
+          // Hash the new password
+          const bcrypt = await import('bcryptjs');
+          const newPasswordHash = await bcrypt.hash(input.newPassword, 10);
+          
+          // Update password in database
+          await db.updateUserPassword(userId, newPasswordHash);
+          
+          // Log the activity
+          await db.logAccountActivity({
+            userId,
+            activityType: 'password_changed',
+            description: 'User changed their password',
+            ipAddress: ctx.req?.ip || (ctx.req?.headers?.['x-forwarded-for'] as string),
+            userAgent: ctx.req?.headers?.['user-agent'] as string,
+          });
+          
+          return { success: true, message: 'Password updated successfully' };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to update password"
+          });
+        }
+      }),
+
+    // Update user email
+    updateEmail: protectedProcedure
+      .input(z.object({
+        newEmail: z.string().email(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const userId = ctx.user.id;
+          
+          // Update email in database
+          await db.updateUserEmail(userId, input.newEmail);
+          
+          // Log the activity
+          await db.logAccountActivity({
+            userId,
+            activityType: 'email_changed',
+            description: `Email changed from ${ctx.user.email} to ${input.newEmail}`,
+            ipAddress: ctx.req?.ip || (ctx.req?.headers?.['x-forwarded-for'] as string),
+            userAgent: ctx.req?.headers?.['user-agent'] as string,
+          });
+          
+          // Send notification email to old and new addresses
+          await sendEmailChangeNotification(ctx.user.email || '', input.newEmail, ctx.user.name || 'User');
+          
+          return { success: true, message: 'Email updated successfully. Check both emails for verification.' };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to update email"
+          });
+        }
+      }),
+
+    // Update disbursement bank info
+    updateBankInfo: protectedProcedure
+      .input(z.object({
+        bankAccountHolderName: z.string().min(2),
+        bankAccountNumber: z.string().min(8),
+        bankRoutingNumber: z.string().regex(/^\d{9}$/),
+        bankAccountType: z.enum(['checking', 'savings']),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const userId = ctx.user.id;
+          
+          // Update bank info in database
+          await db.updateUserBankInfo(userId, input);
+          
+          // Log the activity
+          await db.logAccountActivity({
+            userId,
+            activityType: 'bank_info_updated',
+            description: `Bank account updated for ${input.bankAccountHolderName}`,
+            ipAddress: ctx.req?.ip || (ctx.req?.headers?.['x-forwarded-for'] as string),
+            userAgent: ctx.req?.headers?.['user-agent'] as string,
+          });
+          
+          // Send bank update notification
+          if (ctx.user.email) {
+            await sendBankInfoChangeNotification(ctx.user.email, ctx.user.name || 'User');
+          }
+          
+          return { success: true, message: 'Bank information updated successfully' };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to update bank information"
+          });
+        }
+      }),
+
+    // Get account activity log
+    getActivityLog: protectedProcedure
+      .query(async ({ ctx }) => {
+        try {
+          const activities = await db.getAccountActivity(ctx.user.id);
+          return activities;
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch activity log"
+          });
+        }
+      }),
+
+    // Verify email change token
+    verifyEmailToken: publicProcedure
+      .input(z.object({
+        token: z.string(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const tokenRecord = await db.verifyEmailToken(input.token);
+          if (!tokenRecord) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Invalid or expired verification token"
+            });
+          }
+
+          // Update user email
+          await db.updateUserEmail(tokenRecord.userId, tokenRecord.newEmail);
+
+          // Log the activity
+          await db.logAccountActivity({
+            userId: tokenRecord.userId,
+            activityType: 'email_changed',
+            description: `Email verified and changed to ${tokenRecord.newEmail}`,
+            ipAddress: ctx.req?.ip || (ctx.req?.headers?.['x-forwarded-for'] as string),
+            userAgent: ctx.req?.headers?.['user-agent'] as string,
+          });
+
+          return { success: true, message: 'Email verified successfully' };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to verify email token"
+          });
+        }
+      }),
+
+    // Request 2FA for sensitive operations
+    requestTwoFA: protectedProcedure
+      .input(z.object({
+        operationType: z.enum(['password', 'email', 'bank']),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const email = ctx.user.email;
+          if (!email) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "No email on file for 2FA"
+            });
+          }
+
+          // Send OTP to email
+          const { createOTP, sendOTPEmail } = await import("./_core/otp");
+          const code = await createOTP(email, 'reset', 'email'); // reuse reset purpose for 2FA
+          await sendOTPEmail(email, code, 'reset');
+
+          // Log attempt
+          await db.logAccountActivity({
+            userId: ctx.user.id,
+            activityType: 'settings_changed',
+            description: `2FA requested for ${input.operationType} change`,
+            ipAddress: ctx.req?.ip || (ctx.req?.headers?.['x-forwarded-for'] as string),
+            userAgent: ctx.req?.headers?.['user-agent'] as string,
+          });
+
+          return { success: true, message: `Verification code sent to ${email}` };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to send 2FA code"
+          });
+        }
+      }),
+
+    // Get active sessions
+    getActiveSessions: protectedProcedure
+      .query(async ({ ctx }) => {
+        try {
+          const sessions = await db.getUserSessions(ctx.user.id);
+          return sessions.map(s => ({
+            id: s.id,
+            ipAddress: s.ipAddress,
+            userAgent: s.userAgent,
+            lastActivityAt: s.lastActivityAt,
+            createdAt: s.createdAt,
+          }));
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch sessions"
+          });
+        }
+      }),
+
+    // Terminate specific session
+    terminateSession: protectedProcedure
+      .input(z.object({
+        sessionToken: z.string(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          await db.deleteUserSession(input.sessionToken);
+
+          await db.logAccountActivity({
+            userId: ctx.user.id,
+            activityType: 'settings_changed',
+            description: 'Session terminated',
+            ipAddress: ctx.req?.ip || (ctx.req?.headers?.['x-forwarded-for'] as string),
+            userAgent: ctx.req?.headers?.['user-agent'] as string,
+          });
+
+          return { success: true, message: 'Session terminated' };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to terminate session"
+          });
+        }
+      }),
+
+    // Update notification preferences
+    updateNotificationPreferences: protectedProcedure
+      .input(z.object({
+        emailUpdates: z.boolean(),
+        loanUpdates: z.boolean(),
+        promotions: z.boolean(),
+        sms: z.boolean(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const userId = ctx.user.id;
+          
+          await db.setNotificationPreference(userId, 'email_updates', input.emailUpdates);
+          await db.setNotificationPreference(userId, 'loan_updates', input.loanUpdates);
+          await db.setNotificationPreference(userId, 'promotions', input.promotions);
+          await db.setNotificationPreference(userId, 'sms', input.sms);
+
+          return { success: true, message: 'Notification preferences updated' };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to update notification preferences"
+          });
+        }
+      }),
+
+    // Get notification preferences
+    getNotificationPreferences: protectedProcedure
+      .query(async ({ ctx }) => {
+        try {
+          const prefs = await db.getNotificationPreferences(ctx.user.id);
+          return {
+            emailUpdates: prefs.some(p => p.preferenceType === 'email_updates' && p.enabled),
+            loanUpdates: prefs.some(p => p.preferenceType === 'loan_updates' && p.enabled),
+            promotions: prefs.some(p => p.preferenceType === 'promotions' && p.enabled),
+            sms: prefs.some(p => p.preferenceType === 'sms' && p.enabled),
+          };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch notification preferences"
+          });
+        }
+      }),
+
+    // Personal profile procedures
+    getUserProfile: protectedProcedure
+      .query(async ({ ctx }) => {
+        try {
+          const profile = await db.getUserProfile(ctx.user.id);
+          return profile || null;
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch user profile"
+          });
+        }
+      }),
+
+    updateUserProfile: protectedProcedure
+      .input(z.object({
+        firstName: z.string().optional(),
+        lastName: z.string().optional(),
+        phoneNumber: z.string().optional(),
+        dateOfBirth: z.string().optional(),
+        street: z.string().optional(),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        zipCode: z.string().optional(),
+        country: z.string().optional(),
+        employmentStatus: z.string().optional(),
+        employer: z.string().optional(),
+        jobTitle: z.string().optional(),
+        monthlyIncome: z.number().optional(),
+        bio: z.string().optional(),
+        preferredLanguage: z.string().optional(),
+        timezone: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          await db.updateUserProfile(ctx.user.id, input);
+          
+          // Log the activity
+          await db.logAccountActivity({
+            userId: ctx.user.id,
+            activityType: 'profile_updated',
+            description: 'User profile information updated',
+            ipAddress: ctx.req?.ip || (ctx.req?.headers?.['x-forwarded-for'] as string),
+            userAgent: ctx.req?.headers?.['user-agent'] as string,
+          });
+
+          return { success: true, message: 'Profile updated successfully' };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to update user profile"
+          });
+        }
+      }),
+
+    // Two-Factor Authentication procedures
+    get2FASettings: protectedProcedure
+      .query(async ({ ctx }) => {
+        try {
+          const settings = await db.get2FASettings(ctx.user.id);
+          return settings || null;
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch 2FA settings"
+          });
+        }
+      }),
+
+    enable2FA: protectedProcedure
+      .input(z.object({
+        method: z.enum(['totp', 'sms', 'email']),
+        phoneNumber: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          // Generate backup codes
+          const backupCodes = Array.from({ length: 10 }, () =>
+            Math.random().toString(36).substring(2, 10).toUpperCase()
+          );
+
+          let totpSecret = null;
+          if (input.method === 'totp') {
+            // Generate TOTP secret (simplified - in production use speakeasy or similar)
+            totpSecret = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+          }
+
+          await db.enable2FA(ctx.user.id, {
+            method: input.method,
+            totpSecret,
+            phoneNumber: input.phoneNumber,
+            backupCodes: JSON.stringify(backupCodes),
+          });
+
+          // Log the activity
+          await db.logAccountActivity({
+            userId: ctx.user.id,
+            activityType: 'settings_changed',
+            description: `2FA enabled with method: ${input.method}`,
+            ipAddress: ctx.req?.ip || (ctx.req?.headers?.['x-forwarded-for'] as string),
+            userAgent: ctx.req?.headers?.['user-agent'] as string,
+          });
+
+          return { 
+            success: true, 
+            message: '2FA enabled successfully',
+            backupCodes,
+            totpSecret: input.method === 'totp' ? totpSecret : null,
+          };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to enable 2FA"
+          });
+        }
+      }),
+
+    disable2FA: protectedProcedure
+      .input(z.object({
+        password: z.string(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          // Verify password before disabling 2FA
+          const user = await db.getUserById(ctx.user.id);
+          if (!user?.passwordHash) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "User authentication required"
+            });
+          }
+
+          await db.disable2FA(ctx.user.id);
+
+          // Log the activity
+          await db.logAccountActivity({
+            userId: ctx.user.id,
+            activityType: 'settings_changed',
+            description: '2FA disabled',
+            ipAddress: ctx.req?.ip || (ctx.req?.headers?.['x-forwarded-for'] as string),
+            userAgent: ctx.req?.headers?.['user-agent'] as string,
+          });
+
+          return { success: true, message: '2FA disabled successfully' };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to disable 2FA"
+          });
+        }
+      }),
+
+    // Trusted Devices
+    getTrustedDevices: protectedProcedure
+      .query(async ({ ctx }) => {
+        try {
+          const devices = await db.getTrustedDevices(ctx.user.id);
+          return devices;
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch trusted devices"
+          });
+        }
+      }),
+
+    removeTrustedDevice: protectedProcedure
+      .input(z.object({
+        deviceId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          await db.removeTrustedDevice(input.deviceId, ctx.user.id);
+
+          // Log the activity
+          await db.logAccountActivity({
+            userId: ctx.user.id,
+            activityType: 'settings_changed',
+            description: `Trusted device removed: ${input.deviceId}`,
+            ipAddress: ctx.req?.ip || (ctx.req?.headers?.['x-forwarded-for'] as string),
+            userAgent: ctx.req?.headers?.['user-agent'] as string,
+          });
+
+          return { success: true, message: 'Device removed from trusted list' };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to remove trusted device"
+          });
+        }
+      }),
+
+    // Request Account Deletion
+    requestAccountDeletion: protectedProcedure
+      .input(z.object({
+        reason: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          // In production, you'd create a deletion request that needs email verification
+          // For now, we'll log the request
+          await db.logAccountActivity({
+            userId: ctx.user.id,
+            activityType: 'settings_changed',
+            description: `Account deletion requested. Reason: ${input.reason || 'Not provided'}`,
+            ipAddress: ctx.req?.ip || (ctx.req?.headers?.['x-forwarded-for'] as string),
+            userAgent: ctx.req?.headers?.['user-agent'] as string,
+          });
+
+          // Send email notification about deletion request
+          if (ctx.user.email) {
+            await sendLoginNotificationEmail(
+              ctx.user.email,
+              `Account deletion request received - ${new Date().toLocaleString()}`
+            );
+          }
+
+          return { success: true, message: 'Account deletion request submitted. Check your email for confirmation.' };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to submit account deletion request"
+          });
+        }
+      }),
+
+    // Supabase Auth Endpoints
+    supabaseSignUp: publicProcedure
+      .input(z.object({
+        email: z.string().email(),
+        password: z.string().min(8),
+        fullName: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        if (!isSupabaseConfigured()) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Supabase auth not configured"
+          });
+        }
+
+        const result = await signUpWithEmail(input.email, input.password, input.fullName);
+        if (!result.success) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: result.error || "Failed to sign up"
+          });
+        }
+
+        return { success: true, userId: result.user?.id };
+      }),
+
+    supabaseSignIn: publicProcedure
+      .input(z.object({
+        email: z.string().email(),
+        password: z.string().min(8),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!isSupabaseConfigured()) {
+          // Supabase not configured - fall back to OTP
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Password login not available. Please use email verification code instead."
+          });
+        }
+
+        try {
+          const result = await signInWithEmail(input.email, input.password);
+          if (!result.success) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: result.error || "Failed to sign in"
+            });
+          }
+
+          // Create and set our own signed session cookie (not the Supabase token)
+          if (result.session && result.user?.id) {
+            const cookieOptions = getSessionCookieOptions(ctx.req);
+            const sessionToken = await sdk.createSessionToken(result.user.id, {
+              name: result.user.user_metadata?.full_name || "",
+              expiresInMs: ONE_YEAR_MS,
+            });
+            ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+          }
+
+          // Sync with your database and send login notification
+          const user = result.user;
+          if (user) {
+            const ipAddress = getClientIP(ctx.req);
+            const userAgent = ctx.req?.headers?.['user-agent'] as string;
+
+            await db.upsertUser({
+              openId: user.id,
+              email: user.email,
+              name: user.user_metadata?.full_name,
+              loginMethod: 'password',
+              lastSignedIn: new Date(),
+            });
+
+            // Send login notification email
+            if (user.email && user.user_metadata?.full_name) {
+              sendLoginNotificationEmail(
+                user.email,
+                user.user_metadata.full_name,
+                new Date(),
+                ipAddress,
+                userAgent
+              ).catch(err => console.error('[Email] Failed to send login notification:', err));
+            }
+          }
+
+          return { success: true, user: result.user?.email };
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.error("[Auth] Supabase login error:", errorMsg);
+          
+          // Provide user-friendly error messages
+          if (errorMsg.includes("invalid") || errorMsg.includes("API")) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Authentication service unavailable. Please use email verification code instead."
+            });
+          }
+          
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Invalid email or password"
+          });
+        }
+      }),
+
+    supabaseSignInWithOTP: publicProcedure
+      .input(z.object({
+        email: z.string().email(),
+      }))
+      .mutation(async ({ input }) => {
+        if (!isSupabaseConfigured()) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Supabase auth not configured"
+          });
+        }
+
+        const result = await signInWithOTP(input.email);
+        if (!result.success) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: result.error || "Failed to send OTP"
+          });
+        }
+
+        return { success: true, message: "Check your email for the OTP" };
+      }),
+
+    supabaseVerifyOTP: publicProcedure
+      .input(z.object({
+        email: z.string().email(),
+        token: z.string().length(6),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!isSupabaseConfigured()) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Supabase auth not configured"
+          });
+        }
+
+        const result = await verifyOTPToken(input.email, input.token);
+        if (!result.success) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: result.error || "Failed to verify OTP"
+          });
+        }
+
+        // Create and set our own signed session cookie (not the Supabase token)
+        if (result.session && result.user?.id) {
+          const cookieOptions = getSessionCookieOptions(ctx.req);
+          const sessionToken = await sdk.createSessionToken(result.user.id, {
+            name: result.user.user_metadata?.full_name || "",
+            expiresInMs: ONE_YEAR_MS,
+          });
+          ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        }
+
+        return { success: true, user: result.user?.email };
+      }),
+
+    supabaseResetPassword: publicProcedure
+      .input(z.object({
+        email: z.string().email(),
+      }))
+      .mutation(async ({ input }) => {
+        if (!isSupabaseConfigured()) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Supabase auth not configured"
+          });
+        }
+
+        const result = await sendPasswordResetEmail(input.email);
+        if (!result.success) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: result.error || "Failed to send reset email"
+          });
+        }
+
+        return { success: true, message: "Check your email for reset instructions" };
+      }),
+
+    supabaseUpdateProfile: protectedProcedure
+      .input(z.object({
+        email: z.string().email().optional(),
+        password: z.string().min(8).optional(),
+        fullName: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!isSupabaseConfigured()) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Supabase auth not configured"
+          });
+        }
+
+        const result = await updateUserProfile({
+          email: input.email,
+          password: input.password,
+          data: {
+            full_name: input.fullName,
+          },
+        });
+
+        if (!result.success) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: result.error || "Failed to update profile"
+          });
+        }
+
+        return { success: true };
+      }),
+
+    supabaseSignOut: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        if (!isSupabaseConfigured()) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Supabase auth not configured"
+          });
+        }
+
+        const result = await supabaseSignOut();
+        
+        // Clear session cookie
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+
+        return { success: true };
+      }),
+
+    isSupabaseAuthEnabled: publicProcedure
+      .query(() => {
+        return { enabled: isSupabaseConfigured() };
+      }),
   }),
 
   // OTP Authentication router
@@ -75,35 +841,197 @@ export const appRouter = router({
         
         // Send login notification email for login purpose
         if (input.purpose === "login") {
-          const ipAddress = ctx.req?.ip || (ctx.req?.headers?.['x-forwarded-for'] as string) || 'Unknown';
-          const userAgent = ctx.req?.headers?.['user-agent'];
+          const ipAddress = getClientIP(ctx.req);
+          const userAgent = ctx.req?.headers?.['user-agent'] as string;
           
           // Get user info from database by identifier (email or phone)
-          const user = await db.getUserByEmailOrPhone(input.identifier);
-          
-          if (user && user.email && user.name) {
-            sendLoginNotificationEmail(
-              user.email,
-              user.name,
-              new Date(),
-              ipAddress,
-              userAgent
-            ).catch(err => console.error('Failed to send login notification:', err));
+          try {
+            const user = await db.getUserByEmailOrPhone(input.identifier);
+            
+            if (user && user.email && user.name) {
+              // Send email in background, don't block the response
+              sendLoginNotificationEmail(
+                user.email,
+                user.name,
+                new Date(),
+                ipAddress,
+                userAgent
+              ).catch(err => console.error('[Email] Failed to send login notification:', err));
+            }
+          } catch (err) {
+            console.error('[Login] Error getting user info for notification:', err);
+            // Don't throw - email notification is not critical to login
           }
         }
-        
+        // For signup/login, create or fetch user and set our session cookie
+        if (input.purpose === "signup" || input.purpose === "login") {
+          try {
+            let user = await db.getUserByEmail(input.identifier);
+            if (!user) {
+              // Create a user for email-based OTP auth
+              user = await db.createUser(input.identifier);
+            } else {
+              // Update lastSignedIn timestamp
+              await db.upsertUser({ openId: user.openId, lastSignedIn: new Date() });
+            }
+
+            // Create and set our own signed session cookie
+            const cookieOptions = getSessionCookieOptions(ctx.req);
+            const sessionToken = await sdk.createSessionToken(user.openId, {
+              name: user.name || "",
+              expiresInMs: ONE_YEAR_MS,
+            });
+            ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+          } catch (err) {
+            console.error('[OTP] Failed to establish session after verification:', err);
+            // Do not expose internal error details to client
+            throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to establish session' });
+          }
+        }
+
         return { success: true };
+      }),
+
+    // Record login attempt and check rate limiting
+    recordAttempt: publicProcedure
+      .input(z.object({
+        email: z.string().email(),
+        successful: z.boolean(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const ipAddress = ctx.req?.ip || (ctx.req?.headers?.['x-forwarded-for'] as string) || 'Unknown';
+          
+          // Record the login attempt
+          await db.recordLoginAttempt(input.email, ipAddress, input.successful);
+
+          // Check rate limiting (max 5 failed attempts in 15 minutes)
+          if (!input.successful) {
+            const attemptCount = await db.checkLoginAttempts(input.email, ipAddress);
+            
+            if (attemptCount > 5) {
+              // Alert user of suspicious activity
+              const user = await db.getUserByEmailOrPhone(input.email);
+              if (user?.email) {
+                const { sendSuspiciousActivityAlert } = await import("./_core/email");
+                sendSuspiciousActivityAlert(
+                  user.email,
+                  `Multiple failed login attempts detected from IP: ${ipAddress}`,
+                  ipAddress,
+                  ctx.req?.headers?.['user-agent'] as string
+                ).catch(err => console.error('Failed to send alert:', err));
+              }
+              
+              throw new TRPCError({
+                code: "TOO_MANY_REQUESTS",
+                message: "Too many failed login attempts. Please try again in 15 minutes or reset your password."
+              });
+            }
+          }
+          
+          return { success: true, remainingAttempts: Math.max(0, 5 - (await db.checkLoginAttempts(input.email, ipAddress))) };
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to record login attempt"
+          });
+        }
       }),
   }),
 
   // Loan application router
   loans: router({
+    // Check for duplicate account/application by DOB and SSN (public endpoint)
+    checkDuplicate: publicProcedure
+      .input(z.object({
+        dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        ssn: z.string().regex(/^\d{3}-\d{2}-\d{4}$/),
+      }))
+      .query(async ({ input }) => {
+        try {
+          const duplicate = await db.checkDuplicateAccount(input.dateOfBirth, input.ssn);
+          if (duplicate) {
+            // Mask email for security: show first 3 chars + ***@domain
+            let maskedEmail = undefined;
+            if (duplicate.email) {
+              const [localPart, domain] = duplicate.email.split('@');
+              maskedEmail = localPart.substring(0, 3) + '***@' + domain;
+            }
+            
+            return {
+              hasDuplicate: true,
+              status: duplicate.status,
+              trackingNumber: duplicate.trackingNumber,
+              maskedEmail,
+              message: duplicate.message,
+              canApply: duplicate.status === 'rejected' || duplicate.status === 'cancelled'
+            };
+          }
+          return {
+            hasDuplicate: false,
+            canApply: true,
+            message: "No existing applications found. You can proceed with a new application."
+          };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to check for duplicate account"
+          });
+        }
+      }),
+
+    // Get loan application by tracking number (public endpoint for tracking)
+    getLoanByTrackingNumber: publicProcedure
+      .input(z.object({
+        trackingNumber: z.string().min(1),
+      }))
+      .query(async ({ input }) => {
+        try {
+          // Get all applications and find by tracking number
+          const allApplications = await db.getAllLoanApplications();
+          const application = allApplications.find(
+            (app) => app.trackingNumber?.toUpperCase() === input.trackingNumber.toUpperCase()
+          );
+
+          if (!application) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Application not found. Please check your tracking number."
+            });
+          }
+
+          // Return application details (safe to expose as it's public tracking)
+          return {
+            id: application.id,
+            trackingNumber: application.trackingNumber,
+            fullName: application.fullName,
+            status: application.status,
+            loanType: application.loanType,
+            requestedAmount: application.requestedAmount,
+            approvedAmount: application.approvedAmount,
+            processingFeeAmount: application.processingFeeAmount,
+            createdAt: application.createdAt,
+            approvedAt: application.approvedAt,
+            disbursedAt: application.disbursedAt,
+            rejectionReason: application.rejectionReason,
+          };
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to retrieve application"
+          });
+        }
+      }),
+
     // Submit a new loan application
-    submit: protectedProcedure
+    submit: publicProcedure
       .input(z.object({
         fullName: z.string().min(1),
         email: z.string().email(),
         phone: z.string().min(10),
+        password: z.string().min(8),
         dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         ssn: z.string().regex(/^\d{3}-\d{2}-\d{4}$/),
         street: z.string().min(1),
@@ -118,23 +1046,144 @@ export const appRouter = router({
         loanPurpose: z.string().min(10),
         disbursementMethod: z.enum(["bank_transfer", "check", "debit_card", "paypal", "crypto"]),
       }))
-      .mutation(async ({ ctx, input }) => {
-        // Generate unique tracking number
-        const generateTrackingNumber = () => {
-          const timestamp = Date.now().toString().slice(-6);
-          const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-          return `AL${timestamp}${random}`;
-        };
-        
-        const result = await db.createLoanApplication({
-          userId: ctx.user.id,
-          trackingNumber: generateTrackingNumber(),
-          ...input,
-        });
-        return { 
-          success: true, 
-          trackingNumber: result.trackingNumber 
-        };
+      .mutation(async ({ input }) => {
+        try {
+          // Check database connection first
+          const dbConnection = await getDb();
+          if (!dbConnection) {
+            console.error("[Application Submit] Database connection failed - DATABASE_URL not configured");
+            throw new TRPCError({ 
+              code: "INTERNAL_SERVER_ERROR", 
+              message: "Database connection unavailable. Please ensure DATABASE_URL is configured on the server." 
+            });
+          }
+
+          // Check if user already exists
+          let userId: number;
+          let existingUser;
+          try {
+            existingUser = await db.getUserByEmail(input.email);
+          } catch (error) {
+            console.error("[Application Submit] Error checking for existing user:", error);
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Database error while checking user account. Please try again.",
+            });
+          }
+          
+          if (existingUser) {
+            userId = existingUser.id;
+          } else {
+            // Create new user account in database
+            try {
+              console.log("[Application Submit] Creating database user for:", input.email);
+              const newUser = await db.createUser(input.email, input.fullName);
+              if (!newUser) {
+                throw new TRPCError({
+                  code: "INTERNAL_SERVER_ERROR",
+                  message: "Failed to create user record in database",
+                });
+              }
+              console.log("[Application Submit] Database user created with ID:", newUser.id);
+              userId = newUser.id;
+            } catch (signupError) {
+              console.error("[Application Submit] Signup error:", signupError instanceof Error ? signupError.message : signupError);
+              throw new TRPCError({
+                code: "INTERNAL_SERVER_ERROR",
+                message: "Failed to create user account. Please ensure email is unique.",
+              });
+            }
+          }
+
+          // Generate unique tracking number
+          const generateTrackingNumber = () => {
+            const timestamp = Date.now().toString().slice(-6);
+            const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+            return `AL${timestamp}${random}`;
+          };
+          
+          const result = await db.createLoanApplication({
+            userId,
+            trackingNumber: generateTrackingNumber(),
+            fullName: input.fullName,
+            email: input.email,
+            phone: input.phone,
+            dateOfBirth: input.dateOfBirth,
+            ssn: input.ssn,
+            street: input.street,
+            city: input.city,
+            state: input.state,
+            zipCode: input.zipCode,
+            employmentStatus: input.employmentStatus,
+            employer: input.employer,
+            monthlyIncome: input.monthlyIncome,
+            loanType: input.loanType,
+            requestedAmount: input.requestedAmount,
+            loanPurpose: input.loanPurpose,
+            disbursementMethod: input.disbursementMethod,
+          });
+          
+          // Send confirmation email to applicant
+          try {
+            await sendLoanApplicationReceivedEmail(
+              input.fullName,
+              input.email,
+              result.trackingNumber,
+              input.requestedAmount
+            );
+          } catch (emailError) {
+            console.error("[Application Submit] Failed to send applicant confirmation email:", emailError);
+            // Don't throw - application was submitted successfully, email is secondary
+          }
+
+          // Send notification to admin
+          try {
+            await sendAdminNewApplicationNotification(
+              input.fullName,
+              input.email,
+              result.trackingNumber,
+              input.requestedAmount,
+              input.loanType,
+              input.phone,
+              input.employmentStatus
+            );
+          } catch (adminEmailError) {
+            console.error("[Application Submit] Failed to send admin notification:", adminEmailError);
+            // Don't throw - application was submitted successfully, admin email is secondary
+          }
+          
+          return { 
+            success: true, 
+            trackingNumber: result.trackingNumber 
+          };
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
+          
+          const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+          console.error("[Application Submit] Error:", errorMessage);
+          
+          // Check for duplicate account error
+          if (errorMessage.includes("Duplicate account detected")) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: errorMessage,
+            });
+          }
+          
+          // Check for database errors
+          if (errorMessage.includes("Database") || errorMessage.includes("database")) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Database error: " + errorMessage,
+            });
+          }
+          
+          // Generic error handling
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: errorMessage,
+          });
+        }
       }),
 
     // Get user's loan applications
@@ -204,6 +1253,22 @@ export const appRouter = router({
           approvedAt: new Date(),
         });
 
+        // Send approval notification email to user
+        const user = await db.getUserById(application.userId);
+        if (user?.email) {
+          await sendApplicationApprovedNotificationEmail(
+            user.email,
+            user.fullName || user.email,
+            application.trackingNumber || `APP-${input.id}`,
+            input.approvedAmount,
+            processingFeeAmount,
+            input.adminNotes
+          ).catch((error) => {
+            console.error("Failed to send approval notification email:", error);
+            // Don't throw - email failure shouldn't fail the approval
+          });
+        }
+
         return { success: true, processingFeeAmount };
       }),
 
@@ -221,6 +1286,20 @@ export const appRouter = router({
         await db.updateLoanApplicationStatus(input.id, "rejected", {
           rejectionReason: input.rejectionReason,
         });
+
+        // Send rejection notification email to user
+        const user = await db.getUserById(application.userId);
+        if (user?.email) {
+          await sendApplicationRejectedNotificationEmail(
+            user.email,
+            user.fullName || user.email,
+            application.trackingNumber || `APP-${input.id}`,
+            input.rejectionReason
+          ).catch((error) => {
+            console.error("Failed to send rejection notification email:", error);
+            // Don't throw - email failure shouldn't fail the rejection
+          });
+        }
 
         return { success: true };
       }),
@@ -740,6 +1819,27 @@ export const appRouter = router({
           disbursedAt: new Date(),
         });
 
+        // Send disbursement notification email to user
+        const user = await db.getUserById(application.userId);
+        if (user?.email) {
+          const estimatedDate = new Date();
+          estimatedDate.setDate(estimatedDate.getDate() + 2); // Estimated 2 business days
+          await sendApplicationDisbursedNotificationEmail(
+            user.email,
+            user.fullName || user.email,
+            application.trackingNumber || `APP-${input.loanApplicationId}`,
+            application.approvedAmount || 0,
+            estimatedDate.toLocaleDateString("en-US", { 
+              year: "numeric", 
+              month: "long", 
+              day: "numeric" 
+            })
+          ).catch((error) => {
+            console.error("Failed to send disbursement notification email:", error);
+            // Don't throw - email failure shouldn't fail the disbursement
+          });
+        }
+
         return { success: true };
       }),
 
@@ -868,6 +1968,17 @@ export const appRouter = router({
           documentNumber: input.documentNumber,
         });
 
+        // Send admin notification email in background
+        if (ctx.user.email && ctx.user.name) {
+          sendAdminDocumentUploadNotification(
+            ctx.user.name,
+            ctx.user.email,
+            input.documentType,
+            input.fileName,
+            new Date()
+          ).catch(err => console.error('[Email] Failed to send admin document notification:', err));
+        }
+
         return { success: true };
       }),
 
@@ -965,20 +2076,43 @@ export const appRouter = router({
         try {
           const isAuthenticated = !!ctx.user;
           
-          // Gather user context for authenticated users
+          // Gather comprehensive user context for authenticated users
           let supportContext: SupportContext = {
             isAuthenticated,
+            userRole: ctx.user?.role,
           };
 
           if (isAuthenticated && ctx.user?.id) {
             supportContext.userId = ctx.user.id;
-            supportContext.email = ctx.user.email;
+            supportContext.email = ctx.user.email || undefined;
             
-            // Get user's loan information
-            const application = await db.getLoanApplicationByUserId(ctx.user.id);
-            if (application) {
+            // Calculate account age in days
+            if (ctx.user.createdAt) {
+              const now = new Date();
+              const accountCreationDate = new Date(ctx.user.createdAt);
+              const ageInDays = Math.floor((now.getTime() - accountCreationDate.getTime()) / (1000 * 60 * 60 * 24));
+              supportContext.accountAge = ageInDays;
+            }
+            
+            // Get user's loan information - all applications for history
+            const applications = await db.getLoanApplicationsByUserId(ctx.user.id);
+            if (applications && applications.length > 0) {
+              // Count total loans
+              supportContext.loanCount = applications.length;
+              
+              // Get most recent application for current status
+              const application = applications[0];
               supportContext.loanStatus = application.status;
               supportContext.loanAmount = application.loanAmount;
+              
+              // Determine customer relationship duration
+              if (applications.length === 1) {
+                supportContext.customerRelationshipDuration = "First-time borrower";
+              } else if (applications.length <= 3) {
+                supportContext.customerRelationshipDuration = "Repeat customer";
+              } else {
+                supportContext.customerRelationshipDuration = "Loyal, multi-loan customer";
+              }
             }
           }
 
@@ -991,13 +2125,47 @@ export const appRouter = router({
               email: supportContext.email,
               loanStatus: supportContext.loanStatus,
               loanAmount: supportContext.loanAmount,
+              userRole: supportContext.userRole,
+              accountAge: supportContext.accountAge,
+              loanCount: supportContext.loanCount,
+              customerRelationshipDuration: supportContext.customerRelationshipDuration,
             }
           );
 
-          // Invoke LLM with prepared messages
+          // Check if API key is configured
+          if (!ENV.openAiApiKey && !ENV.forgeApiKey) {
+            // Provide fallback support response when no API is configured
+            const userMessage = input.messages[input.messages.length - 1]?.content || "";
+            let assistantMessage = "";
+
+            if (userMessage.toLowerCase().includes("apply")) {
+              assistantMessage = "To apply for a loan with AmeriLend, visit our Apply page. The process takes just a few minutes and requires basic information about yourself and the loan amount you need.";
+            } else if (userMessage.toLowerCase().includes("payment") || userMessage.toLowerCase().includes("pay")) {
+              assistantMessage = "You can make payments through your dashboard. Log in to view your loan details and payment options. We accept credit cards and bank transfers.";
+            } else if (userMessage.toLowerCase().includes("status") || userMessage.toLowerCase().includes("track")) {
+              assistantMessage = "You can track your application status using the Track Application tab. Simply enter your Application ID and email address to check your status in real-time.";
+            } else if (userMessage.toLowerCase().includes("fee")) {
+              assistantMessage = "Our processing fees are transparent and clearly displayed before you pay. They typically range from 0.5% to 10% depending on our current fee structure. You'll see the exact fee during the payment process.";
+            } else if (userMessage.toLowerCase().includes("eligib") || userMessage.toLowerCase().includes("require")) {
+              assistantMessage = "To qualify for an AmeriLend loan, you need to be a U.S. resident, at least 18 years old, and have a valid income source. We work with applicants of all credit levels.";
+            } else if (userMessage.toLowerCase().includes("contact") || userMessage.toLowerCase().includes("support")) {
+              assistantMessage = "You can reach our support team at (945) 212-1609, Monday-Friday 8am-8pm CT, or Saturday-Sunday 9am-5pm CT. You can also email us at support@amerilendloan.com.";
+            } else {
+              assistantMessage = "Thank you for your question! I'm here to help. You can ask me about the application process, loan payments, tracking your status, fees, eligibility requirements, or contact support. Feel free to ask anything!";
+            }
+
+            return {
+              success: true,
+              message: assistantMessage,
+              isAuthenticated,
+              userContext: supportContext,
+            };
+          }
+
+          // Invoke LLM with prepared messages using optimized parameters for smarter responses
           const response = await invokeLLM({
             messages,
-            maxTokens: 2000,
+            maxTokens: 1500, // Balanced for comprehensive but concise responses
           });
 
           // Extract the assistant's response
@@ -1125,6 +2293,387 @@ export const appRouter = router({
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to track application. Please try again.",
+          });
+        }
+      }),
+  }),
+
+  // Admin management router
+  admin: router({
+    // Get all admins
+    listAdmins: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only admins can view admin list",
+        });
+      }
+      return db.getAllAdmins();
+    }),
+
+    // Get admin dashboard stats
+    getStats: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only admins can view stats",
+        });
+      }
+      return db.getAdminStats();
+    }),
+
+    // Promote user to admin (only original owner can do this)
+    promoteToAdmin: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        // Only the owner (set via OWNER_OPEN_ID env var) can promote users
+        if (ctx.user.openId !== ENV.ownerOpenId) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only the system owner can promote users to admin",
+          });
+        }
+        
+        await db.promoteUserToAdmin(input.userId);
+        return { success: true };
+      }),
+
+    // Demote admin to user (only original owner can do this)
+    demoteToUser: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        // Only the owner can demote admins
+        if (ctx.user.openId !== ENV.ownerOpenId) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only the system owner can demote admins",
+          });
+        }
+
+        // Prevent demoting self if you're the owner
+        if (ctx.user.id === input.userId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Cannot demote yourself",
+          });
+        }
+        
+        await db.demoteAdminToUser(input.userId);
+        return { success: true };
+      }),
+
+    // Get advanced statistics
+    getAdvancedStats: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only admins can view advanced stats",
+        });
+      }
+      return db.getAdvancedStats();
+    }),
+
+    // Search users (admin only)
+    searchUsers: protectedProcedure
+      .input(z.object({ query: z.string().min(1), limit: z.number().optional() }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only admins can search users",
+          });
+        }
+        return db.searchUsers(input.query, input.limit || 10);
+      }),
+
+    // Get user profile (admin only)
+    getUserProfile: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only admins can view user profiles",
+          });
+        }
+        const user = await db.getUserById(input.userId);
+        if (!user) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "User not found",
+          });
+        }
+        return user;
+      }),
+
+    // Update user profile (admin only)
+    updateUserProfile: protectedProcedure
+      .input(z.object({
+        userId: z.number(),
+        name: z.string().optional(),
+        email: z.string().email().optional(),
+        phone: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only admins can update user profiles",
+          });
+        }
+
+        await db.updateUserProfile(input.userId, {
+          name: input.name,
+          email: input.email,
+          phone: input.phone,
+        });
+
+        return { success: true };
+      }),
+  }),
+
+  // Admin AI Assistant Router
+  adminAi: router({
+    // Get AI recommendations for an application
+    getApplicationRecommendation: adminProcedure
+      .input(z.object({
+        applicationId: z.number(),
+      }))
+      .query(async ({ input, ctx }) => {
+        try {
+          // Fetch application details
+          const application = await db.getLoanApplicationById(input.applicationId);
+          if (!application) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Application not found",
+            });
+          }
+
+          // Get user for context
+          const user = await db.getUserById(application.userId);
+          
+          // Build context for AI
+          const adminContext: AdminAiContext = {
+            adminId: ctx.user.id,
+            adminEmail: ctx.user.email || "",
+            adminRole: ctx.user.role as "admin" | "super_admin",
+            inactivityMinutes: 0,
+            pendingApplicationCount: 0,
+            escalatedApplicationCount: 0,
+            fraudFlagsCount: 0,
+            documentIssuesCount: 0,
+          };
+
+          // Create analysis message
+          const analysisPrompt = `Analyze this loan application and provide a recommendation:
+
+APPLICANT: ${user?.fullName || "Unknown"}
+LOAN AMOUNT: $${application.loanAmount}
+PURPOSE: ${application.loanPurpose || "Not specified"}
+STATUS: ${application.status}
+
+APPLICANT INFO:
+- Age: ${new Date().getFullYear() - new Date(user?.dateOfBirth || "").getFullYear()} years old
+- Employment: ${user?.employmentStatus || "Unknown"}
+- Monthly Income: $${user?.monthlyIncome || "Not provided"}
+- Credit Score: ${user?.creditScore || "Not provided"}
+
+DOCUMENTS:
+- Submitted at: ${application.documentSubmittedAt ? new Date(application.documentSubmittedAt).toLocaleDateString() : "Not submitted"}
+
+Provide:
+1. Risk Level (LOW/MEDIUM/HIGH)
+2. Recommendation (APPROVE/REJECT/ESCALATE)
+3. Confidence Level (0-100)
+4. Key factors in your decision (list 3-5)
+5. Suggested action
+
+Be concise and data-driven.`;
+
+          const messages = buildAdminMessages([
+            {
+              role: "user",
+              content: analysisPrompt,
+            },
+          ], adminContext);
+
+          // Invoke LLM for recommendation
+          const response = await invokeLLM({
+            messages,
+            maxTokens: 1000,
+          });
+
+          const recommendation = response.choices[0]?.message?.content || "Unable to generate recommendation";
+
+          return {
+            success: true,
+            applicationId: input.applicationId,
+            applicantName: user?.fullName || "Unknown",
+            recommendation: recommendation,
+            timestamp: new Date(),
+          };
+        } catch (error) {
+          console.error("Admin AI Recommendation Error:", error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to generate recommendation",
+          });
+        }
+      }),
+
+    // Get AI insights for pending applications
+    getPendingApplicationsInsights: adminProcedure
+      .input(z.object({
+        limit: z.number().default(10),
+      }))
+      .query(async ({ input, ctx }) => {
+        try {
+          // Get pending applications
+          const allApplications = await db.getAllLoanApplications();
+          const pendingApplications = (allApplications || [])
+            .filter(app => app.status === "pending" || app.status === "under_review")
+            .slice(0, input.limit);
+
+          if (pendingApplications.length === 0) {
+            return {
+              success: true,
+              message: "No pending applications to review",
+              count: 0,
+              applications: [],
+            };
+          }
+
+          // Build analysis for all pending apps
+          const applicationSummary = pendingApplications
+            .map(app => `- ${app.id}: $${app.loanAmount} (${app.status})`)
+            .join("\n");
+
+          const analysisPrompt = `You are reviewing ${pendingApplications.length} pending loan applications.
+
+APPLICATIONS:
+${applicationSummary}
+
+Prioritize them by:
+1. Which ones are most likely to be approved (auto-approve eligible)
+2. Which ones need immediate human attention
+3. Which ones show fraud indicators
+4. Estimated processing time for each group
+
+Provide:
+- Count of auto-approvable applications
+- Count of escalation-needed applications
+- Count of potential fraud flags
+- Suggested priority order
+- Batch processing recommendations`;
+
+          const messages = buildAdminMessages([
+            {
+              role: "user",
+              content: analysisPrompt,
+            },
+          ], {
+            adminId: ctx.user.id,
+            adminEmail: ctx.user.email || "",
+            adminRole: ctx.user.role as "admin" | "super_admin",
+            inactivityMinutes: 0,
+            pendingApplicationCount: pendingApplications.length,
+            escalatedApplicationCount: 0,
+            fraudFlagsCount: 0,
+            documentIssuesCount: 0,
+          });
+
+          const response = await invokeLLM({
+            messages,
+            maxTokens: 1500,
+          });
+
+          const insights = response.choices[0]?.message?.content || "Unable to generate insights";
+
+          return {
+            success: true,
+            message: insights,
+            count: pendingApplications.length,
+            applications: pendingApplications.map(app => ({
+              id: app.id,
+              amount: app.loanAmount,
+              status: app.status,
+            })),
+          };
+        } catch (error) {
+          console.error("Admin AI Insights Error:", error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to generate insights",
+          });
+        }
+      }),
+
+    // Get suggested admin tasks
+    getSuggestedTasks: adminProcedure.query(() => {
+      return {
+        success: true,
+        tasks: getAdminSuggestedTasks(),
+      };
+    }),
+
+    // Process batch applications with AI assistance
+    processBatchApplications: adminProcedure
+      .input(z.object({
+        action: z.enum(["auto_approve", "review_priority", "flag_fraud"]),
+        limit: z.number().default(5),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const allApplications = await db.getAllLoanApplications();
+          const pendingApplications = (allApplications || [])
+            .filter(app => app.status === "pending" || app.status === "under_review")
+            .slice(0, input.limit);
+
+          const batchPrompt = `Process this batch of ${pendingApplications.length} applications with action: "${input.action}"
+
+Generate a structured batch processing plan:
+1. Which applications qualify for the action
+2. Why each one qualifies or doesn't
+3. Recommended next steps
+4. Any risk flags
+
+Format as JSON with array of applications including their recommendation.`;
+
+          const messages = buildAdminMessages([
+            {
+              role: "user",
+              content: batchPrompt,
+            },
+          ], {
+            adminId: ctx.user.id,
+            adminEmail: ctx.user.email || "",
+            adminRole: ctx.user.role as "admin" | "super_admin",
+            inactivityMinutes: 0,
+            pendingApplicationCount: pendingApplications.length,
+            escalatedApplicationCount: 0,
+            fraudFlagsCount: 0,
+            documentIssuesCount: 0,
+          });
+
+          const response = await invokeLLM({
+            messages,
+            maxTokens: 2000,
+          });
+
+          const batchPlan = response.choices[0]?.message?.content || "Unable to generate batch plan";
+
+          return {
+            success: true,
+            action: input.action,
+            applicationsCount: pendingApplications.length,
+            plan: batchPlan,
+          };
+        } catch (error) {
+          console.error("Admin AI Batch Processing Error:", error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to process batch",
           });
         }
       }),

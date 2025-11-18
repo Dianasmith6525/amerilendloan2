@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { Loader2, Settings, DollarSign, CheckCircle, XCircle, Send } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import VerificationDocumentsAdmin from "@/components/VerificationDocumentsAdmin";
@@ -28,8 +28,33 @@ const statusColors = {
 };
 
 export default function AdminDashboard() {
-  const { user, isAuthenticated, loading: authLoading, logout } = useAuth();
   const [, setLocation] = useLocation();
+  const { user, isAuthenticated, loading: authLoading, logout } = useAuth();
+  
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      setLocation("/login");
+    }
+  }, [isAuthenticated, authLoading, setLocation]);
+  
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-emerald-50 to-blue-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading admin dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Don't render if not authenticated (redirect will happen)
+  if (!isAuthenticated) {
+    return null;
+  }
+  
   const utils = trpc.useUtils();
 
   // Approval dialog state

@@ -66,7 +66,9 @@ export default function VerificationDocumentsAdmin() {
   const [rejectionReason, setRejectionReason] = useState("");
 
   const utils = trpc.useUtils();
-  const { data: documents, isLoading } = trpc.verification.adminList.useQuery();
+  const { data: documents, isLoading } = trpc.verification.adminList.useQuery(undefined, {
+    refetchInterval: 3000, // Real-time refresh every 3 seconds
+  });
 
   const approveMutation = trpc.verification.adminApprove.useMutation({
     onSuccess: () => {

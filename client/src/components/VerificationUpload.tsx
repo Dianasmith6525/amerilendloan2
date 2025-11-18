@@ -9,6 +9,7 @@ import { trpc } from "@/lib/trpc";
 import { Upload, FileText, CheckCircle2, XCircle, Clock, Loader2, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 const documentTypeLabels: Record<string, string> = {
   drivers_license_front: "Driver's License (Front)",
@@ -41,6 +42,7 @@ const statusIcons = {
 };
 
 export default function VerificationUpload() {
+  const { isAuthenticated } = useAuth();
   const [selectedType, setSelectedType] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -48,7 +50,9 @@ export default function VerificationUpload() {
   const [viewDocument, setViewDocument] = useState<{ url: string; type: string } | null>(null);
 
   const utils = trpc.useUtils();
-  const { data: documents, isLoading } = trpc.verification.myDocuments.useQuery();
+  const { data: documents, isLoading } = trpc.verification.myDocuments.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
   const uploadMutation = trpc.verification.uploadDocument.useMutation({
     onSuccess: () => {
       utils.verification.myDocuments.invalidate();
@@ -102,26 +106,45 @@ export default function VerificationUpload() {
     setUploading(true);
 
     try {
-      // Convert file to base64 for storage
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64Data = reader.result as string;
-        
-        // In a real application, you would upload to actual storage
-        // For demo purposes, we're storing the base64 data
-        await uploadMutation.mutateAsync({
-          documentType: selectedType as any,
-          fileName: selectedFile.name,
-          filePath: base64Data, // In production, this would be the storage URL
-          fileSize: selectedFile.size,
-          mimeType: selectedFile.type,
-        });
-        
-        setUploading(false);
-      };
-      reader.readAsDataURL(selectedFile);
+      // Step 1: Upload file to external storage via server
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
+      // Get session token from cookies
+      const sessionToken = document.cookie
+        .split("; ")
+        .find(row => row.startsWith("app_session_id="))
+        ?.split("=")[1];
+
+      const uploadResponse = await fetch("/api/upload-document", {
+        method: "POST",
+        body: formData,
+        headers: {
+          "Authorization": `Bearer ${sessionToken || ""}`,
+        },
+        credentials: "include", // Include cookies in request
+      });
+
+      if (!uploadResponse.ok) {
+        const error = await uploadResponse.json();
+        throw new Error(error.error || "Storage upload failed");
+      }
+
+      const uploadedFile = await uploadResponse.json();
+      
+      // Step 2: Register document in database with URL (not Base64)
+      await uploadMutation.mutateAsync({
+        documentType: selectedType as any,
+        fileName: uploadedFile.fileName,
+        filePath: uploadedFile.url, // ✅ Store URL from storage, not Base64
+        fileSize: uploadedFile.fileSize,
+        mimeType: uploadedFile.mimeType,
+      });
+
+      setUploading(false);
     } catch (error) {
       console.error("Upload error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to upload document");
       setUploading(false);
     }
   };

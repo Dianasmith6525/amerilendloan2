@@ -2,10 +2,10 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { useLocation } from "wouter";
 import {
   CheckCircle2,
   Clock,
@@ -33,7 +33,34 @@ import { Link } from "wouter";
 import VerificationUpload from "@/components/VerificationUpload";
 
 export default function Dashboard() {
-  const { user, isAuthenticated, logout } = useAuth();
+  const [, setLocation] = useLocation();
+  const { user, isAuthenticated, loading: authLoading, logout } = useAuth();
+  
+  // Redirect to login if not authenticated (only after loading completes)
+  useEffect(() => {
+    if (authLoading) return; // Don't redirect while loading
+    if (!isAuthenticated) {
+      setLocation("/login");
+    }
+  }, [isAuthenticated, authLoading, setLocation]);
+  
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-emerald-50 to-blue-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Don't render if not authenticated (redirect will happen)
+  if (!isAuthenticated) {
+    return null;
+  }
+  
   const { data: loans, isLoading } = trpc.loans.myApplications.useQuery(undefined, {
     enabled: isAuthenticated,
   });
@@ -107,7 +134,7 @@ export default function Dashboard() {
                 className="w-full bg-[#FFA500] hover:bg-[#FF8C00] text-white"
                 asChild
               >
-                <a href={getLoginUrl()}>Sign In</a>
+                <a href="/login">Sign In</a>
               </Button>
             </CardContent>
           </Card>
@@ -194,12 +221,15 @@ export default function Dashboard() {
     <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white border-b shadow-sm">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between h-16">
+        <div className="container mx-auto px-4 py-2 sm:py-2.5 md:py-3">
+          <div className="flex items-center justify-between">
             <Link href="/">
-              <a className="text-2xl font-bold">
-                <span className="text-[#0033A0]">Ameri</span>
-                <span className="text-[#D4AF37]">Lend</span>
+              <a className="flex items-center flex-shrink-0">
+                <img
+                  src="/logo.jpg"
+                  alt="AmeriLend"
+                  className="h-20 sm:h-24 md:h-28 w-auto object-contain brightness-105 contrast-110"
+                />
               </a>
             </Link>
             <div className="flex items-center gap-3">
@@ -276,55 +306,55 @@ export default function Dashboard() {
       <div className="flex-1 py-12">
         <div className="container mx-auto px-4 max-w-6xl">
           {/* Analytics Dashboard */}
-          <div className="grid md:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
             <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
+              <CardContent className="p-4 sm:p-6">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Total Applications</p>
-                    <p className="text-3xl font-bold text-[#0033A0]">{stats.total}</p>
+                    <p className="text-xs sm:text-sm text-gray-600 mb-1">Total Applications</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-[#0033A0]">{stats.total}</p>
                   </div>
-                  <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                    <FileText className="w-6 h-6 text-blue-600" />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
+              <CardContent className="p-4 sm:p-6">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Approved</p>
-                    <p className="text-3xl font-bold text-green-600">{stats.approved}</p>
+                    <p className="text-xs sm:text-sm text-gray-600 mb-1">Approved</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-green-600">{stats.approved}</p>
                   </div>
-                  <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-                    <CheckCircle2 className="w-6 h-6 text-green-600" />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                    <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
+              <CardContent className="p-4 sm:p-6">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Pending Review</p>
-                    <p className="text-3xl font-bold text-yellow-600">{stats.pending}</p>
+                    <p className="text-xs sm:text-sm text-gray-600 mb-1">Pending Review</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-yellow-600">{stats.pending}</p>
                   </div>
-                  <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center">
-                    <Clock className="w-6 h-6 text-yellow-600" />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
+                    <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
+              <CardContent className="p-4 sm:p-6">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Total Funded</p>
-                    <p className="text-3xl font-bold text-green-600">
+                    <p className="text-xs sm:text-sm text-gray-600 mb-1">Total Funded</p>
+                    <p className="text-xl sm:text-3xl font-bold text-green-600">
                       {new Intl.NumberFormat("en-US", {
                         style: "currency",
                         currency: "USD",
@@ -332,8 +362,8 @@ export default function Dashboard() {
                       }).format((stats.totalFunded || 0) / 100)}
                     </p>
                   </div>
-                  <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-                    <TrendingUp className="w-6 h-6 text-green-600" />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                    <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
                   </div>
                 </div>
               </CardContent>
@@ -341,7 +371,7 @@ export default function Dashboard() {
           </div>
 
           {/* Quick Actions */}
-          <div className="grid md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
             <Card className="border-l-4 border-l-orange-500 hover:shadow-lg transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-start gap-4">
@@ -547,6 +577,29 @@ export default function Dashboard() {
                                         <p className="font-semibold text-gray-800">
                                           {loan.loanType === "installment" ? "12 months" : "6 months"}
                                         </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Processing Fee Breakdown - Show for approved/fee_pending/fee_paid/disbursed loans */}
+                                {(loan.status === "approved" || loan.status === "fee_pending" || loan.status === "fee_paid" || loan.status === "disbursed") && loan.processingFeeAmount && (
+                                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+                                    <h4 className="font-bold text-orange-800 mb-3 flex items-center gap-2">
+                                      <DollarSign className="w-4 h-4" />
+                                      Processing Fee Breakdown
+                                    </h4>
+                                    <div className="space-y-2">
+                                      <div className="flex justify-between items-center pb-2 border-b border-orange-200">
+                                        <span className="text-sm text-gray-600">Loan Amount</span>
+                                        <span className="font-semibold text-gray-800">{formatCurrency(loan.approvedAmount || 0)}</span>
+                                      </div>
+                                      <div className="flex justify-between items-center pb-2">
+                                        <span className="text-sm text-gray-600">Processing Fee</span>
+                                        <span className="font-semibold text-lg text-orange-600">{formatCurrency(loan.processingFeeAmount)}</span>
+                                      </div>
+                                      <div className="text-xs text-orange-700 bg-orange-100 rounded p-2 mt-2">
+                                        This fee covers administrative costs, loan processing, and verification services. The fee will be deducted when you pay before loan disbursement.
                                       </div>
                                     </div>
                                   </div>
@@ -962,11 +1015,38 @@ export default function Dashboard() {
       </div>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-8">
-        <div className="container mx-auto px-4 text-center">
-          <p className="text-sm text-gray-400">
-            © 2025 AmeriLend - U.S. Consumer Loan Platform. All rights reserved.
-          </p>
+      <footer className="bg-gradient-to-r from-[#0033A0] to-[#003366] text-white py-8">
+        <div className="container mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-6">
+            <div>
+              <h4 className="font-semibold mb-3">Need Help?</h4>
+              <div className="space-y-2 text-sm text-white/80">
+                <p>📞 <a href="tel:+19452121609" className="hover:text-[#FFA500] transition-colors">(945) 212-1609</a></p>
+                <p>📧 <a href="mailto:support@amerilendloan.com" className="hover:text-[#FFA500] transition-colors">support@amerilendloan.com</a></p>
+                <p>Hours: Mon-Fri 8am-8pm, Sat-Sun 9am-5pm CT</p>
+              </div>
+            </div>
+            <div>
+              <h4 className="font-semibold mb-3">Quick Links</h4>
+              <ul className="space-y-2 text-sm text-white/80">
+                <li><a href="/" className="hover:text-[#FFA500] transition-colors">Home</a></li>
+                <li><a href="/#faq" className="hover:text-[#FFA500] transition-colors">FAQ</a></li>
+                <li><Link href="/settings"><span className="hover:text-[#FFA500] transition-colors">Settings</span></Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold mb-3">Legal</h4>
+              <ul className="space-y-2 text-sm text-white/80">
+                <li><a href="/public/legal/privacy-policy" className="hover:text-[#FFA500] transition-colors">Privacy Policy</a></li>
+                <li><a href="/public/legal/terms-of-service" className="hover:text-[#FFA500] transition-colors">Terms of Service</a></li>
+                <li><a href="/public/legal/loan-agreement" className="hover:text-[#FFA500] transition-colors">Loan Agreement</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className="border-t border-white/20 pt-6 text-center text-xs text-white/70">
+            <p>© 2025 AmeriLend, LLC. All Rights Reserved.</p>
+            <p className="mt-2">Your trusted partner for consumer loans.</p>
+          </div>
         </div>
       </footer>
     </div>

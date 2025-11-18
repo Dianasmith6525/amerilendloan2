@@ -87,7 +87,7 @@ export function SupportModal({ isOpen, onOpenChange }: SupportModalProps) {
                 <div>
                   <h3 className="font-semibold text-gray-900">Email Support</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    Email us at <strong>support@amerilend.com</strong>
+                    Email us at <strong>support@amerilendloan.com</strong>
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
                     Response within 24 hours

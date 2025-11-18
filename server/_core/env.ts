@@ -12,4 +12,6 @@ export const ENV = {
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN ?? "",
   twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER ?? "",
   sendGridApiKey: process.env.SENDGRID_API_KEY ?? "",
+  supabaseUrl: process.env.VITE_SUPABASE_URL ?? "",
+  supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY ?? "",
 };

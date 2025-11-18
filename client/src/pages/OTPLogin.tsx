@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
@@ -6,11 +6,20 @@ import { Loader2, Eye, EyeOff } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 export default function OTPLogin() {
   const [, setLocation] = useLocation();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [step, setStep] = useState<"form" | "code">("form");
+
+  // Redirect to dashboard if already authenticated
+  useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      setLocation("/dashboard");
+    }
+  }, [isAuthenticated, authLoading, setLocation]);
   
   // Login form state
   const [loginIdentifier, setLoginIdentifier] = useState(""); 
@@ -49,18 +58,49 @@ export default function OTPLogin() {
         setLoginIdentifier("");
       } else if (isLogin) {
         toast.success("Login successful!");
-        setLocation("/dashboard");
+        setTimeout(() => setLocation("/dashboard"), 300);
       } else {
         toast.success("Account created successfully!");
         setSignupEmail("");
         setSignupUsername("");
         setSignupPassword("");
-        setLocation("/dashboard");
+        setTimeout(() => setLocation("/dashboard"), 300);
       }
     },
     onError: (error) => {
       toast.error(error.message || "Invalid code");
     },
+  });
+
+  // Password login mutation (Supabase)
+  const supabaseLoginMutation = trpc.auth.supabaseSignIn.useMutation({
+    onSuccess: () => {
+      toast.success("Login successful!");
+      setTimeout(() => setLocation("/dashboard"), 300);
+    },
+    onError: (error) => {
+      // If password login fails (service unavailable, invalid API key, etc), 
+      // fall back to OTP and show the user what's happening
+      const errorMsg = error.message || "Failed to sign in";
+      if (errorMsg.includes("unavailable") || errorMsg.includes("not available")) {
+        toast.info("Switching to email verification...");
+        // Trigger OTP fallback
+        if (loginIdentifier && loginPassword) {
+          setPendingIdentifier(loginIdentifier);
+          requestEmailCodeMutation.mutate({
+            email: loginIdentifier,
+            purpose: "login",
+          });
+        }
+      } else {
+        toast.error(errorMsg);
+      }
+    },
+  });
+
+  // Check if Supabase is enabled
+  const supabaseEnabledQuery = trpc.auth.isSupabaseAuthEnabled.useQuery(undefined, {
+    refetchOnWindowFocus: false,
   });
 
   const toggleLogin = () => {
@@ -83,6 +123,14 @@ export default function OTPLogin() {
       return;
     }
 
+    // If Supabase is enabled, use password login; else fall back to OTP
+    const supabaseEnabled = supabaseEnabledQuery.data?.enabled;
+    if (supabaseEnabled) {
+      supabaseLoginMutation.mutate({ email: loginIdentifier, password: loginPassword });
+      return;
+    }
+
+    // Fallback: use OTP email code
     setPendingIdentifier(loginIdentifier);
     requestEmailCodeMutation.mutate({
       email: loginIdentifier,
@@ -214,23 +262,28 @@ export default function OTPLogin() {
                       required
                     />
                   </div>
-                  <div className="relative">
-                    <Input
-                      type={showLoginPassword ? "text" : "password"}
-                      placeholder="Enter password"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0033A0] focus:border-transparent"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowLoginPassword(!showLoginPassword)}
-                      className="absolute right-3 top-3 text-gray-500 hover:text-[#0033A0]"
-                    >
-                      {showLoginPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                    </button>
-                  </div>
+
+                  {supabaseEnabledQuery.data?.enabled ? (
+                    <div className="relative">
+                      <Input
+                        type={showLoginPassword ? "text" : "password"}
+                        placeholder="Enter password"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0033A0] focus:border-transparent"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                        className="absolute right-3 top-3 text-gray-500 hover:text-[#0033A0]"
+                      >
+                        {showLoginPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-600">We'll send a 6-digit code to your email to verify your login.</p>
+                  )}
                   
                   <div className="flex items-center justify-between">
                     <label className="flex items-center cursor-pointer">
@@ -253,16 +306,16 @@ export default function OTPLogin() {
 
                   <Button
                     type="submit"
-                    disabled={isLoading}
+                    disabled={isLoading || supabaseLoginMutation.isPending}
                     className="w-full bg-[#0033A0] hover:bg-[#002080] text-white py-3 rounded-lg font-semibold text-lg transition-all"
                   >
-                    {isLoading ? (
+                    {isLoading || supabaseLoginMutation.isPending ? (
                       <>
                         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                        Logging in...
+                        {supabaseEnabledQuery.data?.enabled ? "Logging in..." : "Processing..."}
                       </>
                     ) : (
-                      "Login"
+                      supabaseEnabledQuery.data?.enabled ? "Log In" : "Send Login Code"
                     )}
                   </Button>
 

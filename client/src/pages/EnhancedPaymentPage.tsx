@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
+import { APP_LOGO, APP_TITLE } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { Loader2, CreditCard, Bitcoin, CheckCircle, Copy, QrCode, Lock, Shield, AlertCircle, Clock, X } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -297,7 +297,7 @@ export default function EnhancedPaymentPage() {
           </CardHeader>
           <CardContent>
             <Button className="w-full" asChild>
-              <a href={getLoginUrl()}>Sign In</a>
+              <a href="/login">Sign In</a>
             </Button>
           </CardContent>
         </Card>
@@ -478,32 +478,32 @@ export default function EnhancedPaymentPage() {
           )}
 
           {paymentVerification.status === "pending" && (
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {/* Payment Summary */}
-              <div className="md:col-span-1">
+              <div className="lg:col-span-1">
                 <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Payment Summary</CardTitle>
+                  <CardHeader className="pb-3 sm:pb-4">
+                    <CardTitle className="text-base sm:text-lg">Payment Summary</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-3 sm:space-y-4">
                     <div>
-                      <p className="text-sm text-muted-foreground">Loan Amount</p>
-                      <p className="text-2xl font-bold text-accent">
+                      <p className="text-xs sm:text-sm text-muted-foreground">Loan Amount</p>
+                      <p className="text-xl sm:text-2xl font-bold text-accent">
                         ${(application.approvedAmount! / 100).toLocaleString()}
                       </p>
                     </div>
-                    <div className="border-t pt-4">
-                      <p className="text-sm text-muted-foreground">Processing Fee</p>
-                      <p className="text-3xl font-bold">
+                    <div className="border-t pt-3 sm:pt-4">
+                      <p className="text-xs sm:text-sm text-muted-foreground">Processing Fee</p>
+                      <p className="text-2xl sm:text-3xl font-bold">
                         ${(feeAmount / 100).toFixed(2)}
                       </p>
                     </div>
                     {paymentMethod === "crypto" && (
-                      <div className="bg-blue-50 border border-blue-200 rounded p-3">
-                        <p className="text-sm font-medium text-blue-900">
+                      <div className="bg-blue-50 border border-blue-200 rounded p-2 sm:p-3">
+                        <p className="text-xs sm:text-sm font-medium text-blue-900">
                           {selectedCrypto} Amount
                         </p>
-                        <p className="text-lg font-bold text-blue-800">
+                        <p className="text-base sm:text-lg font-bold text-blue-800">
                           {cryptoAmount} {selectedCrypto}
                         </p>
                         <p className="text-xs text-blue-700 mt-1">
@@ -516,18 +516,18 @@ export default function EnhancedPaymentPage() {
               </div>
 
               {/* Payment Method Selection */}
-              <div className="md:col-span-2">
+              <div className="md:col-span-1 lg:col-span-2">
               <Card>
-                <CardHeader>
-                  <CardTitle>Choose Payment Method</CardTitle>
-                  <CardDescription>
+                <CardHeader className="pb-3 sm:pb-4">
+                  <CardTitle className="text-base sm:text-lg">Choose Payment Method</CardTitle>
+                  <CardDescription className="text-xs sm:text-sm">
                     Select how you'd like to pay the processing fee
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "card" | "crypto")}>
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="card">
+                    <TabsList className="grid w-full grid-cols-2 text-xs sm:text-sm">
+                      <TabsTrigger value="card" className="text-xs sm:text-sm">
                         <CreditCard className="mr-2 h-4 w-4" />
                         Credit/Debit Card
                       </TabsTrigger>
@@ -816,6 +816,41 @@ export default function EnhancedPaymentPage() {
 
       {/* Support Modal */}
       <SupportModal isOpen={supportOpen} onOpenChange={setSupportOpen} />
+
+      {/* Footer */}
+      <footer className="bg-gradient-to-r from-[#0033A0] to-[#003366] text-white py-8 mt-12">
+        <div className="container mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-6">
+            <div>
+              <h4 className="font-semibold mb-3">Need Help?</h4>
+              <div className="space-y-2 text-sm text-white/80">
+                <p>📞 <a href="tel:+19452121609" className="hover:text-[#FFA500] transition-colors">(945) 212-1609</a></p>
+                <p>📧 <a href="mailto:support@amerilendloan.com" className="hover:text-[#FFA500] transition-colors">support@amerilendloan.com</a></p>
+              </div>
+            </div>
+            <div>
+              <h4 className="font-semibold mb-3">Quick Links</h4>
+              <ul className="space-y-2 text-sm text-white/80">
+                <li><a href="/" className="hover:text-[#FFA500] transition-colors">Home</a></li>
+                <li><a href="/dashboard" className="hover:text-[#FFA500] transition-colors">Dashboard</a></li>
+                <li><a href="/#faq" className="hover:text-[#FFA500] transition-colors">FAQ</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold mb-3">Legal</h4>
+              <ul className="space-y-2 text-sm text-white/80">
+                <li><a href="/public/legal/privacy-policy" className="hover:text-[#FFA500] transition-colors">Privacy Policy</a></li>
+                <li><a href="/public/legal/terms-of-service" className="hover:text-[#FFA500] transition-colors">Terms of Service</a></li>
+                <li><a href="/public/legal/loan-agreement" className="hover:text-[#FFA500] transition-colors">Loan Agreement</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className="border-t border-white/20 pt-6 text-center text-xs text-white/70">
+            <p>© 2025 AmeriLend, LLC. All Rights Reserved.</p>
+            <p className="mt-2">Secure payment processing with multiple payment methods.</p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

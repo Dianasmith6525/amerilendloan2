@@ -1,24 +1,54 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { boolean, integer, pgEnum, pgTable, text, timestamp, varchar, serial } from "drizzle-orm/pg-core";
 
 /**
  * Core user table backing auth flow.
  * Extend this file with additional tables as your product grows.
  * Columns use camelCase to match both database fields and generated types.
  */
-export const users = mysqlTable("users", {
+
+export const roleEnum = pgEnum("role", ["user", "admin"]);
+export const purposeEnum = pgEnum("purpose", ["signup", "login", "reset"]);
+export const loanTypeEnum = pgEnum("loan_type", ["installment", "short_term"]);
+export const disbursementMethodEnum = pgEnum("disbursement_method", ["bank_transfer", "check", "debit_card", "paypal", "crypto"]);
+
+export const users = pgTable("users", {
   /**
    * Surrogate primary key. Auto-incremented numeric value managed by the database.
    * Use this for relations between tables.
    */
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  passwordHash: text("passwordHash"), // for local password auth
+  role: roleEnum("role").default("user").notNull(),
+  
+  // Personal information
+  firstName: varchar("firstName", { length: 100 }),
+  lastName: varchar("lastName", { length: 100 }),
+  phoneNumber: varchar("phoneNumber", { length: 20 }),
+  ssn: varchar("ssn", { length: 11 }), // Social Security Number (encrypted in practice)
+  dateOfBirth: varchar("dateOfBirth", { length: 10 }), // YYYY-MM-DD format
+  bio: text("bio"),
+  preferredLanguage: varchar("preferredLanguage", { length: 10 }).default("en"),
+  
+  // Address information
+  street: varchar("street", { length: 255 }),
+  city: varchar("city", { length: 100 }),
+  state: varchar("state", { length: 2 }),
+  zipCode: varchar("zipCode", { length: 10 }),
+  timezone: varchar("timezone", { length: 50 }).default("UTC"),
+  
+  // Disbursement bank information
+  bankAccountHolderName: varchar("bankAccountHolderName", { length: 255 }),
+  bankAccountNumber: varchar("bankAccountNumber", { length: 50 }),
+  bankRoutingNumber: varchar("bankRoutingNumber", { length: 20 }),
+  bankAccountType: varchar("bankAccountType", { length: 20 }), // checking, savings
+  
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
@@ -28,14 +58,14 @@ export type InsertUser = typeof users.$inferInsert;
 /**
  * OTP codes for authentication (signup, login, and reset)
  */
-export const otpCodes = mysqlTable("otpCodes", {
-  id: int("id").autoincrement().primaryKey(),
+export const otpCodes = pgTable("otpCodes", {
+  id: serial("id").primaryKey(),
   email: varchar("email", { length: 320 }).notNull(),
   code: varchar("code", { length: 6 }).notNull(),
-  purpose: mysqlEnum("purpose", ["signup", "login", "reset"]).notNull(),
+  purpose: purposeEnum("purpose").notNull(),
   expiresAt: timestamp("expiresAt").notNull(),
-  verified: int("verified").default(0).notNull(), // 0 = not verified, 1 = verified
-  attempts: int("attempts").default(0).notNull(),
+  verified: integer("verified").default(0).notNull(), // 0 = not verified, 1 = verified
+  attempts: integer("attempts").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -45,16 +75,18 @@ export type InsertOtpCode = typeof otpCodes.$inferInsert;
 /**
  * Legal document acceptances tracking
  */
-export const legalAcceptances = mysqlTable("legalAcceptances", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  loanApplicationId: int("loanApplicationId"),  // Optional, for loan-specific agreements
-  documentType: mysqlEnum("documentType", [
-    "terms_of_service",
-    "privacy_policy",
-    "loan_agreement",
-    "esign_consent"
-  ]).notNull(),
+export const docTypeEnum = pgEnum("doc_type", [
+  "terms_of_service",
+  "privacy_policy",
+  "loan_agreement",
+  "esign_consent"
+]);
+
+export const legalAcceptances = pgTable("legalAcceptances", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  loanApplicationId: integer("loanApplicationId"),  // Optional, for loan-specific agreements
+  documentType: docTypeEnum("documentType").notNull(),
   documentVersion: varchar("documentVersion", { length: 20 }).notNull(),  // e.g., "1.0", "2.1"
   ipAddress: varchar("ipAddress", { length: 45 }),  // IPv4 or IPv6
   userAgent: text("userAgent"),
@@ -64,12 +96,24 @@ export const legalAcceptances = mysqlTable("legalAcceptances", {
 export type LegalAcceptance = typeof legalAcceptances.$inferSelect;
 export type InsertLegalAcceptance = typeof legalAcceptances.$inferInsert;
 
+export const employmentStatusEnum = pgEnum("employment_status", ["employed", "self_employed", "unemployed", "retired"]);
+export const loanApplicationStatusEnum = pgEnum("loan_application_status", [
+  "pending",        // Initial submission
+  "under_review",   // Being reviewed by admin
+  "approved",       // Approved, awaiting fee payment
+  "fee_pending",    // Fee payment initiated
+  "fee_paid",       // Fee confirmed paid
+  "disbursed",      // Loan disbursed
+  "rejected",       // Application rejected
+  "cancelled"       // Cancelled by user
+]);
+
 /**
  * Loan applications submitted by users
  */
-export const loanApplications = mysqlTable("loanApplications", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+export const loanApplications = pgTable("loanApplications", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
   trackingNumber: varchar("trackingNumber", { length: 20 }).notNull().unique(),
   
   // Applicant information
@@ -86,38 +130,29 @@ export const loanApplications = mysqlTable("loanApplications", {
   zipCode: varchar("zipCode", { length: 10 }).notNull(),
   
   // Employment information
-  employmentStatus: mysqlEnum("employmentStatus", ["employed", "self_employed", "unemployed", "retired"]).notNull(),
+  employmentStatus: employmentStatusEnum("employmentStatus").notNull(),
   employer: varchar("employer", { length: 255 }),
-  monthlyIncome: int("monthlyIncome").notNull(), // in cents
+  monthlyIncome: integer("monthlyIncome").notNull(), // in cents
   
   // Loan details
-  loanType: mysqlEnum("loanType", ["installment", "short_term"]).notNull(),
-  requestedAmount: int("requestedAmount").notNull(), // in cents
+  loanType: loanTypeEnum("loanType").notNull(),
+  requestedAmount: integer("requestedAmount").notNull(), // in cents
   loanPurpose: text("loanPurpose").notNull(),
-  disbursementMethod: mysqlEnum("disbursementMethod", ["bank_transfer", "check", "debit_card", "paypal", "crypto"]).notNull(),
+  disbursementMethod: disbursementMethodEnum("disbursementMethod").notNull(),
   
   // Approval details
-  approvedAmount: int("approvedAmount"), // in cents, null if not approved
-  processingFeeAmount: int("processingFeeAmount"), // in cents, calculated after approval
+  approvedAmount: integer("approvedAmount"), // in cents, null if not approved
+  processingFeeAmount: integer("processingFeeAmount"), // in cents, calculated after approval
   
   // Status tracking
-  status: mysqlEnum("status", [
-    "pending",        // Initial submission
-    "under_review",   // Being reviewed by admin
-    "approved",       // Approved, awaiting fee payment
-    "fee_pending",    // Fee payment initiated
-    "fee_paid",       // Fee confirmed paid
-    "disbursed",      // Loan disbursed
-    "rejected",       // Application rejected
-    "cancelled"       // Cancelled by user
-  ]).default("pending").notNull(),
+  status: loanApplicationStatusEnum("status").default("pending").notNull(),
   
   rejectionReason: text("rejectionReason"),
   adminNotes: text("adminNotes"),
   
   // Timestamps
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   approvedAt: timestamp("approvedAt"),
   disbursedAt: timestamp("disbursedAt"),
 });
@@ -125,46 +160,58 @@ export const loanApplications = mysqlTable("loanApplications", {
 export type LoanApplication = typeof loanApplications.$inferSelect;
 export type InsertLoanApplication = typeof loanApplications.$inferInsert;
 
+export const calculationModeEnum = pgEnum("calculation_mode", ["percentage", "fixed"]);
+
 /**
  * System configuration for processing fees
  */
-export const feeConfiguration = mysqlTable("feeConfiguration", {
-  id: int("id").autoincrement().primaryKey(),
+export const feeConfiguration = pgTable("feeConfiguration", {
+  id: serial("id").primaryKey(),
   
   // Fee calculation mode
-  calculationMode: mysqlEnum("calculationMode", ["percentage", "fixed"]).default("percentage").notNull(),
+  calculationMode: calculationModeEnum("calculationMode").default("percentage").notNull(),
   
   // Percentage mode settings (1.5% - 2.5%)
-  percentageRate: int("percentageRate").default(200).notNull(), // stored as basis points (200 = 2.00%)
+  percentageRate: integer("percentageRate").default(200).notNull(), // stored as basis points (200 = 2.00%)
   
   // Fixed fee mode settings ($1.50 - $2.50)
-  fixedFeeAmount: int("fixedFeeAmount").default(200).notNull(), // in cents (200 = $2.00)
+  fixedFeeAmount: integer("fixedFeeAmount").default(200).notNull(), // in cents (200 = $2.00)
   
   // Metadata
-  isActive: int("isActive").default(1).notNull(), // 1 = active, 0 = inactive
-  updatedBy: int("updatedBy"), // admin user id
+  isActive: boolean("isActive").default(true).notNull(),
+  updatedBy: integer("updatedBy"), // admin user id
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type FeeConfiguration = typeof feeConfiguration.$inferSelect;
 export type InsertFeeConfiguration = typeof feeConfiguration.$inferInsert;
 
+export const paymentProviderEnum = pgEnum("payment_provider", ["stripe", "authorizenet", "crypto"]);
+export const paymentMethodEnum = pgEnum("payment_method", ["card", "crypto"]);
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "pending",      // Payment initiated
+  "processing",   // Payment being processed
+  "succeeded",    // Payment successful
+  "failed",       // Payment failed
+  "cancelled"     // Payment cancelled
+]);
+
 /**
  * Payment records for processing fees
  */
-export const payments = mysqlTable("payments", {
-  id: int("id").autoincrement().primaryKey(),
-  loanApplicationId: int("loanApplicationId").notNull(),
-  userId: int("userId").notNull(),
+export const payments = pgTable("payments", {
+  id: serial("id").primaryKey(),
+  loanApplicationId: integer("loanApplicationId").notNull(),
+  userId: integer("userId").notNull(),
   
   // Payment details
-  amount: int("amount").notNull(), // in cents
+  amount: integer("amount").notNull(), // in cents
   currency: varchar("currency", { length: 3 }).default("USD").notNull(),
   
   // Payment provider details
-  paymentProvider: mysqlEnum("paymentProvider", ["stripe", "authorizenet", "crypto"]).default("stripe").notNull(),
-  paymentMethod: mysqlEnum("paymentMethod", ["card", "crypto"]).default("card").notNull(),
+  paymentProvider: paymentProviderEnum("paymentProvider").default("stripe").notNull(),
+  paymentMethod: paymentMethodEnum("paymentMethod").default("card").notNull(),
   
   // Card payment details (Authorize.net or Stripe)
   paymentIntentId: varchar("paymentIntentId", { length: 255 }), // Payment intent/transaction ID
@@ -179,36 +226,37 @@ export const payments = mysqlTable("payments", {
   cryptoAmount: varchar("cryptoAmount", { length: 50 }), // Amount in crypto (string for precision)
   
   // Status tracking
-  status: mysqlEnum("status", [
-    "pending",      // Payment initiated
-    "processing",   // Payment being processed
-    "succeeded",    // Payment successful
-    "failed",       // Payment failed
-    "cancelled"     // Payment cancelled
-  ]).default("pending").notNull(),
+  status: paymentStatusEnum("status").default("pending").notNull(),
   
   failureReason: text("failureReason"),
   adminNotes: text("adminNotes"),
   
   // Timestamps
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   completedAt: timestamp("completedAt"),
 });
 
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = typeof payments.$inferInsert;
 
+export const disbursementStatusEnum = pgEnum("disbursement_status", [
+  "pending",      // Awaiting processing
+  "processing",   // Being processed
+  "completed",    // Successfully disbursed
+  "failed"        // Disbursement failed
+]);
+
 /**
  * Loan disbursement records
  */
-export const disbursements = mysqlTable("disbursements", {
-  id: int("id").autoincrement().primaryKey(),
-  loanApplicationId: int("loanApplicationId").notNull(),
-  userId: int("userId").notNull(),
+export const disbursements = pgTable("disbursements", {
+  id: serial("id").primaryKey(),
+  loanApplicationId: integer("loanApplicationId").notNull(),
+  userId: integer("userId").notNull(),
   
   // Disbursement details
-  amount: int("amount").notNull(), // in cents
+  amount: integer("amount").notNull(), // in cents
   
   // Bank account details (simplified for demo)
   accountHolderName: varchar("accountHolderName", { length: 255 }).notNull(),
@@ -216,12 +264,7 @@ export const disbursements = mysqlTable("disbursements", {
   routingNumber: varchar("routingNumber", { length: 20 }).notNull(),
   
   // Status tracking
-  status: mysqlEnum("status", [
-    "pending",      // Awaiting processing
-    "processing",   // Being processed
-    "completed",    // Successfully disbursed
-    "failed"        // Disbursement failed
-  ]).default("pending").notNull(),
+  status: disbursementStatusEnum("status").default("pending").notNull(),
   
   transactionId: varchar("transactionId", { length: 255 }), // External transaction reference
   failureReason: text("failureReason"),
@@ -229,54 +272,57 @@ export const disbursements = mysqlTable("disbursements", {
   
   // Timestamps
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   completedAt: timestamp("completedAt"),
-  initiatedBy: int("initiatedBy"), // admin user id
+  initiatedBy: integer("initiatedBy"), // admin user id
 });
 
 export type Disbursement = typeof disbursements.$inferSelect;
 export type InsertDisbursement = typeof disbursements.$inferInsert;
 
+export const verificationDocTypeEnum = pgEnum("verification_doc_type", [
+  "drivers_license_front",
+  "drivers_license_back",
+  "passport",
+  "national_id_front",
+  "national_id_back",
+  "ssn_card",
+  "bank_statement",
+  "utility_bill",
+  "pay_stub",
+  "tax_return",
+  "other"
+]);
+export const verificationStatusEnum = pgEnum("verification_status", [
+  "pending",      // Uploaded, awaiting review
+  "under_review", // Being reviewed by admin
+  "approved",     // Verified and approved
+  "rejected",     // Rejected by admin
+  "expired"       // Document expired
+]);
+
 /**
  * Identity verification documents uploaded by users
  */
-export const verificationDocuments = mysqlTable("verificationDocuments", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  loanApplicationId: int("loanApplicationId"), // Optional link to specific loan application
+export const verificationDocuments = pgTable("verificationDocuments", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  loanApplicationId: integer("loanApplicationId"), // Optional link to specific loan application
   
   // Document details
-  documentType: mysqlEnum("documentType", [
-    "drivers_license_front",
-    "drivers_license_back",
-    "passport",
-    "national_id_front",
-    "national_id_back",
-    "ssn_card",
-    "bank_statement",
-    "utility_bill",
-    "pay_stub",
-    "tax_return",
-    "other"
-  ]).notNull(),
+  documentType: verificationDocTypeEnum("documentType").notNull(),
   
   // File information
   fileName: varchar("fileName", { length: 255 }).notNull(),
   filePath: text("filePath").notNull(), // Storage path or URL
-  fileSize: int("fileSize").notNull(), // in bytes
+  fileSize: integer("fileSize").notNull(), // in bytes
   mimeType: varchar("mimeType", { length: 100 }).notNull(), // e.g., image/jpeg, application/pdf
   
   // Verification status
-  status: mysqlEnum("status", [
-    "pending",      // Uploaded, awaiting review
-    "under_review", // Being reviewed by admin
-    "approved",     // Verified and approved
-    "rejected",     // Rejected by admin
-    "expired"       // Document expired
-  ]).default("pending").notNull(),
+  status: verificationStatusEnum("status").default("pending").notNull(),
   
   // Admin review details
-  reviewedBy: int("reviewedBy"), // admin user id
+  reviewedBy: integer("reviewedBy"), // admin user id
   reviewedAt: timestamp("reviewedAt"),
   rejectionReason: text("rejectionReason"),
   adminNotes: text("adminNotes"),
@@ -287,8 +333,203 @@ export const verificationDocuments = mysqlTable("verificationDocuments", {
   
   // Timestamps
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type VerificationDocument = typeof verificationDocuments.$inferSelect;
 export type InsertVerificationDocument = typeof verificationDocuments.$inferInsert;
+
+/**
+ * Account activity log for tracking user account changes
+ */
+export const activityEnum = pgEnum("activity_type", [
+  "password_changed",
+  "email_changed",
+  "bank_info_updated",
+  "profile_updated",
+  "document_uploaded",
+  "login_attempt",
+  "suspicious_activity",
+  "settings_changed"
+]);
+
+export const notificationPreferenceEnum = pgEnum("notification_pref", [
+  "email_updates",
+  "loan_updates",
+  "promotions",
+  "sms"
+]);
+
+/**
+ * User notification preferences
+ */
+export const notificationPreferences = pgTable("notificationPreferences", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  preferenceType: notificationPreferenceEnum("preferenceType").notNull(),
+  enabled: boolean("enabled").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+export type InsertNotificationPreference = typeof notificationPreferences.$inferInsert;
+
+/**
+ * Email verification tokens
+ */
+export const emailVerificationTokens = pgTable("emailVerificationTokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  token: varchar("token", { length: 255 }).notNull().unique(),
+  newEmail: varchar("newEmail", { length: 320 }).notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  verified: boolean("verified").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+export type InsertEmailVerificationToken = typeof emailVerificationTokens.$inferInsert;
+
+/**
+ * User sessions for tracking active sessions
+ */
+export const userSessions = pgTable("userSessions", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  sessionToken: varchar("sessionToken", { length: 255 }).notNull().unique(),
+  ipAddress: varchar("ipAddress", { length: 45 }),
+  userAgent: text("userAgent"),
+  lastActivityAt: timestamp("lastActivityAt").defaultNow().notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type UserSession = typeof userSessions.$inferSelect;
+export type InsertUserSession = typeof userSessions.$inferInsert;
+
+/**
+ * Login attempt tracking for rate limiting
+ */
+export const loginAttempts = pgTable("loginAttempts", {
+  id: serial("id").primaryKey(),
+  email: varchar("email", { length: 320 }).notNull(),
+  ipAddress: varchar("ipAddress", { length: 45 }).notNull(),
+  successful: boolean("successful").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type LoginAttempt = typeof loginAttempts.$inferSelect;
+export type InsertLoginAttempt = typeof loginAttempts.$inferInsert;
+
+export const accountActivity = pgTable("accountActivity", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  activityType: activityEnum("activityType").notNull(),
+  description: text("description").notNull(),
+  ipAddress: varchar("ipAddress", { length: 45 }), // IPv4 or IPv6
+  userAgent: text("userAgent"),
+  suspicious: boolean("suspicious").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AccountActivity = typeof accountActivity.$inferSelect;
+export type InsertAccountActivity = typeof accountActivity.$inferInsert;
+
+/**
+ * Two-Factor Authentication (2FA) settings and backup codes
+ */
+export const twoFactorMethods = pgEnum("two_factor_method", ["totp", "sms", "email"]);
+
+export const twoFactorAuthentication = pgTable("twoFactorAuthentication", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
+  
+  // 2FA Settings
+  enabled: boolean("enabled").default(false).notNull(),
+  method: twoFactorMethods("method").default("totp").notNull(),
+  
+  // TOTP (Time-based One-Time Password) - Google Authenticator
+  totpSecret: varchar("totpSecret", { length: 255 }), // Encrypted TOTP secret
+  totpEnabled: boolean("totpEnabled").default(false).notNull(),
+  
+  // SMS 2FA
+  phoneNumber: varchar("phoneNumber", { length: 20 }), // For SMS 2FA
+  smsEnabled: boolean("smsEnabled").default(false).notNull(),
+  
+  // Backup codes
+  backupCodes: text("backupCodes"), // JSON array of backup codes (encrypted)
+  backupCodesUsed: integer("backupCodesUsed").default(0).notNull(), // Number of backup codes used
+  
+  // Metadata
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  lastUsedAt: timestamp("lastUsedAt"),
+});
+
+export type TwoFactorAuthentication = typeof twoFactorAuthentication.$inferSelect;
+export type InsertTwoFactorAuthentication = typeof twoFactorAuthentication.$inferInsert;
+
+/**
+ * Personal user profile information
+ */
+export const userProfiles = pgTable("userProfiles", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
+  
+  // Personal Information
+  firstName: varchar("firstName", { length: 100 }),
+  lastName: varchar("lastName", { length: 100 }),
+  phoneNumber: varchar("phoneNumber", { length: 20 }),
+  dateOfBirth: varchar("dateOfBirth", { length: 10 }), // YYYY-MM-DD
+  
+  // Address
+  street: varchar("street", { length: 255 }),
+  city: varchar("city", { length: 100 }),
+  state: varchar("state", { length: 2 }), // US state code
+  zipCode: varchar("zipCode", { length: 10 }),
+  country: varchar("country", { length: 100 }).default("United States"),
+  
+  // Employment Info
+  employmentStatus: varchar("employmentStatus", { length: 50 }),
+  employer: varchar("employer", { length: 255 }),
+  jobTitle: varchar("jobTitle", { length: 255 }),
+  monthlyIncome: integer("monthlyIncome"), // in cents
+  
+  // Profile Settings
+  profilePictureUrl: varchar("profilePictureUrl", { length: 500 }),
+  bio: text("bio"),
+  preferredLanguage: varchar("preferredLanguage", { length: 10 }).default("en"),
+  timezone: varchar("timezone", { length: 50 }).default("UTC"),
+  
+  // Metadata
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type UserProfile = typeof userProfiles.$inferSelect;
+export type InsertUserProfile = typeof userProfiles.$inferInsert;
+
+/**
+ * Device management for login tracking
+ */
+export const trustedDevices = pgTable("trustedDevices", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  
+  // Device Info
+  deviceName: varchar("deviceName", { length: 255 }).notNull(),
+  deviceFingerprint: varchar("deviceFingerprint", { length: 255 }).notNull().unique(),
+  userAgent: text("userAgent"),
+  ipAddress: varchar("ipAddress", { length: 45 }),
+  
+  // Trust settings
+  isTrusted: boolean("isTrusted").default(true).notNull(),
+  lastUsedAt: timestamp("lastUsedAt").defaultNow().notNull(),
+  
+  // Metadata
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TrustedDevice = typeof trustedDevices.$inferSelect;
+export type InsertTrustedDevice = typeof trustedDevices.$inferInsert;

@@ -1,61 +1,26 @@
 {
-  "version": "7",
-  "dialect": "mysql",
+  "version": "6",
+  "dialect": "pg",
   "entries": [
     {
       "idx": 0,
-      "version": "5",
-      "when": 1762113279652,
-      "tag": "0000_gray_ender_wiggin",
+      "version": "7",
+      "when": 1763358497376,
+      "tag": "0000_cheerful_lady_ursula",
       "breakpoints": true
     },
     {
       "idx": 1,
-      "version": "5",
-      "when": 1762113350642,
-      "tag": "0001_faulty_daimon_hellstrom",
+      "version": "7",
+      "when": 1763364047347,
+      "tag": "0001_dazzling_mulholland_black",
       "breakpoints": true
     },
     {
       "idx": 2,
-      "version": "5",
-      "when": 1762114495042,
-      "tag": "0002_abandoned_mockingbird",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "5",
-      "when": 1762114547460,
-      "tag": "0003_kind_random",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "5",
-      "when": 1762115678556,
-      "tag": "0004_rare_drax",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "5",
-      "when": 1763338449213,
-      "tag": "0005_young_mikhail_rasputin",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "5",
-      "when": 1763338730111,
-      "tag": "0006_peaceful_blazing_skull",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "5",
-      "when": 1763341108225,
-      "tag": "0007_modern_joseph",
+      "version": "7",
+      "when": 1763407874075,
+      "tag": "0002_exotic_risque",
       "breakpoints": true
     }
   ]

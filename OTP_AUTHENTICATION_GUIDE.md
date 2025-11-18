@@ -159,7 +159,7 @@ export async function sendOTPEmail(
 ): Promise<void> {
   const msg = {
     to: email,
-    from: 'noreply@amerilend.com',
+    from: 'noreply@amerilendloan.com',
     subject: `Your ${purpose} verification code`,
     text: `Your verification code is: ${code}. This code will expire in 10 minutes.`,
     html: `
@@ -277,7 +277,7 @@ Implement rate limiting at multiple levels:
 ```env
 # Email Service Configuration
 SENDGRID_API_KEY=your_sendgrid_api_key
-OTP_FROM_EMAIL=noreply@amerilend.com
+OTP_FROM_EMAIL=noreply@amerilendloan.com
 OTP_FROM_NAME=AmeriLend
 
 # OTP Configuration
