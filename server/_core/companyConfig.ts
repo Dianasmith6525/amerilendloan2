@@ -50,8 +50,7 @@ export function getEmailFooter(): string {
   return `
     <div style="background-color: #f5f5f5; border-top: 3px solid #0033A0; padding: 30px 20px; margin-top: 30px; text-align: center; font-size: 12px; color: #666;">
       <div style="margin-bottom: 20px;">
-        <img src="${COMPANY_INFO.logo.url}" alt="${COMPANY_INFO.logo.alt}" style="height: 45px; margin-bottom: 10px;">
-      </div>
+        <img src="${COMPANY_INFO.logo.url}" alt="${COMPANY_INFO.logo.alt}" style="display: block; height: 45px; width: auto; margin: 0 auto 10px; border: 0; max-width: 100%; max-height: 60px;"
       
       <p style="margin: 8px 0; font-weight: bold; font-size: 16px; color: #0033A0;">${COMPANY_INFO.name}</p>
       
@@ -70,14 +69,14 @@ export function getEmailFooter(): string {
       <div style="margin: 25px 0; padding: 20px 0; border-top: 1px solid #ddd; border-bottom: 1px solid #ddd;">
         <p style="margin: 10px 0 15px 0; font-weight: bold; font-size: 13px; color: #333;">📱 Connect With Us</p>
         <div style="margin-top: 12px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; align-items: center;">
-          <a href="https://wa.me/${COMPANY_INFO.contact.whatsapp.replace(/\D/g, '')}" style="display: inline-block; text-decoration: none;" title="WhatsApp">
-            <img src="${COMPANY_INFO.images.whatsappIcon}" alt="WhatsApp" style="height: 40px; width: 40px; object-fit: contain; border-radius: 5px;">
+          <a href="https://wa.me/${COMPANY_INFO.contact.whatsapp.replace(/\D/g, '')}" style="display: inline-block; text-decoration: none; margin: 5px;" title="WhatsApp">
+            <img src="${COMPANY_INFO.images.whatsappIcon}" alt="WhatsApp" style="display: block; height: 40px; width: 40px; border: 0; border-radius: 5px; max-width: 100%;">
           </a>
-          <a href="https://t.me/${COMPANY_INFO.contact.telegram.replace('@', '')}" style="display: inline-block; text-decoration: none;" title="Telegram">
-            <img src="${COMPANY_INFO.images.telegramIcon}" alt="Telegram" style="height: 40px; width: 40px; object-fit: contain; border-radius: 5px;">
+          <a href="https://t.me/${COMPANY_INFO.contact.telegram.replace('@', '')}" style="display: inline-block; text-decoration: none; margin: 5px;" title="Telegram">
+            <img src="${COMPANY_INFO.images.telegramIcon}" alt="Telegram" style="display: block; height: 40px; width: 40px; border: 0; border-radius: 5px; max-width: 100%;">
           </a>
-          <a href="mailto:${COMPANY_INFO.contact.email}" style="display: inline-block; text-decoration: none;" title="Email Support">
-            <img src="${COMPANY_INFO.images.emailIcon}" alt="Support" style="height: 40px; width: 40px; object-fit: contain; border-radius: 5px;">
+          <a href="mailto:${COMPANY_INFO.contact.email}" style="display: inline-block; text-decoration: none; margin: 5px;" title="Email Support">
+            <img src="${COMPANY_INFO.images.emailIcon}" alt="Support" style="display: block; height: 40px; width: 40px; border: 0; border-radius: 5px; max-width: 100%;">
           </a>
         </div>
       </div>
@@ -85,11 +84,11 @@ export function getEmailFooter(): string {
       <div style="margin: 25px 0; padding: 20px 0; border-top: 1px solid #ddd; border-bottom: 1px solid #ddd;">
         <p style="margin: 10px 0 15px 0; font-weight: bold; font-size: 13px; color: #333;">✅ Trusted By Thousands</p>
         <div style="margin-top: 12px; display: flex; justify-content: center; gap: 25px; flex-wrap: wrap; align-items: center;">
-          <div style="display: flex; align-items: center; justify-content: center;">
-            <img src="${COMPANY_INFO.images.trustpilotLogo}" alt="Trustpilot" style="height: 35px; max-width: 120px; object-fit: contain;">
+          <div style="display: inline-block; margin: 0 10px;">
+            <img src="${COMPANY_INFO.images.trustpilotLogo}" alt="Trustpilot" style="display: block; height: 35px; max-width: 120px; width: auto; border: 0;">
           </div>
-          <div style="display: flex; align-items: center; justify-content: center;">
-            <img src="${COMPANY_INFO.images.lendingTreeLogo}" alt="LendingTree" style="height: 35px; max-width: 120px; object-fit: contain;">
+          <div style="display: inline-block; margin: 0 10px;">
+            <img src="${COMPANY_INFO.images.lendingTreeLogo}" alt="LendingTree" style="display: block; height: 35px; max-width: 120px; width: auto; border: 0;">
           </div>
         </div>
       </div>
