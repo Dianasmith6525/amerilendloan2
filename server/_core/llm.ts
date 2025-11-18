@@ -66,6 +66,7 @@ export type InvokeParams = {
   output_schema?: OutputSchema;
   responseFormat?: ResponseFormat;
   response_format?: ResponseFormat;
+  temperature?: number;
 };
 
 export type ToolCall = {
@@ -286,6 +287,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     output_schema,
     responseFormat,
     response_format,
+    temperature,
   } = params;
 
   // Use GPT-4 if OpenAI key is set, otherwise use Gemini
@@ -309,6 +311,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   }
 
   payload.max_tokens = 32768;
+  
+  // Add temperature if provided (for varied responses, default 0.7 for support chat)
+  if (temperature !== undefined) {
+    payload.temperature = temperature;
+  }
   
   // Only add thinking parameter for Gemini models
   if (!ENV.openAiApiKey) {

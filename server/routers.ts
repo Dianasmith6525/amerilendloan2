@@ -2331,6 +2331,7 @@ export const appRouter = router({
           const response = await invokeLLM({
             messages,
             maxTokens: 1500, // Balanced for comprehensive but concise responses
+            temperature: 0.8, // Higher temperature for more varied, creative responses
           });
 
           // Extract the assistant's response
