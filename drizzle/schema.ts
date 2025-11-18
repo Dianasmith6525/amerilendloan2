@@ -533,3 +533,37 @@ export const trustedDevices = pgTable("trustedDevices", {
 
 export type TrustedDevice = typeof trustedDevices.$inferSelect;
 export type InsertTrustedDevice = typeof trustedDevices.$inferInsert;
+
+/**
+ * Payment idempotency log - prevents duplicate charges on retry
+ */
+export const paymentIdempotencyLog = pgTable("paymentIdempotencyLog", {
+  id: serial("id").primaryKey(),
+  idempotencyKey: varchar("idempotencyKey", { length: 255 }).notNull().unique(),
+  paymentId: integer("paymentId").notNull(),
+  responseData: text("responseData"), // JSON stringified response
+  status: varchar("status", { length: 50 }).notNull(), // success, failed
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PaymentIdempotencyLog = typeof paymentIdempotencyLog.$inferSelect;
+export type InsertPaymentIdempotencyLog = typeof paymentIdempotencyLog.$inferInsert;
+
+/**
+ * Payment audit trail - tracks all payment status changes
+ */
+export const paymentAuditLog = pgTable("paymentAuditLog", {
+  id: serial("id").primaryKey(),
+  paymentId: integer("paymentId").notNull(),
+  action: varchar("action", { length: 100 }).notNull(), // "payment_created", "status_changed", "webhook_received", etc.
+  oldStatus: paymentStatusEnum("oldStatus"),
+  newStatus: paymentStatusEnum("newStatus"),
+  metadata: text("metadata"), // JSON stringified metadata
+  userId: integer("userId"), // Admin who made the change, if applicable
+  ipAddress: varchar("ipAddress", { length: 45 }),
+  userAgent: text("userAgent"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PaymentAuditLog = typeof paymentAuditLog.$inferSelect;
+export type InsertPaymentAuditLog = typeof paymentAuditLog.$inferInsert;

@@ -590,14 +590,37 @@ export async function getPaymentsByLoanApplicationId(loanApplicationId: number) 
 export async function updatePaymentStatus(
   id: number,
   status: Payment["status"],
-  additionalData?: Partial<Payment>
+  additionalData?: Partial<Payment>,
+  auditContext?: { userId?: number; ipAddress?: string; userAgent?: string; action?: string }
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  return db.update(payments)
+  // Get current payment to log status change
+  const currentPayment = await getPaymentById(id);
+  const oldStatus = currentPayment?.status;
+  
+  // Update payment status
+  const result = await db.update(payments)
     .set({ status, ...additionalData, updatedAt: new Date() })
-    .where(eq(payments.id, id));
+    .where(eq(payments.id, id))
+    .returning();
+  
+  // Log to audit trail if status changed
+  if (oldStatus && oldStatus !== status) {
+    await logPaymentAudit(
+      id,
+      auditContext?.action || "payment_status_changed",
+      oldStatus,
+      status,
+      { reason: additionalData?.failureReason || additionalData?.adminNotes },
+      auditContext?.userId,
+      auditContext?.ipAddress,
+      auditContext?.userAgent
+    ).catch(err => console.warn("[Audit] Failed to log payment status change:", err));
+  }
+  
+  return result;
 }
 
 // ============================================
@@ -1254,4 +1277,84 @@ export async function removeTrustedDevice(deviceId: number, userId: number) {
       eq(trustedDevices.id, deviceId),
       eq(trustedDevices.userId, userId)
     ));
+}
+
+// ============================================
+// Payment Idempotency Queries
+// ============================================
+
+export async function getPaymentByIdempotencyKey(idempotencyKey: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const { paymentIdempotencyLog } = await import("../drizzle/schema");
+  
+  const result = await db.select()
+    .from(paymentIdempotencyLog)
+    .where(eq(paymentIdempotencyLog.idempotencyKey, idempotencyKey))
+    .limit(1);
+  
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function storeIdempotencyResult(
+  idempotencyKey: string,
+  paymentId: number,
+  responseData: any,
+  status: "success" | "failed"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { paymentIdempotencyLog } = await import("../drizzle/schema");
+  
+  await db.insert(paymentIdempotencyLog).values({
+    idempotencyKey,
+    paymentId,
+    responseData: JSON.stringify(responseData),
+    status,
+  });
+}
+
+// ============================================
+// Payment Audit Trail Queries
+// ============================================
+
+export async function logPaymentAudit(
+  paymentId: number,
+  action: string,
+  oldStatus?: string,
+  newStatus?: string,
+  metadata?: any,
+  userId?: number,
+  ipAddress?: string,
+  userAgent?: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { paymentAuditLog } = await import("../drizzle/schema");
+  
+  await db.insert(paymentAuditLog).values({
+    paymentId,
+    action,
+    oldStatus: oldStatus as any,
+    newStatus: newStatus as any,
+    metadata: JSON.stringify(metadata),
+    userId,
+    ipAddress,
+    userAgent,
+  });
+}
+
+export async function getPaymentAuditLog(paymentId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { paymentAuditLog } = await import("../drizzle/schema");
+  
+  return db.select()
+    .from(paymentAuditLog)
+    .where(eq(paymentAuditLog.paymentId, paymentId))
+    .orderBy(desc(paymentAuditLog.createdAt));
 }

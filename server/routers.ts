@@ -1391,8 +1391,19 @@ export const appRouter = router({
           dataDescriptor: z.string(),
           dataValue: z.string(),
         }).optional(),
+        idempotencyKey: z.string().uuid().optional(), // Prevent duplicate charges
       }))
       .mutation(async ({ ctx, input }) => {
+        // Check idempotency: if same key, return cached result
+        if (input.idempotencyKey) {
+          const cachedResult = await db.getPaymentByIdempotencyKey(input.idempotencyKey);
+          if (cachedResult) {
+            const cachedData = JSON.parse(cachedResult.responseData || "{}");
+            console.log("[Payment] Returning cached result for idempotency key:", input.idempotencyKey);
+            return cachedData;
+          }
+        }
+
         const application = await db.getLoanApplicationById(input.loanApplicationId);
         
         if (!application) {
@@ -1433,6 +1444,9 @@ export const appRouter = router({
 
         // For card payments with Authorize.Net
         if (input.paymentMethod === "card" && input.opaqueData) {
+          // Create payment record first (for audit trail and retry logic)
+          const payment = await db.createPayment(paymentData);
+
           const result = await createAuthorizeNetTransaction(
             application.processingFeeAmount,
             input.opaqueData,
@@ -1440,33 +1454,54 @@ export const appRouter = router({
           );
 
           if (!result.success) {
+            // Update payment to failed (don't throw immediately)
+            await db.updatePaymentStatus(payment[0].id, "failed", {
+              failureReason: result.error || "Card payment failed",
+            });
+            
+            // Keep loan in fee_pending so user can retry
+            await db.updateLoanApplicationStatus(
+              input.loanApplicationId, 
+              "fee_pending"
+            );
+            
             throw new TRPCError({ 
-              code: "INTERNAL_SERVER_ERROR", 
-              message: result.error || "Card payment failed" 
+              code: "BAD_REQUEST", 
+              message: result.error || "Card payment failed - please retry with another card",
+              cause: "PAYMENT_DECLINED"
             });
           }
 
-          paymentData = {
-            ...paymentData,
-            status: "succeeded",
+          // Payment succeeded - update record
+          await db.updatePaymentStatus(payment[0].id, "succeeded", {
             paymentIntentId: result.transactionId,
             cardLast4: result.cardLast4,
             cardBrand: result.cardBrand,
             completedAt: new Date(),
-          };
-
-          // Create payment record
-          await db.createPayment(paymentData);
+          });
 
           // Update loan status to fee_paid
           await db.updateLoanApplicationStatus(input.loanApplicationId, "fee_paid");
 
-          return { 
+          const cardResponse = { 
             success: true, 
+            paymentId: payment[0].id,
             amount: application.processingFeeAmount,
             transactionId: result.transactionId,
             message: "Payment processed successfully"
           };
+
+          // Cache result if idempotency key provided
+          if (input.idempotencyKey) {
+            await db.storeIdempotencyResult(
+              input.idempotencyKey,
+              payment[0].id,
+              cardResponse,
+              "success"
+            ).catch(err => console.warn("[Idempotency] Failed to cache card payment result:", err));
+          }
+
+          return cardResponse;
         }
 
         // For crypto payments, create charge and get payment address
@@ -1494,17 +1529,30 @@ export const appRouter = router({
           };
 
           // Create payment record
-          await db.createPayment(paymentData);
+          const cryptoPayment = await db.createPayment(paymentData);
 
           // Update loan status to fee_pending
           await db.updateLoanApplicationStatus(input.loanApplicationId, "fee_pending");
 
-          return { 
-            success: true, 
+          const cryptoResponse = { 
+            success: true,
+            paymentId: cryptoPayment[0]?.id,
             amount: application.processingFeeAmount,
             cryptoAddress: charge.paymentAddress,
             cryptoAmount: charge.cryptoAmount,
           };
+
+          // Cache result if idempotency key provided
+          if (input.idempotencyKey) {
+            await db.storeIdempotencyResult(
+              input.idempotencyKey,
+              cryptoPayment[0]?.id || 0,
+              cryptoResponse,
+              "success"
+            ).catch(err => console.warn("[Idempotency] Failed to cache crypto payment result:", err));
+          }
+
+          return cryptoResponse;
         }
 
         throw new TRPCError({ 
@@ -1760,6 +1808,137 @@ export const appRouter = router({
         const status = await getNetworkStatus(input.currency);
         return status;
       }),
+
+    // Retry a failed payment (with rate limiting)
+    retryPayment: protectedProcedure
+      .input(z.object({
+        paymentId: z.number(),
+        opaqueData: z.object({
+          dataDescriptor: z.string(),
+          dataValue: z.string(),
+        }).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const payment = await db.getPaymentById(input.paymentId);
+        
+        if (!payment) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Payment not found" });
+        }
+        
+        if (payment.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        // Only allow retry for failed or expired payments
+        if (payment.status !== "failed" && payment.status !== "expired") {
+          throw new TRPCError({ 
+            code: "BAD_REQUEST", 
+            message: `Cannot retry payment with status: ${payment.status}` 
+          });
+        }
+
+        // Rate limiting: only one retry attempt per 30 seconds
+        const lastUpdated = payment.updatedAt ? new Date(payment.updatedAt).getTime() : 0;
+        const timeSinceUpdate = Date.now() - lastUpdated;
+        if (timeSinceUpdate < 30000) {
+          throw new TRPCError({ 
+            code: "TOO_MANY_REQUESTS",
+            message: `Please wait ${Math.ceil((30000 - timeSinceUpdate) / 1000)} seconds before retrying`
+          });
+        }
+
+        // Get application to verify it's still in correct state
+        const application = await db.getLoanApplicationById(payment.loanApplicationId);
+        if (!application) {
+          throw new TRPCError({ code: "NOT_FOUND" });
+        }
+
+        // If card payment, retry with new tokenized card data
+        if (payment.paymentMethod === "card" && input.opaqueData) {
+          const result = await createAuthorizeNetTransaction(
+            payment.amount,
+            input.opaqueData,
+            `Processing fee for loan #${application.trackingNumber} (Retry)`
+          );
+
+          if (!result.success) {
+            await db.updatePaymentStatus(payment.id, "failed", {
+              failureReason: result.error || "Card payment failed on retry",
+            });
+            
+            throw new TRPCError({ 
+              code: "BAD_REQUEST", 
+              message: result.error || "Card payment failed - please retry with another card"
+            });
+          }
+
+          // Update payment to succeeded
+          await db.updatePaymentStatus(payment.id, "succeeded", {
+            paymentIntentId: result.transactionId,
+            cardLast4: result.cardLast4,
+            cardBrand: result.cardBrand,
+            completedAt: new Date(),
+          }, {
+            action: "payment_retry_succeeded"
+          });
+
+          // Update loan status to fee_paid
+          await db.updateLoanApplicationStatus(payment.loanApplicationId, "fee_paid");
+
+          return {
+            success: true,
+            message: "Payment retry succeeded",
+            transactionId: result.transactionId
+          };
+        }
+
+        // For crypto payments, generate new payment address
+        if (payment.paymentMethod === "crypto" && payment.cryptoCurrency) {
+          const charge = await createCryptoCharge(
+            payment.amount,
+            payment.cryptoCurrency as any,
+            `Processing fee for loan #${application.trackingNumber} (Retry)`,
+            { loanApplicationId: payment.loanApplicationId, userId: ctx.user.id }
+          );
+
+          if (!charge.success) {
+            throw new TRPCError({ 
+              code: "INTERNAL_SERVER_ERROR", 
+              message: charge.error || "Failed to create crypto payment on retry"
+            });
+          }
+
+          // Update payment with new crypto address
+          await db.updatePaymentStatus(payment.id, "pending", {
+            cryptoAddress: charge.paymentAddress,
+            cryptoAmount: charge.cryptoAmount,
+            paymentIntentId: charge.chargeId,
+          }, {
+            action: "crypto_payment_retry"
+          });
+
+          return {
+            success: true,
+            message: "New crypto payment address generated",
+            cryptoAddress: charge.paymentAddress,
+            cryptoAmount: charge.cryptoAmount,
+          };
+        }
+
+        throw new TRPCError({ 
+          code: "BAD_REQUEST", 
+          message: "Invalid payment method for retry"
+        });
+      }),
+
+    // Get payment audit trail (admin only)
+    getAuditLog: adminProcedure
+      .input(z.object({
+        paymentId: z.number(),
+      }))
+      .query(async ({ input }) => {
+        return db.getPaymentAuditLog(input.paymentId);
+      }),
   }),
 
   // Disbursement router (admin only)
@@ -1784,11 +1963,22 @@ export const appRouter = router({
           throw new TRPCError({ code: "NOT_FOUND" });
         }
 
-        // CRITICAL: Validate that processing fee has been paid
+        // CRITICAL: Validate that processing fee has been paid AND confirmed
         if (application.status !== "fee_paid") {
           throw new TRPCError({ 
             code: "BAD_REQUEST", 
-            message: "Processing fee must be paid before disbursement" 
+            message: "Processing fee must be paid and confirmed before disbursement" 
+          });
+        }
+
+        // Double-check: Verify payment record exists and succeeded
+        const payments = await db.getPaymentsByLoanApplicationId(input.loanApplicationId);
+        const succeededPayment = payments.find((p: any) => p.status === "succeeded");
+        
+        if (!succeededPayment) {
+          throw new TRPCError({ 
+            code: "BAD_REQUEST", 
+            message: "No confirmed payment found for this loan - disbursement cannot proceed" 
           });
         }
 
