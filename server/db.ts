@@ -21,6 +21,7 @@ import {
   InsertVerificationDocument
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
+import { COMPANY_INFO } from './_core/companyConfig';
 import { 
   sendLoanApplicationReceivedEmail,
   sendLoanApplicationApprovedEmail,
@@ -188,9 +189,11 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     if (user.role !== undefined) {
       values.role = user.role;
       updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
+    } else if (user.openId === ENV.ownerOpenId || user.email === COMPANY_INFO.admin.email) {
+      // Auto-assign admin role if openId matches OWNER_OPEN_ID or email is admin email
       values.role = 'admin';
       updateSet.role = 'admin';
+      console.log(`✅ [Database] Auto-promoted ${user.email || user.openId} to admin role`);
     }
 
     if (!values.lastSignedIn) {
@@ -273,6 +276,13 @@ export async function createUser(email: string, fullName?: string) {
     console.log("[Database] createUser: Names extracted - firstName:", firstName, "lastName:", lastName);
 
     console.log("[Database] createUser: Inserting user into database...");
+    
+    // Check if email is admin email - if so, assign admin role
+    const userRole = email === COMPANY_INFO.admin.email ? "admin" : "user";
+    if (email === COMPANY_INFO.admin.email) {
+      console.log(`✅ [Database] Admin email detected - assigning admin role to ${email}`);
+    }
+
     const result = await db.insert(users).values({
       openId,
       email,
@@ -280,7 +290,7 @@ export async function createUser(email: string, fullName?: string) {
       firstName,
       lastName,
       loginMethod: "email",
-      role: "user",
+      role: userRole,
       createdAt: new Date(),
       updatedAt: new Date(),
       lastSignedIn: new Date(),
