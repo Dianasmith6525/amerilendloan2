@@ -2163,9 +2163,10 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
-        // Initialize context outside try block so it's available in catch
-        const isAuthenticated = !!ctx.user;
-        let supportContext: SupportContext = {
+        try {
+          // Initialize context outside try block so it's available in catch
+          const isAuthenticated = !!ctx.user;
+          let supportContext: SupportContext = {
           isAuthenticated,
           userRole: ctx.user?.role,
         };
@@ -2227,7 +2228,10 @@ export const appRouter = router({
           );
 
           // Check if API key is configured
-          if (!ENV.openAiApiKey && !ENV.forgeApiKey) {
+          const apiKeysAvailable = !(!ENV.openAiApiKey && !ENV.forgeApiKey);
+          console.log("[AI Chat] API keys available:", apiKeysAvailable, "OpenAI:", !!ENV.openAiApiKey, "Forge:", !!ENV.forgeApiKey);
+          
+          if (!apiKeysAvailable) {
             console.log("[AI Chat] No API keys configured, using fallback response");
             // Provide fallback support response when no API is configured
             const userMessage = input.messages[input.messages.length - 1]?.content || "";
@@ -2258,6 +2262,7 @@ export const appRouter = router({
           }
 
           // Invoke LLM with prepared messages using optimized parameters for smarter responses
+          console.log("[AI Chat] Invoking LLM with", messages.length, "messages");
           const response = await invokeLLM({
             messages,
             maxTokens: 1500, // Balanced for comprehensive but concise responses
@@ -2297,6 +2302,7 @@ export const appRouter = router({
             assistantMessage = "You can reach our support team at (945) 212-1609, Monday-Friday 8am-8pm CT, or Saturday-Sunday 9am-5pm CT. You can also email us at support@amerilendloan.com.";
           }
           
+          
           console.log("[AI Chat] Returning fallback response:", assistantMessage);
           
           return {
@@ -2306,6 +2312,17 @@ export const appRouter = router({
             userContext: supportContext,
           };
         }
+      } catch (outerError) {
+        console.error("[AI Chat] OUTER CATCH - Unhandled error in mutation:", outerError);
+        
+        // Final fallback - return generic helpful message
+        return {
+          success: true,
+          message: "Thank you for contacting AmeriLend support! I'm here to help with any questions about your loan application or account. Please try your message again, or contact us at (945) 212-1609.",
+          isAuthenticated: !!ctx.user,
+          userContext: { isAuthenticated: !!ctx.user, userRole: ctx.user?.role },
+        };
+      }
       }),
 
     // Get suggested prompts based on authentication status
