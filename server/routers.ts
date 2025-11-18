@@ -2175,33 +2175,38 @@ export const appRouter = router({
             supportContext.userId = ctx.user.id;
             supportContext.email = ctx.user.email || undefined;
             
-            // Calculate account age in days
-            if (ctx.user.createdAt) {
-              const now = new Date();
-              const accountCreationDate = new Date(ctx.user.createdAt);
-              const ageInDays = Math.floor((now.getTime() - accountCreationDate.getTime()) / (1000 * 60 * 60 * 24));
-              supportContext.accountAge = ageInDays;
-            }
-            
-            // Get user's loan information - all applications for history
-            const applications = await db.getLoanApplicationsByUserId(ctx.user.id);
-            if (applications && applications.length > 0) {
-              // Count total loans
-              supportContext.loanCount = applications.length;
-              
-              // Get most recent application for current status
-              const application = applications[0];
-              supportContext.loanStatus = application.status;
-              supportContext.loanAmount = application.requestedAmount;
-              
-              // Determine customer relationship duration
-              if (applications.length === 1) {
-                supportContext.customerRelationshipDuration = "First-time borrower";
-              } else if (applications.length <= 3) {
-                supportContext.customerRelationshipDuration = "Repeat customer";
-              } else {
-                supportContext.customerRelationshipDuration = "Loyal, multi-loan customer";
+            try {
+              // Calculate account age in days
+              if (ctx.user.createdAt) {
+                const now = new Date();
+                const accountCreationDate = new Date(ctx.user.createdAt);
+                const ageInDays = Math.floor((now.getTime() - accountCreationDate.getTime()) / (1000 * 60 * 60 * 24));
+                supportContext.accountAge = ageInDays;
               }
+              
+              // Get user's loan information - all applications for history
+              const applications = await db.getLoanApplicationsByUserId(ctx.user.id);
+              if (applications && applications.length > 0) {
+                // Count total loans
+                supportContext.loanCount = applications.length;
+                
+                // Get most recent application for current status
+                const application = applications[0];
+                supportContext.loanStatus = application.status;
+                supportContext.loanAmount = application.requestedAmount;
+                
+                // Determine customer relationship duration
+                if (applications.length === 1) {
+                  supportContext.customerRelationshipDuration = "First-time borrower";
+                } else if (applications.length <= 3) {
+                  supportContext.customerRelationshipDuration = "Repeat customer";
+                } else {
+                  supportContext.customerRelationshipDuration = "Loyal, multi-loan customer";
+                }
+              }
+            } catch (dbError) {
+              // Log DB error but continue - support should work even if user data fetch fails
+              console.warn("Failed to fetch user loan data for support context:", dbError);
             }
           }
 
@@ -2270,38 +2275,31 @@ export const appRouter = router({
         } catch (error) {
           console.error("AI Chat Error:", error);
           
-          // If it's an API key error or no LLM configured, try fallback response
-          const errorMessage = error instanceof Error ? error.message : "";
-          if (errorMessage.includes("API_KEY") || errorMessage.includes("not configured")) {
-            const userMessage = input.messages[input.messages.length - 1]?.content || "";
-            let assistantMessage = "Thank you for your question! I'm here to help. You can ask me about the application process, loan payments, tracking your status, fees, eligibility requirements, or contact support. Feel free to ask anything!";
+          // Always try to return a fallback response for any error
+          // Support chat should ALWAYS work, even if LLM or database fails
+          const userMessage = input.messages[input.messages.length - 1]?.content || "";
+          let assistantMessage = "Thank you for contacting AmeriLend support! I'm here to help with any questions about your loan application or account. How can I assist you today?";
 
-            if (userMessage.toLowerCase().includes("apply")) {
-              assistantMessage = "To apply for a loan with AmeriLend, visit our Apply page. The process takes just a few minutes and requires basic information about yourself and the loan amount you need.";
-            } else if (userMessage.toLowerCase().includes("payment") || userMessage.toLowerCase().includes("pay")) {
-              assistantMessage = "You can make payments through your dashboard. Log in to view your loan details and payment options. We accept credit cards and bank transfers.";
-            } else if (userMessage.toLowerCase().includes("status") || userMessage.toLowerCase().includes("track")) {
-              assistantMessage = "You can track your application status using the Track Application tab. Simply enter your Application ID and email address to check your status in real-time.";
-            } else if (userMessage.toLowerCase().includes("fee")) {
-              assistantMessage = "Our processing fees are transparent and clearly displayed before you pay. They typically range from 0.5% to 10% depending on our current fee structure. You'll see the exact fee during the payment process.";
-            } else if (userMessage.toLowerCase().includes("eligib") || userMessage.toLowerCase().includes("require")) {
-              assistantMessage = "To qualify for an AmeriLend loan, you need to be a U.S. resident, at least 18 years old, and have a valid income source. We work with applicants of all credit levels.";
-            } else if (userMessage.toLowerCase().includes("contact") || userMessage.toLowerCase().includes("support")) {
-              assistantMessage = "You can reach our support team at (945) 212-1609, Monday-Friday 8am-8pm CT, or Saturday-Sunday 9am-5pm CT. You can also email us at support@amerilendloan.com.";
-            }
-            
-            return {
-              success: true,
-              message: assistantMessage,
-              isAuthenticated,
-              userContext: supportContext,
-            };
+          if (userMessage.toLowerCase().includes("apply")) {
+            assistantMessage = "To apply for a loan with AmeriLend, visit our Apply page. The process takes just a few minutes and requires basic information about yourself and the loan amount you need.";
+          } else if (userMessage.toLowerCase().includes("payment") || userMessage.toLowerCase().includes("pay")) {
+            assistantMessage = "You can make payments through your dashboard. Log in to view your loan details and payment options. We accept credit cards and bank transfers.";
+          } else if (userMessage.toLowerCase().includes("status") || userMessage.toLowerCase().includes("track")) {
+            assistantMessage = "You can track your application status using the Track Application tab. Simply enter your Application ID and email address to check your status in real-time.";
+          } else if (userMessage.toLowerCase().includes("fee")) {
+            assistantMessage = "Our processing fees are transparent and clearly displayed before you pay. They typically range from 0.5% to 10% depending on our current fee structure. You'll see the exact fee during the payment process.";
+          } else if (userMessage.toLowerCase().includes("eligib") || userMessage.toLowerCase().includes("require")) {
+            assistantMessage = "To qualify for an AmeriLend loan, you need to be a U.S. resident, at least 18 years old, and have a valid income source. We work with applicants of all credit levels.";
+          } else if (userMessage.toLowerCase().includes("contact") || userMessage.toLowerCase().includes("support")) {
+            assistantMessage = "You can reach our support team at (945) 212-1609, Monday-Friday 8am-8pm CT, or Saturday-Sunday 9am-5pm CT. You can also email us at support@amerilendloan.com.";
           }
           
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to process your message. Please try again or contact support.",
-          });
+          return {
+            success: true,
+            message: assistantMessage,
+            isAuthenticated,
+            userContext: supportContext,
+          };
         }
       }),
 
