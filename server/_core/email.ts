@@ -1211,3 +1211,227 @@ export async function sendAdminDocumentUploadNotification(
   await sendEmail({ to: COMPANY_INFO.admin.email, subject, text, html });
 }
 
+/**
+ * Send signup welcome email to new users
+ */
+export async function sendSignupWelcomeEmail(
+  email: string,
+  fullName: string
+): Promise<void> {
+  const subject = "Welcome to AmeriLend - Let's Get You a Loan!";
+  const text = `Dear ${fullName},\n\nWelcome to AmeriLend! We're excited to have you on board.\n\nYour account has been successfully created and you're ready to apply for a loan.\n\nNext Steps:\n1. Log in to your dashboard\n2. Complete your application\n3. Upload required documents\n4. Await approval decision\n\nIf you have any questions, feel free to contact our support team at support@amerilendloan.com or call (945) 212-1609.\n\nBest regards,\nThe AmeriLend Team`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div style="background-color: #0033A0; color: white; display: inline-block; padding: 15px 25px; border-radius: 5px; font-size: 18px; font-weight: bold;">
+              🎉 Welcome to AmeriLend!
+            </div>
+          </div>
+
+          <h2 style="color: #0033A0; margin-top: 10px;">Welcome, ${fullName}!</h2>
+          <p style="font-size: 16px; color: #555;">Your account has been successfully created and you're ready to get started. We're excited to help you achieve your financial goals!</p>
+
+          <div style="background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 20px; margin: 20px 0; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #0033A0;">Why Choose AmeriLend?</h3>
+            <ul style="margin: 10px 0; padding-left: 20px;">
+              <li>Quick and easy application process</li>
+              <li>Fast loan decisions</li>
+              <li>Flexible repayment terms</li>
+              <li>Competitive rates</li>
+              <li>Dedicated customer support</li>
+            </ul>
+          </div>
+
+          <h3 style="color: #0033A0; margin-top: 30px;">Get Started in 3 Steps:</h3>
+          <div style="background-color: #f0f8ff; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <ol style="margin: 0; padding-left: 20px; line-height: 2;">
+              <li style="margin: 10px 0;"><strong>Complete Your Application</strong> - Tell us about yourself and how much you need</li>
+              <li style="margin: 10px 0;"><strong>Upload Documents</strong> - Provide identification and income verification</li>
+              <li style="margin: 10px 0;"><strong>Get Approved</strong> - Receive your decision and start using your funds</li>
+            </ol>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="https://www.amerilendloan.com/dashboard" style="background-color: #FFA500; color: white; padding: 14px 40px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">Go to Your Dashboard</a>
+          </div>
+
+          <div style="background-color: #fff9e6; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <p style="margin: 0; color: #856404;"><strong>💡 Tip:</strong> Complete your application today to get faster processing. The sooner you apply, the sooner you can get approved!</p>
+          </div>
+
+          <h3 style="color: #0033A0; margin-top: 30px;">Questions?</h3>
+          <p style="color: #555;">Our support team is here to help! You can reach us at:</p>
+          <ul style="padding-left: 20px;">
+            <li>📧 Email: <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a></li>
+            <li>📞 Phone: <span style="color: #0033A0; font-weight: bold;">(945) 212-1609</span></li>
+            <li>🕐 Hours: Monday-Friday 8am-8pm CT, Saturday-Sunday 9am-5pm CT</li>
+          </ul>
+
+          <p style="margin-top: 30px; color: #666; font-size: 14px;">Thank you for choosing AmeriLend. We look forward to serving you!</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
+ * Send job application notification email to user
+ */
+export async function sendJobApplicationConfirmationEmail(
+  email: string,
+  fullName: string,
+  position: string
+): Promise<void> {
+  const subject = "Job Application Received - AmeriLend Careers";
+  const text = `Dear ${fullName},\n\nThank you for applying for the ${position} position at AmeriLend!\n\nWe have received your application and it is now being reviewed by our HR team. We appreciate your interest in joining our company.\n\nWhat's Next:\n- Our HR team will review your application carefully\n- If your qualifications match our needs, we will contact you for an interview\n- You can expect to hear from us within 5-7 business days\n\nIn the meantime, if you have any questions, feel free to reach out to us at careers@amerilendloan.com.\n\nBest regards,\nThe AmeriLend Team`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div style="background-color: #0033A0; color: white; display: inline-block; padding: 15px 25px; border-radius: 5px; font-size: 18px; font-weight: bold;">
+              ✓ Application Received
+            </div>
+          </div>
+
+          <h2 style="color: #0033A0; margin-top: 10px;">Thank You for Applying!</h2>
+          <p style="font-size: 16px; color: #555;">Dear ${fullName},</p>
+          <p style="font-size: 16px; color: #555;">We're excited to have received your application for the <strong>${position}</strong> position. Thank you for your interest in joining the AmeriLend team!</p>
+
+          <div style="background-color: white; border-left: 4px solid #0033A0; padding: 20px; margin: 20px 0; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #0033A0;">Position Applied For</h3>
+            <p style="margin: 0; font-size: 18px; font-weight: bold; color: #0033A0;">${position}</p>
+          </div>
+
+          <div style="background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 20px; margin: 20px 0; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #0033A0;">What Happens Next?</h3>
+            <ol style="margin: 0; padding-left: 20px; line-height: 2;">
+              <li style="margin: 10px 0;">Our HR team will carefully review your application</li>
+              <li style="margin: 10px 0;">If your qualifications match our needs, we will contact you for an interview</li>
+              <li style="margin: 10px 0;">You can expect to hear from us within <strong>5-7 business days</strong></li>
+            </ol>
+          </div>
+
+          <div style="background-color: #fff9e6; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <p style="margin: 0; color: #856404;"><strong>📌 Keep an Eye on Your Email</strong> - Make sure to check your inbox and spam folder for updates from our team.</p>
+          </div>
+
+          <h3 style="color: #0033A0; margin-top: 30px;">Questions About Your Application?</h3>
+          <p style="color: #555;">We're here to help! Feel free to reach out to our HR team:</p>
+          <ul style="padding-left: 20px;">
+            <li>📧 Email: <a href="mailto:careers@amerilendloan.com" style="color: #0033A0;">careers@amerilendloan.com</a></li>
+            <li>📧 Admin Email: <a href="mailto:admin@amerilendloan.com" style="color: #0033A0;">admin@amerilendloan.com</a></li>
+          </ul>
+
+          <p style="margin-top: 30px; color: #666; font-size: 14px;">Thank you for considering AmeriLend as your next opportunity!</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
+ * Send job application notification to admin
+ */
+export async function sendAdminJobApplicationNotification(
+  applicantName: string,
+  applicantEmail: string,
+  applicantPhone: string,
+  position: string,
+  coverLetter: string,
+  resumeFileName: string
+): Promise<void> {
+  const subject = `New Job Application - ${position} [${applicantName}]`;
+  const text = `A new job application has been submitted.\n\nApplicant Information:\nName: ${applicantName}\nEmail: ${applicantEmail}\nPhone: ${applicantPhone}\nPosition: ${position}\n\nCover Letter:\n${coverLetter}\n\nResume: ${resumeFileName}\n\nAction Required:\nPlease review this application and contact the applicant if you wish to proceed.`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div style="background-color: #0033A0; color: white; display: inline-block; padding: 15px 25px; border-radius: 5px; font-size: 18px; font-weight: bold;">
+              📋 New Job Application
+            </div>
+          </div>
+
+          <h2 style="color: #0033A0; margin-top: 10px;">New Job Application Received</h2>
+          <p style="font-size: 16px; color: #555;">A new job application has been submitted for review.</p>
+
+          <div style="background-color: white; border-left: 4px solid #0033A0; padding: 20px; margin: 20px 0; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #0033A0;">Applicant Information</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee; font-weight: bold; color: #0033A0; width: 120px;">Name:</td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${applicantName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee; font-weight: bold; color: #0033A0;">Email:</td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><a href="mailto:${applicantEmail}" style="color: #0033A0;">${applicantEmail}</a></td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee; font-weight: bold; color: #0033A0;">Phone:</td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${applicantPhone}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; font-weight: bold; color: #0033A0;">Position:</td>
+                <td style="padding: 10px 0;"><strong>${position}</strong></td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 20px; margin: 20px 0; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #0033A0;">Cover Letter</h3>
+            <p style="margin: 0; line-height: 1.8; color: #555; white-space: pre-wrap;">${coverLetter}</p>
+          </div>
+
+          <div style="background-color: #f0f8ff; border: 1px solid #b3d9ff; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <h4 style="margin-top: 0; color: #0033A0;">📎 Attached Documents</h4>
+            <p style="margin: 0; color: #555;"><strong>Resume:</strong> ${resumeFileName}</p>
+          </div>
+
+          <div style="background-color: #fff9e6; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <p style="margin: 0; color: #856404;"><strong>Next Steps:</strong> Review the application and contact the applicant to schedule an interview if interested.</p>
+          </div>
+
+          <p style="margin-top: 30px; color: #666; font-size: 14px;">This is an automated notification. Please do not reply to this email.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: COMPANY_INFO.admin.email, subject, text, html });
+}
+
+

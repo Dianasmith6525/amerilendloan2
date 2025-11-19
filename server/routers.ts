@@ -12,7 +12,7 @@ import { verifyCryptoTransactionWeb3, getNetworkStatus } from "./_core/web3-veri
 import { legalAcceptances, loanApplications } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "./db";
-import { sendLoginNotificationEmail, sendEmailChangeNotification, sendBankInfoChangeNotification, sendSuspiciousActivityAlert, sendApplicationApprovedNotificationEmail, sendApplicationRejectedNotificationEmail, sendApplicationDisbursedNotificationEmail, sendLoanApplicationReceivedEmail, sendAdminNewApplicationNotification, sendAdminDocumentUploadNotification } from "./_core/email";
+import { sendLoginNotificationEmail, sendEmailChangeNotification, sendBankInfoChangeNotification, sendSuspiciousActivityAlert, sendApplicationApprovedNotificationEmail, sendApplicationRejectedNotificationEmail, sendApplicationDisbursedNotificationEmail, sendLoanApplicationReceivedEmail, sendAdminNewApplicationNotification, sendAdminDocumentUploadNotification, sendSignupWelcomeEmail, sendJobApplicationConfirmationEmail, sendAdminJobApplicationNotification } from "./_core/email";
 import { sendPasswordResetConfirmationEmail } from "./_core/password-reset-email";
 import { successResponse, errorResponse, duplicateResponse, ERROR_CODES, HTTP_STATUS } from "./_core/response-handler";
 import { invokeLLM } from "./_core/llm";
@@ -21,6 +21,7 @@ import { buildAdminMessages, getAdminSuggestedTasks, type AdminAiContext, type A
 import { ENV } from "./_core/env";
 import { sdk } from "./_core/sdk";
 import { getClientIP } from "./_core/ipUtils";
+import { COMPANY_INFO } from "./_core/companyConfig";
 import { 
   signUpWithEmail, 
   signInWithEmail, 
@@ -986,6 +987,8 @@ export const appRouter = router({
         if (input.purpose === "signup" || input.purpose === "login") {
           try {
             let user = await db.getUserByEmail(input.identifier);
+            const isNewUser = !user;
+            
             if (!user) {
               // Create a user for email-based OTP auth
               user = await db.createUser(input.identifier);
@@ -1001,6 +1004,12 @@ export const appRouter = router({
               expiresInMs: ONE_YEAR_MS,
             });
             ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+
+            // Send signup welcome email for new users
+            if (isNewUser && input.purpose === "signup" && user.email) {
+              sendSignupWelcomeEmail(user.email, user.name || "User")
+                .catch(err => console.error('[Email] Failed to send signup welcome email:', err));
+            }
           } catch (err) {
             console.error('[OTP] Failed to establish session after verification:', err);
             // Do not expose internal error details to client
@@ -3419,6 +3428,97 @@ Format as JSON with array of applications including their recommendation.`;
         ],
       };
     }),
+  }),
+
+  // Contact Router for job applications and emails
+  contact: router({
+    sendEmail: publicProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        email: z.string().email(),
+        subject: z.string().min(1),
+        message: z.string().min(1),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          // Send email to admin
+          const emailPayload = {
+            to: COMPANY_INFO.admin.email,
+            subject: `${input.subject} [from ${input.name}]`,
+            text: `From: ${input.name} <${input.email}>\n\n${input.message}`,
+            html: `
+              <!DOCTYPE html>
+              <html>
+                <head>
+                  <meta charset="utf-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                </head>
+                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+                  <div style="background-color: #f9f9f9; padding: 30px;">
+                    <h2 style="color: #0033A0; margin-top: 0;">${input.subject}</h2>
+                    <p><strong>From:</strong> ${input.name} <a href="mailto:${input.email}" style="color: #0033A0;">&lt;${input.email}&gt;</a></p>
+                    <div style="background-color: white; padding: 20px; border-left: 4px solid #0033A0; margin: 20px 0;">
+                      <p style="margin: 0; white-space: pre-wrap; line-height: 1.8;">${input.message}</p>
+                    </div>
+                  </div>
+                </body>
+              </html>
+            `,
+          };
+
+          const { sendEmail } = await import("./_core/email");
+          const result = await sendEmail(emailPayload);
+
+          if (!result.success) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: result.error || "Failed to send email"
+            });
+          }
+
+          return { success: true, message: "Email sent successfully" };
+        } catch (error) {
+          console.error('[Contact] Error sending email:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to send email. Please try again later."
+          });
+        }
+      }),
+
+    sendJobApplication: publicProcedure
+      .input(z.object({
+        fullName: z.string().min(1),
+        email: z.string().email(),
+        phone: z.string().min(10),
+        position: z.string().min(1),
+        resumeFileName: z.string(),
+        coverLetter: z.string().min(1),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          // Send confirmation email to applicant
+          await sendJobApplicationConfirmationEmail(input.email, input.fullName, input.position);
+
+          // Send notification to admin
+          await sendAdminJobApplicationNotification(
+            input.fullName,
+            input.email,
+            input.phone,
+            input.position,
+            input.coverLetter,
+            input.resumeFileName
+          );
+
+          return { success: true, message: "Application submitted successfully" };
+        } catch (error) {
+          console.error('[Contact] Error submitting job application:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to submit application. Please try again later."
+          });
+        }
+      }),
   }),
 });
 

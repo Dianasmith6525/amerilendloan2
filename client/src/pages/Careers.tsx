@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, ArrowLeft } from "lucide-react";
@@ -26,12 +26,26 @@ export default function Careers() {
     coverLetter: "",
   });
 
-  const sendEmailMutation = trpc.contact.sendEmail.useMutation({
+  // Get current user data to auto-fill form
+  const { data: user } = trpc.auth.me.useQuery();
+
+  // Auto-fill form with user data when available
+  useEffect(() => {
+    if (user && user.email) {
+      setFormData(prev => ({
+        ...prev,
+        email: user.email || "",
+        fullName: user.name || "",
+      }));
+    }
+  }, [user]);
+
+  const sendJobApplicationMutation = trpc.contact.sendJobApplication.useMutation({
     onSuccess: () => {
       toast.success("Application submitted! We'll review and get back to you soon.");
       setFormData({
-        fullName: "",
-        email: "",
+        fullName: user?.name || "",
+        email: user?.email || "",
         phone: "",
         position: "Not Specified",
         resume: null,
@@ -93,32 +107,22 @@ export default function Careers() {
       return;
     }
 
+    if (!formData.resume) {
+      toast.error("Please upload your resume");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      // Prepare email content
-      const emailContent = `
-Job Application Received
-
-Name: ${formData.fullName}
-Email: ${formData.email}
-Phone: ${formData.phone}
-Position of Interest: ${formData.position}
-
-Cover Letter:
-${formData.coverLetter}
-
----
-Resume File: ${formData.resume?.name || "Not provided"}
-File Size: ${formData.resume ? (formData.resume.size / 1024).toFixed(2) + " KB" : "N/A"}
-      `.trim();
-
-      // Send email via contact form (using existing email infrastructure)
-      sendEmailMutation.mutate({
-        name: formData.fullName,
+      // Send job application via new endpoint
+      sendJobApplicationMutation.mutate({
+        fullName: formData.fullName,
         email: formData.email,
-        message: emailContent,
-        subject: `Job Application from ${formData.fullName} - ${formData.position}`,
+        phone: formData.phone,
+        position: formData.position,
+        resumeFileName: formData.resume.name,
+        coverLetter: formData.coverLetter,
       });
     } catch (error) {
       toast.error("Failed to submit application. Please try again.");
@@ -320,10 +324,10 @@ File Size: ${formData.resume ? (formData.resume.size / 1024).toFixed(2) + " KB" 
                 {/* Submit Button */}
                 <Button
                   type="submit"
-                  disabled={isSubmitting || sendEmailMutation.isPending}
+                  disabled={isSubmitting || sendJobApplicationMutation.isPending}
                   className="w-full bg-[#0033A0] hover:bg-blue-800 text-white py-3 rounded-lg font-semibold text-lg transition-all"
                 >
-                  {isSubmitting || sendEmailMutation.isPending ? (
+                  {isSubmitting || sendJobApplicationMutation.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                       Submitting Application...
