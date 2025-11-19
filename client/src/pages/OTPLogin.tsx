@@ -368,7 +368,7 @@ export default function OTPLogin() {
                   <SocialAuthButtons purpose="login" />
 
                   <div className="text-center">
-                    <a href="#contact" className="text-xs text-gray-600 hover:text-[#0033A0] underline">
+                    <a href="mailto:support@amerilendloan.com" className="text-xs text-gray-600 hover:text-[#0033A0] underline">
                       Need help logging in? Contact Support
                     </a>
                   </div>
