@@ -51,7 +51,7 @@ export function getEmailFooter(): string {
   return `
     <div style="background-color: #f5f5f5; border-top: 3px solid #0033A0; padding: 30px 20px; margin-top: 30px; text-align: center; font-size: 12px; color: #666;">
       <div style="margin-bottom: 20px;">
-        <img src="${COMPANY_INFO.logo.url}" alt="${COMPANY_INFO.logo.alt}" style="display: block; height: 45px; width: auto; margin: 0 auto 10px; border: 0; max-width: 100%; max-height: 60px;"
+        <img src="${COMPANY_INFO.logo.url}" alt="${COMPANY_INFO.logo.alt}" style="display: block; height: 45px; width: auto; margin: 0 auto 10px; border: 0; max-width: 100%; max-height: 60px;">
       
       <p style="margin: 8px 0; font-weight: bold; font-size: 16px; color: #0033A0;">${COMPANY_INFO.name}</p>
       
