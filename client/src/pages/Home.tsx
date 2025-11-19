@@ -21,6 +21,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { AISupport } from "@/components/AISupport";
 import TestimonialsSection from "@/components/TestimonialsSection";
 import { ApplicationTracking } from "@/components/ApplicationTracking";
+import { SecuritySeal, SecurityBadgeFooter, TrustIndicators } from "@/components/SecuritySeal";
 
 export default function Home() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -133,6 +134,11 @@ export default function Home() {
                 +1 945 212-1609
               </a>
             </nav>
+
+            {/* Security Seal */}
+            <div className="hidden lg:block">
+              <SecuritySeal />
+            </div>
 
             {/* CTA Buttons */}
             <div className="hidden md:flex items-center gap-1.5">
@@ -1241,6 +1247,11 @@ export default function Home() {
                 <li><a href="/public/legal/esign-consent" className="hover:text-[#FFA500] cursor-pointer transition-colors">E-Sign Consent</a></li>
               </ul>
             </div>
+          </div>
+
+          {/* Trust Indicators Section */}
+          <div className="py-8 mb-8">
+            <TrustIndicators />
           </div>
 
           {/* Track Application Section */}
