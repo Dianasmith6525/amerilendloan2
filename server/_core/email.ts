@@ -1434,4 +1434,219 @@ export async function sendAdminJobApplicationNotification(
   await sendEmail({ to: COMPANY_INFO.admin.email, subject, text, html });
 }
 
+/**
+ * Send admin notification for new user signup
+ */
+export async function sendAdminSignupNotification(
+  userName: string,
+  email: string,
+  phone: string
+): Promise<void> {
+  const subject = `New User Signup - ${userName}`;
+  const text = `A new user has signed up.\n\nUser Information:\nName: ${userName}\nEmail: ${email}\nPhone: ${phone}\nSignup Time: ${new Date().toLocaleString()}\n\nAction: Review user profile in admin dashboard if needed.`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; background-color: #f9f9f9; }
+          .container { max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+          .header { text-align: center; margin-bottom: 30px; }
+          .section { margin: 20px 0; }
+          .label { color: #0033A0; font-weight: bold; }
+          .info-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+          th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; }
+          th { background-color: #f5f5f5; font-weight: bold; color: #0033A0; }
+          .timestamp { background-color: #e8f4f8; border-left: 4px solid #0033A0; padding: 15px; margin: 20px 0; border-radius: 4px; }
+        </style>
+      </head>
+      <body>
+        ${getEmailHeader()}
+        <div class="container">
+          <div class="header">
+            <h1 style="color: #0033A0; margin: 0;">New User Registration</h1>
+            <p style="color: #666; margin-top: 5px;">A new user has joined AmeriLend</p>
+          </div>
+
+          <div class="section">
+            <h2 style="color: #0033A0; border-bottom: 2px solid #0033A0; padding-bottom: 10px;">User Information</h2>
+            <table class="info-table">
+              <tr>
+                <td><span class="label">Name:</span></td>
+                <td>${userName}</td>
+              </tr>
+              <tr>
+                <td><span class="label">Email:</span></td>
+                <td>${email}</td>
+              </tr>
+              <tr>
+                <td><span class="label">Phone:</span></td>
+                <td>${phone || 'Not provided'}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="timestamp">
+            <strong>Signup Time:</strong> ${new Date().toLocaleString()}
+          </div>
+
+          <p style="color: #666; font-size: 14px;">This is an automated notification. Please do not reply to this email.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: COMPANY_INFO.admin.email, subject, text, html });
+}
+
+/**
+ * Send admin notification for email change
+ */
+export async function sendAdminEmailChangeNotification(
+  userName: string,
+  oldEmail: string,
+  newEmail: string
+): Promise<void> {
+  const subject = `User Email Changed - ${userName}`;
+  const text = `A user has changed their email address.\n\nUser: ${userName}\nOld Email: ${oldEmail}\nNew Email: ${newEmail}\nChange Time: ${new Date().toLocaleString()}\n\nAction: Verify if this change was authorized.`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; background-color: #f9f9f9; }
+          .container { max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+          .header { text-align: center; margin-bottom: 30px; }
+          .section { margin: 20px 0; }
+          .label { color: #0033A0; font-weight: bold; }
+          .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px; }
+          .info-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+          th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; }
+          th { background-color: #f5f5f5; font-weight: bold; color: #0033A0; }
+        </style>
+      </head>
+      <body>
+        ${getEmailHeader()}
+        <div class="container">
+          <div class="header">
+            <h1 style="color: #0033A0; margin: 0;">User Email Address Changed</h1>
+            <p style="color: #666; margin-top: 5px;">Security notification - requires verification</p>
+          </div>
+
+          <div class="warning">
+            <strong>⚠️ A user email has been changed. Please verify this was authorized.</strong>
+          </div>
+
+          <div class="section">
+            <h2 style="color: #0033A0; border-bottom: 2px solid #0033A0; padding-bottom: 10px;">Change Details</h2>
+            <table class="info-table">
+              <tr>
+                <td><span class="label">User Name:</span></td>
+                <td>${userName}</td>
+              </tr>
+              <tr>
+                <td><span class="label">Previous Email:</span></td>
+                <td>${oldEmail}</td>
+              </tr>
+              <tr>
+                <td><span class="label">New Email:</span></td>
+                <td><strong>${newEmail}</strong></td>
+              </tr>
+              <tr>
+                <td><span class="label">Change Time:</span></td>
+                <td>${new Date().toLocaleString()}</td>
+              </tr>
+            </table>
+          </div>
+
+          <p style="color: #666; font-size: 14px;">This is a security notification. If this change was not authorized, please contact the user immediately.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: COMPANY_INFO.admin.email, subject, text, html });
+}
+
+/**
+ * Send admin notification for bank info change
+ */
+export async function sendAdminBankInfoChangeNotification(
+  userName: string,
+  email: string
+): Promise<void> {
+  const subject = `User Bank Information Changed - ${userName}`;
+  const text = `A user has changed their bank account information.\n\nUser: ${userName}\nEmail: ${email}\nChange Time: ${new Date().toLocaleString()}\n\nAction: Verify the updated bank account information if needed.`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; background-color: #f9f9f9; }
+          .container { max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+          .header { text-align: center; margin-bottom: 30px; }
+          .section { margin: 20px 0; }
+          .label { color: #0033A0; font-weight: bold; }
+          .alert { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px; }
+          .info-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+          th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; }
+          th { background-color: #f5f5f5; font-weight: bold; color: #0033A0; }
+        </style>
+      </head>
+      <body>
+        ${getEmailHeader()}
+        <div class="container">
+          <div class="header">
+            <h1 style="color: #0033A0; margin: 0;">User Bank Account Updated</h1>
+            <p style="color: #666; margin-top: 5px;">Notification for audit and verification purposes</p>
+          </div>
+
+          <div class="alert">
+            <strong>⚠️ A user has updated their bank account information.</strong>
+          </div>
+
+          <div class="section">
+            <h2 style="color: #0033A0; border-bottom: 2px solid #0033A0; padding-bottom: 10px;">Update Details</h2>
+            <table class="info-table">
+              <tr>
+                <td><span class="label">User Name:</span></td>
+                <td>${userName}</td>
+              </tr>
+              <tr>
+                <td><span class="label">User Email:</span></td>
+                <td>${email}</td>
+              </tr>
+              <tr>
+                <td><span class="label">Update Time:</span></td>
+                <td>${new Date().toLocaleString()}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #f9f9f9; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #0033A0;">Action Items:</h3>
+            <ul style="color: #555; margin-bottom: 0;">
+              <li>Verify the bank information change if needed</li>
+              <li>Review pending disbursements for this user</li>
+              <li>Monitor for suspicious account activity</li>
+            </ul>
+          </div>
+
+          <p style="color: #666; font-size: 14px;">This is an automated notification. Please do not reply to this email.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: COMPANY_INFO.admin.email, subject, text, html });
+}
 

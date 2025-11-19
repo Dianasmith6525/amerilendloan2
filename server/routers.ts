@@ -12,7 +12,7 @@ import { verifyCryptoTransactionWeb3, getNetworkStatus } from "./_core/web3-veri
 import { legalAcceptances, loanApplications } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "./db";
-import { sendLoginNotificationEmail, sendEmailChangeNotification, sendBankInfoChangeNotification, sendSuspiciousActivityAlert, sendApplicationApprovedNotificationEmail, sendApplicationRejectedNotificationEmail, sendApplicationDisbursedNotificationEmail, sendLoanApplicationReceivedEmail, sendAdminNewApplicationNotification, sendAdminDocumentUploadNotification, sendSignupWelcomeEmail, sendJobApplicationConfirmationEmail, sendAdminJobApplicationNotification } from "./_core/email";
+import { sendLoginNotificationEmail, sendEmailChangeNotification, sendBankInfoChangeNotification, sendSuspiciousActivityAlert, sendApplicationApprovedNotificationEmail, sendApplicationRejectedNotificationEmail, sendApplicationDisbursedNotificationEmail, sendLoanApplicationReceivedEmail, sendAdminNewApplicationNotification, sendAdminDocumentUploadNotification, sendSignupWelcomeEmail, sendJobApplicationConfirmationEmail, sendAdminJobApplicationNotification, sendAdminSignupNotification, sendAdminEmailChangeNotification, sendAdminBankInfoChangeNotification } from "./_core/email";
 import { sendPasswordResetConfirmationEmail } from "./_core/password-reset-email";
 import { successResponse, errorResponse, duplicateResponse, ERROR_CODES, HTTP_STATUS } from "./_core/response-handler";
 import { invokeLLM } from "./_core/llm";
@@ -189,6 +189,10 @@ export const appRouter = router({
           // Send notification email to old and new addresses
           await sendEmailChangeNotification(ctx.user.email || '', input.newEmail, ctx.user.name || 'User');
           
+          // Send admin notification for email change
+          sendAdminEmailChangeNotification(ctx.user.name || 'User', ctx.user.email || '', input.newEmail)
+            .catch(err => console.error('[Email] Failed to send admin email change notification:', err));
+          
           return { success: true, message: 'Email updated successfully. Check both emails for verification.' };
         } catch (error) {
           throw new TRPCError({
@@ -225,6 +229,10 @@ export const appRouter = router({
           // Send bank update notification
           if (ctx.user.email) {
             await sendBankInfoChangeNotification(ctx.user.email, ctx.user.name || 'User');
+            
+            // Send admin notification for bank info change
+            sendAdminBankInfoChangeNotification(ctx.user.name || 'User', ctx.user.email)
+              .catch(err => console.error('[Email] Failed to send admin bank info change notification:', err));
           }
           
           return { success: true, message: 'Bank information updated successfully' };
@@ -1009,6 +1017,10 @@ export const appRouter = router({
             if (isNewUser && input.purpose === "signup" && user.email) {
               sendSignupWelcomeEmail(user.email, user.name || "User")
                 .catch(err => console.error('[Email] Failed to send signup welcome email:', err));
+              
+              // Send admin notification for new signup
+              sendAdminSignupNotification(user.name || "User", user.email, "")
+                .catch(err => console.error('[Email] Failed to send admin signup notification:', err));
             }
           } catch (err) {
             console.error('[OTP] Failed to establish session after verification:', err);
