@@ -1379,3 +1379,21 @@ export async function getPaymentAuditLog(paymentId: number) {
     .where(eq(paymentAuditLog.paymentId, paymentId))
     .orderBy(desc(paymentAuditLog.createdAt));
 }
+
+/**
+ * Update user fields by openId (used during signup to add password)
+ */
+export async function updateUserByOpenId(openId: string, data: Partial<{ passwordHash: string; loginMethod: string; name: string; email: string }>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const updateData: Record<string, any> = { updatedAt: new Date() };
+  if (data.passwordHash !== undefined) updateData.passwordHash = data.passwordHash;
+  if (data.loginMethod !== undefined) updateData.loginMethod = data.loginMethod;
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.email !== undefined) updateData.email = data.email;
+  
+  await db.update(users)
+    .set(updateData)
+    .where(eq(users.openId, openId));
+}

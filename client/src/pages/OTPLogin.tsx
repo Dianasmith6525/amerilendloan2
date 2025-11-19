@@ -249,6 +249,8 @@ export default function OTPLogin() {
       identifier: pendingIdentifier,
       code,
       purpose: isResetMode ? "reset" : isLogin ? "login" : "signup",
+      // Include password for signup flow to store it in database
+      password: !isLogin && !isResetMode ? signupPassword : undefined,
     });
   };
 

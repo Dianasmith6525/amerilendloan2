@@ -957,6 +957,7 @@ export const appRouter = router({
         identifier: z.string(), // email or phone
         code: z.string().length(6),
         purpose: z.enum(["signup", "login", "reset"]),
+        password: z.string().optional(), // Optional password for signup
       }))
       .mutation(async ({ input, ctx }) => {
         const result = await verifyOTP(input.identifier, input.code, input.purpose);
@@ -1000,6 +1001,16 @@ export const appRouter = router({
             if (!user) {
               // Create a user for email-based OTP auth
               user = await db.createUser(input.identifier);
+              
+              // If password is provided during signup, hash and store it
+              if (input.purpose === "signup" && input.password) {
+                const bcrypt = await import('bcryptjs');
+                const hashedPassword = await bcrypt.hash(input.password, 10);
+                await db.updateUserByOpenId(user.openId, { 
+                  passwordHash: hashedPassword,
+                  loginMethod: "email_password"
+                });
+              }
             } else {
               // Update lastSignedIn timestamp
               await db.upsertUser({ openId: user.openId, lastSignedIn: new Date() });
