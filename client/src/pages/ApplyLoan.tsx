@@ -180,7 +180,16 @@ export default function ApplyLoan() {
       setLastSaved(savedDraft.savedAt);
       toast.success(`Draft loaded from ${savedDraft.savedAt.toLocaleString()}`);
     }
-  }, []);
+    
+    // Auto-fill email and name from authenticated user
+    if (user && user.email) {
+      setFormData(prev => ({
+        ...prev,
+        email: prev.email || user.email || "",
+        fullName: prev.fullName || user.name || ""
+      }));
+    }
+  }, [user, authLoading]);
 
   const submitMutation = trpc.loans.submit.useMutation({
     onSuccess: (data) => {
