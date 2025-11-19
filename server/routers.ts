@@ -5,7 +5,7 @@ import { publicProcedure, router, protectedProcedure, adminProcedure } from "./_
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "./db";
-import { createOTP, verifyOTP, sendOTPEmail, sendOTPPhone } from "./_core/otp";
+import { createOTP, verifyOTP, verifyOTPForPasswordReset, sendOTPEmail, sendOTPPhone } from "./_core/otp";
 import { createAuthorizeNetTransaction, getAcceptJsConfig } from "./_core/authorizenet";
 import { createCryptoCharge, checkCryptoPaymentStatus, getSupportedCryptos, convertUSDToCrypto, verifyCryptoPaymentByTxHash, checkNetworkStatus } from "./_core/crypto-payment";
 import { verifyCryptoTransactionWeb3, getNetworkStatus } from "./_core/web3-verification";
@@ -1019,8 +1019,9 @@ export const appRouter = router({
         newPassword: z.string().min(8),
       }))
       .mutation(async ({ input }) => {
-        // First verify the OTP code
-        const result = await verifyOTP(input.email, input.code, "reset");
+        // Verify the OTP code for password reset
+        // Use verifyOTPForPasswordReset which accepts already-verified codes from the code verification step
+        const result = await verifyOTPForPasswordReset(input.email, input.code);
         if (!result.valid) {
           throw new TRPCError({ 
             code: "BAD_REQUEST", 

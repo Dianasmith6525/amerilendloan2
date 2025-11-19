@@ -117,6 +117,50 @@ export async function verifyOTP(
 }
 
 /**
+ * Verify OTP for password reset - accepts already-verified codes from the previous verification step
+ * This is needed because the password reset flow has two steps:
+ * 1. Verify code (calls verifyCode which marks as verified)
+ * 2. Submit new password (calls resetPasswordWithOTP which needs to validate the same code)
+ */
+export async function verifyOTPForPasswordReset(
+  identifier: string,
+  code: string
+): Promise<{ valid: boolean; error?: string }> {
+  const db = await getDb();
+  if (!db) {
+    return { valid: false, error: "Database not available" };
+  }
+
+  // For password reset, find the most recent OTP (verified or unverified) that matches
+  // This allows the code to be checked after it's already been verified in the verify step
+  const results = await db
+    .select()
+    .from(otpCodes)
+    .where(
+      and(
+        eq(otpCodes.email, identifier),
+        eq(otpCodes.purpose, "reset"),
+        gt(otpCodes.expiresAt, new Date())
+      )
+    )
+    .orderBy(otpCodes.createdAt)
+    .limit(1);
+
+  if (results.length === 0) {
+    return { valid: false, error: "No valid OTP found or OTP expired" };
+  }
+
+  const otpRecord = results[0];
+
+  // Check if code matches
+  if (otpRecord.code !== code) {
+    return { valid: false, error: "Invalid code" };
+  }
+
+  return { valid: true };
+}
+
+/**
  * Send OTP via email using SendGrid
  */
 export async function sendOTPEmail(email: string, code: string, purpose: "signup" | "login" | "reset"): Promise<void> {
