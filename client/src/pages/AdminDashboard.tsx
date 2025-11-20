@@ -260,9 +260,6 @@ export default function AdminDashboard() {
             </div>
           </Link>
           <nav className="flex items-center gap-4">
-            <Link href="/dashboard">
-              <Button variant="ghost">User Dashboard</Button>
-            </Link>
             <Button variant="ghost" onClick={() => logout()}>
               Sign Out
             </Button>
