@@ -38,6 +38,13 @@ export default function AdminDashboard() {
     }
   }, [isAuthenticated, authLoading, setLocation]);
   
+  // Redirect to dashboard if not admin
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && user?.role !== "admin") {
+      setLocation("/dashboard");
+    }
+  }, [isAuthenticated, user?.role, authLoading, setLocation]);
+  
   // Show loading state while checking authentication
   if (authLoading) {
     return (

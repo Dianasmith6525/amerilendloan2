@@ -36,6 +36,14 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { user, isAuthenticated, loading: authLoading, logout } = useAuth();
   
+  // Redirect to admin dashboard if user is admin
+  useEffect(() => {
+    if (authLoading) return; // Don't redirect while loading
+    if (isAuthenticated && user?.role === "admin") {
+      setLocation("/admin");
+    }
+  }, [isAuthenticated, user?.role, authLoading, setLocation]);
+  
   // Redirect to login if not authenticated (only after loading completes)
   useEffect(() => {
     if (authLoading) return; // Don't redirect while loading
