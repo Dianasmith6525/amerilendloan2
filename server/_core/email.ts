@@ -2329,3 +2329,350 @@ AmeriLend Support Team
   await sendEmail({ to: email, subject, text, html });
 }
 
+/**
+ * Send document approval notification to user
+ */
+export async function sendDocumentApprovedEmail(
+  email: string,
+  fullName: string,
+  documentType: string,
+  trackingNumber?: string
+): Promise<void> {
+  const documentLabels: Record<string, string> = {
+    drivers_license_front: "Driver's License (Front)",
+    drivers_license_back: "Driver's License (Back)",
+    passport: "Passport",
+    national_id_front: "National ID (Front)",
+    national_id_back: "National ID (Back)",
+    ssn_card: "Social Security Card",
+    bank_statement: "Bank Statement",
+    utility_bill: "Utility Bill",
+    pay_stub: "Pay Stub",
+    tax_return: "Tax Return",
+    other: "Document"
+  };
+
+  const docLabel = documentLabels[documentType] || "Document";
+  const subject = `Document Verification Complete - AmeriLend`;
+
+  const text = `
+Dear ${fullName},
+
+Great news! Your ${docLabel} has been successfully verified and approved.
+
+Document Type: ${docLabel}
+Status: ✓ Approved
+Verification Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+
+${trackingNumber ? `Loan Tracking #: ${trackingNumber}\n` : ''}
+
+Your document has met all verification requirements and is now on file with AmeriLend. This helps us process your loan application faster.
+
+If you have any questions about your document verification or application, please contact our support team.
+
+Best regards,
+AmeriLend Verification Team
+  `;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333;">
+        ${getEmailHeader()}
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="margin: 0; color: #28a745; font-size: 28px;">✓ Document Approved</h1>
+            <p style="margin: 10px 0 0 0; color: #666; font-size: 16px;">Your document has been verified and approved</p>
+          </div>
+
+          <div style="background-color: #d4edda; border-left: 4px solid #28a745; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h2 style="margin-top: 0; color: #155724;">Document Verification Details</h2>
+            <table style="width: 100%; margin-top: 15px;">
+              <tr style="border-bottom: 1px solid #b8e6c9;">
+                <td style="padding: 12px 0; color: #155724;"><strong>Document Type:</strong></td>
+                <td style="padding: 12px 0; text-align: right; font-weight: bold;">${docLabel}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #b8e6c9;">
+                <td style="padding: 12px 0; color: #155724;"><strong>Status:</strong></td>
+                <td style="padding: 12px 0; text-align: right; color: #28a745;"><strong>✓ Approved</strong></td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; color: #155724;"><strong>Verified On:</strong></td>
+                <td style="padding: 12px 0; text-align: right;">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+              </tr>
+            </table>
+          </div>
+
+          ${trackingNumber ? `<div style="background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #0033A0;">Your Application</h3>
+            <p style="margin: 10px 0;">Your document is now on file and your loan application will progress accordingly.</p>
+            <p style="margin: 10px 0; color: #666;"><strong>Loan Tracking #:</strong> ${trackingNumber}</p>
+          </div>` : ''}
+
+          <div style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 30px 0;">
+            <h3 style="margin-top: 0; color: #333;">What Happens Next?</h3>
+            <ul style="margin: 10px 0; padding-left: 20px; color: #666;">
+              <li style="margin-bottom: 8px;">Your document has been verified and approved</li>
+              <li style="margin-bottom: 8px;">Your loan application will continue processing</li>
+              <li>You will receive updates via email as your application progresses</li>
+            </ul>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${COMPANY_INFO.website}/dashboard" style="background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">View Your Application</a>
+          </div>
+
+          <div style="border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 30px;">
+            <p style="margin: 0; color: #666; font-size: 13px;">
+              <strong>Questions?</strong><br>
+              Email: <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a>
+            </p>
+          </div>
+
+          <p style="margin-top: 20px; color: #999; font-size: 12px; text-align: center;">This is an automated notification. Please do not reply to this email.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
+ * Send document rejection notification to user
+ */
+export async function sendDocumentRejectedEmail(
+  email: string,
+  fullName: string,
+  documentType: string,
+  rejectionReason: string,
+  trackingNumber?: string
+): Promise<void> {
+  const documentLabels: Record<string, string> = {
+    drivers_license_front: "Driver's License (Front)",
+    drivers_license_back: "Driver's License (Back)",
+    passport: "Passport",
+    national_id_front: "National ID (Front)",
+    national_id_back: "National ID (Back)",
+    ssn_card: "Social Security Card",
+    bank_statement: "Bank Statement",
+    utility_bill: "Utility Bill",
+    pay_stub: "Pay Stub",
+    tax_return: "Tax Return",
+    other: "Document"
+  };
+
+  const docLabel = documentLabels[documentType] || "Document";
+  const subject = `Document Review - Resubmission Required - AmeriLend`;
+
+  const text = `
+Dear ${fullName},
+
+Thank you for submitting your ${docLabel} for verification. After review, we were unable to approve this document.
+
+Document Type: ${docLabel}
+Status: ⚠ Rejected
+Review Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+
+Reason for Rejection:
+${rejectionReason}
+
+${trackingNumber ? `Loan Tracking #: ${trackingNumber}\n` : ''}
+
+Please review the reason above and resubmit a clear, readable image or document. Make sure:
+- The document is not blurry or partially cut off
+- All text is clearly visible
+- The document has not expired (if applicable)
+- The document is the correct type
+
+You can resubmit your document through your dashboard at any time.
+
+If you need assistance, please contact our support team.
+
+Best regards,
+AmeriLend Verification Team
+  `;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333;">
+        ${getEmailHeader()}
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="margin: 0; color: #ffc107; font-size: 28px;">⚠ Document Review</h1>
+            <p style="margin: 10px 0 0 0; color: #666; font-size: 16px;">We need you to resubmit your document</p>
+          </div>
+
+          <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h2 style="margin-top: 0; color: #856404;">Document Review Details</h2>
+            <table style="width: 100%; margin-top: 15px;">
+              <tr style="border-bottom: 1px solid #ffeaa7;">
+                <td style="padding: 12px 0; color: #856404;"><strong>Document Type:</strong></td>
+                <td style="padding: 12px 0; text-align: right; font-weight: bold;">${docLabel}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #ffeaa7;">
+                <td style="padding: 12px 0; color: #856404;"><strong>Status:</strong></td>
+                <td style="padding: 12px 0; text-align: right; color: #d39e00;"><strong>⚠ Needs Resubmission</strong></td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; color: #856404;"><strong>Reviewed On:</strong></td>
+                <td style="padding: 12px 0; text-align: right;">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #333;">Reason for Rejection</h3>
+            <p style="margin: 0; color: #555; font-size: 15px; line-height: 1.8;">${rejectionReason}</p>
+          </div>
+
+          ${trackingNumber ? `<div style="background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #0033A0;">Your Application</h3>
+            <p style="margin: 10px 0; color: #666;"><strong>Loan Tracking #:</strong> ${trackingNumber}</p>
+            <p style="margin: 10px 0; color: #666;">Once you resubmit the document, we will review it again and get back to you as soon as possible.</p>
+          </div>` : ''}
+
+          <div style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 30px 0;">
+            <h3 style="margin-top: 0; color: #333;">How to Resubmit</h3>
+            <ol style="margin: 10px 0; padding-left: 20px; color: #666;">
+              <li style="margin-bottom: 8px;">Go to your dashboard</li>
+              <li style="margin-bottom: 8px;">Find the "Documents" section</li>
+              <li style="margin-bottom: 8px;">Upload a clear, readable image of your ${docLabel}</li>
+              <li>Submit for verification</li>
+            </ol>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${COMPANY_INFO.website}/dashboard" style="background-color: #0033A0; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">Go to Dashboard</a>
+          </div>
+
+          <div style="border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 30px;">
+            <p style="margin: 0; color: #666; font-size: 13px;">
+              <strong>Need Help?</strong><br>
+              Email: <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a>
+            </p>
+          </div>
+
+          <p style="margin-top: 20px; color: #999; font-size: 12px; text-align: center;">This is an automated notification. Please do not reply to this email.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
+ * Send admin notification when new document is uploaded (already exists - just documenting)
+ */
+export async function sendAdminNewDocumentUploadNotification(
+  userName: string,
+  userEmail: string,
+  documentType: string,
+  fileName: string
+): Promise<void> {
+  const documentLabels: Record<string, string> = {
+    drivers_license_front: "Driver's License (Front)",
+    drivers_license_back: "Driver's License (Back)",
+    passport: "Passport",
+    national_id_front: "National ID (Front)",
+    national_id_back: "National ID (Back)",
+    ssn_card: "Social Security Card",
+    bank_statement: "Bank Statement",
+    utility_bill: "Utility Bill",
+    pay_stub: "Pay Stub",
+    tax_return: "Tax Return",
+    other: "Document"
+  };
+
+  const docLabel = documentLabels[documentType] || "Document";
+  const subject = `New Document Upload - Review Required - AmeriLend Admin`;
+
+  const text = `
+Admin Alert: New document uploaded for verification
+
+User: ${userName}
+Email: ${userEmail}
+Document Type: ${docLabel}
+File Name: ${fileName}
+Upload Time: ${new Date().toLocaleString('en-US')}
+
+Please review this document in the admin dashboard and approve or reject it accordingly.
+
+The user will be notified once you take action.
+
+AmeriLend Admin System
+  `;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333;">
+        ${getEmailHeader()}
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="margin: 0; color: #0033A0; font-size: 24px;">📄 New Document Upload</h1>
+            <p style="margin: 10px 0 0 0; color: #666; font-size: 14px;">Document pending review</p>
+          </div>
+
+          <div style="background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h2 style="margin-top: 0; color: #0033A0;">Upload Details</h2>
+            <table style="width: 100%; margin-top: 10px;">
+              <tr style="border-bottom: 1px solid #b3d9ff;">
+                <td style="padding: 8px 0; color: #0033A0;"><strong>User:</strong></td>
+                <td style="padding: 8px 0; text-align: right;"><strong>${userName}</strong></td>
+              </tr>
+              <tr style="border-bottom: 1px solid #b3d9ff;">
+                <td style="padding: 8px 0; color: #0033A0;"><strong>Email:</strong></td>
+                <td style="padding: 8px 0; text-align: right;"><a href="mailto:${userEmail}" style="color: #0033A0;">${userEmail}</a></td>
+              </tr>
+              <tr style="border-bottom: 1px solid #b3d9ff;">
+                <td style="padding: 8px 0; color: #0033A0;"><strong>Document Type:</strong></td>
+                <td style="padding: 8px 0; text-align: right;">${docLabel}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #b3d9ff;">
+                <td style="padding: 8px 0; color: #0033A0;"><strong>File Name:</strong></td>
+                <td style="padding: 8px 0; text-align: right; font-family: monospace; font-size: 12px;">${fileName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #0033A0;"><strong>Upload Time:</strong></td>
+                <td style="padding: 8px 0; text-align: right;">${new Date().toLocaleString('en-US')}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; color: #856404;"><strong>Action Required:</strong> Please review this document in the admin dashboard and approve or reject it. The user will be notified of your decision.</p>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${COMPANY_INFO.website}/admin/documents" style="background-color: #0033A0; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Review in Dashboard</a>
+          </div>
+
+          <p style="margin-top: 30px; color: #999; font-size: 12px; text-align: center;">This is an automated notification. Please do not reply to this email.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: COMPANY_INFO.admin.email, subject, text, html });
+}
+
+
+

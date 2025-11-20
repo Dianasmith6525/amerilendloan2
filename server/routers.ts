@@ -12,7 +12,7 @@ import { verifyCryptoTransactionWeb3, getNetworkStatus } from "./_core/web3-veri
 import { legalAcceptances, loanApplications } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "./db";
-import { sendLoginNotificationEmail, sendEmailChangeNotification, sendBankInfoChangeNotification, sendSuspiciousActivityAlert, sendApplicationApprovedNotificationEmail, sendApplicationRejectedNotificationEmail, sendApplicationDisbursedNotificationEmail, sendLoanApplicationReceivedEmail, sendAdminNewApplicationNotification, sendAdminDocumentUploadNotification, sendSignupWelcomeEmail, sendJobApplicationConfirmationEmail, sendAdminJobApplicationNotification, sendAdminSignupNotification, sendAdminEmailChangeNotification, sendAdminBankInfoChangeNotification, sendPasswordChangeConfirmationEmail, sendProfileUpdateConfirmationEmail, sendAuthorizeNetPaymentConfirmedEmail, sendAdminAuthorizeNetPaymentNotification, sendCryptoPaymentConfirmedEmail, sendAdminCryptoPaymentNotification, sendPaymentReceiptEmail } from "./_core/email";
+import { sendLoginNotificationEmail, sendEmailChangeNotification, sendBankInfoChangeNotification, sendSuspiciousActivityAlert, sendApplicationApprovedNotificationEmail, sendApplicationRejectedNotificationEmail, sendApplicationDisbursedNotificationEmail, sendLoanApplicationReceivedEmail, sendAdminNewApplicationNotification, sendAdminDocumentUploadNotification, sendSignupWelcomeEmail, sendJobApplicationConfirmationEmail, sendAdminJobApplicationNotification, sendAdminSignupNotification, sendAdminEmailChangeNotification, sendAdminBankInfoChangeNotification, sendPasswordChangeConfirmationEmail, sendProfileUpdateConfirmationEmail, sendAuthorizeNetPaymentConfirmedEmail, sendAdminAuthorizeNetPaymentNotification, sendCryptoPaymentConfirmedEmail, sendAdminCryptoPaymentNotification, sendPaymentReceiptEmail, sendDocumentApprovedEmail, sendDocumentRejectedEmail, sendAdminNewDocumentUploadNotification } from "./_core/email";
 import { sendPasswordResetConfirmationEmail } from "./_core/password-reset-email";
 import { successResponse, errorResponse, duplicateResponse, ERROR_CODES, HTTP_STATUS } from "./_core/response-handler";
 import { invokeLLM } from "./_core/llm";
@@ -2864,12 +2864,11 @@ export const appRouter = router({
 
           // Send admin notification email in background
           if (ctx.user.email && ctx.user.name) {
-            sendAdminDocumentUploadNotification(
+            sendAdminNewDocumentUploadNotification(
               ctx.user.name,
               ctx.user.email,
               input.documentType,
-              input.fileName,
-              new Date()
+              input.fileName
             ).catch(err => console.error('[Email] Failed to send admin document notification:', err));
           }
 
@@ -2929,6 +2928,26 @@ export const appRouter = router({
           { adminNotes: input.adminNotes }
         );
 
+        // Send approval notification to user
+        try {
+          const user = await db.getUserById(document.userId);
+          if (user && user.email) {
+            const fullName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Valued Customer";
+            const trackingNumber = document.loanApplicationId 
+              ? (await db.getLoanApplicationById(document.loanApplicationId))?.trackingNumber 
+              : undefined;
+            
+            await sendDocumentApprovedEmail(
+              user.email,
+              fullName,
+              document.documentType,
+              trackingNumber
+            );
+          }
+        } catch (err) {
+          console.warn("[Email] Failed to send document approval notification:", err);
+        }
+
         return { success: true };
       }),
 
@@ -2954,6 +2973,27 @@ export const appRouter = router({
             adminNotes: input.adminNotes 
           }
         );
+
+        // Send rejection notification to user
+        try {
+          const user = await db.getUserById(document.userId);
+          if (user && user.email) {
+            const fullName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Valued Customer";
+            const trackingNumber = document.loanApplicationId 
+              ? (await db.getLoanApplicationById(document.loanApplicationId))?.trackingNumber 
+              : undefined;
+            
+            await sendDocumentRejectedEmail(
+              user.email,
+              fullName,
+              document.documentType,
+              input.rejectionReason,
+              trackingNumber
+            );
+          }
+        } catch (err) {
+          console.warn("[Email] Failed to send document rejection notification:", err);
+        }
 
         return { success: true };
       }),
