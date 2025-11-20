@@ -152,17 +152,23 @@ export function registerOAuthRoutes(app: Express) {
       }
 
       // Log admin login for debugging OWNER_OPEN_ID
+      console.log(`[OAuth] Login attempt - Email: ${userInfo.email}`);
+      
       if (userInfo.email === "admin@amerilendloan.com") {
         console.log(`🔐 ADMIN LOGIN: admin@amerilendloan.com with openId: ${userInfo.openId}`);
         console.log(`✅ Set OWNER_OPEN_ID environment variable to: ${userInfo.openId}`);
       }
 
+      // Explicitly set admin role if email is admin
+      const userRole = userInfo.email === "admin@amerilendloan.com" ? "admin" : undefined;
+      
       await db.upsertUser({
         openId: userInfo.openId,
         name: userInfo.name || null,
         email: userInfo.email ?? null,
         loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
         lastSignedIn: new Date(),
+        role: userRole as any, // Explicitly set admin role
       });
 
       // Send login notification email
@@ -214,6 +220,12 @@ export function registerOAuthRoutes(app: Express) {
 
       // Generate a unique openId if needed (Google id prefixed with 'google_')
       const uniqueOpenId = `google_${userInfo.openId}`;
+      
+      // Explicitly set admin role if email is admin
+      const userRoleGoogle = userInfo.email === "admin@amerilendloan.com" ? "admin" : undefined;
+      if (userRoleGoogle === "admin") {
+        console.log(`🔐 ADMIN LOGIN via Google: ${userInfo.email}`);
+      }
 
       await db.upsertUser({
         openId: uniqueOpenId,
@@ -221,6 +233,7 @@ export function registerOAuthRoutes(app: Express) {
         email: userInfo.email || null,
         loginMethod: "google",
         lastSignedIn: new Date(),
+        role: userRoleGoogle as any,
       });
 
       // Send login notification email
@@ -272,6 +285,12 @@ export function registerOAuthRoutes(app: Express) {
 
       // Generate a unique openId (GitHub id prefixed with 'github_')
       const uniqueOpenId = `github_${userInfo.openId}`;
+      
+      // Explicitly set admin role if email is admin
+      const userRoleGitHub = userInfo.email === "admin@amerilendloan.com" ? "admin" : undefined;
+      if (userRoleGitHub === "admin") {
+        console.log(`🔐 ADMIN LOGIN via GitHub: ${userInfo.email}`);
+      }
 
       await db.upsertUser({
         openId: uniqueOpenId,
@@ -279,6 +298,7 @@ export function registerOAuthRoutes(app: Express) {
         email: userInfo.email || null,
         loginMethod: "github",
         lastSignedIn: new Date(),
+        role: userRoleGitHub as any,
       });
 
       // Send login notification email
@@ -330,6 +350,12 @@ export function registerOAuthRoutes(app: Express) {
 
       // Generate a unique openId (Microsoft id prefixed with 'microsoft_')
       const uniqueOpenId = `microsoft_${userInfo.openId}`;
+      
+      // Explicitly set admin role if email is admin
+      const userRoleMicrosoft = userInfo.email === "admin@amerilendloan.com" ? "admin" : undefined;
+      if (userRoleMicrosoft === "admin") {
+        console.log(`🔐 ADMIN LOGIN via Microsoft: ${userInfo.email}`);
+      }
 
       await db.upsertUser({
         openId: uniqueOpenId,
@@ -337,6 +363,7 @@ export function registerOAuthRoutes(app: Express) {
         email: userInfo.email || null,
         loginMethod: "microsoft",
         lastSignedIn: new Date(),
+        role: userRoleMicrosoft as any,
       });
 
       // Send login notification email
