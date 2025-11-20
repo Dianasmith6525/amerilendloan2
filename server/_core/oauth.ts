@@ -244,7 +244,7 @@ export function registerOAuthRoutes(app: Express) {
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-      res.redirect(302, "/dashboard");
+      res.redirect(302, "/login");
     } catch (error) {
       console.error("[Google OAuth] Callback failed", error);
       res.redirect(302, "/login?error=google_auth_failed");
@@ -302,7 +302,7 @@ export function registerOAuthRoutes(app: Express) {
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-      res.redirect(302, "/dashboard");
+      res.redirect(302, "/login");
     } catch (error) {
       console.error("[GitHub OAuth] Callback failed", error);
       res.redirect(302, "/login?error=github_auth_failed");
@@ -360,7 +360,7 @@ export function registerOAuthRoutes(app: Express) {
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-      res.redirect(302, "/dashboard");
+      res.redirect(302, "/login");
     } catch (error) {
       console.error("[Microsoft OAuth] Callback failed", error);
       res.redirect(302, "/login?error=microsoft_auth_failed");
