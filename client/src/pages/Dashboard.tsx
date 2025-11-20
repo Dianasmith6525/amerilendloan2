@@ -64,8 +64,8 @@ export default function Dashboard() {
     );
   }
   
-  // Don't render if not authenticated (redirect will happen)
-  if (!isAuthenticated) {
+  // Don't render if not authenticated or if admin (redirect will happen)
+  if (!isAuthenticated || user?.role === "admin") {
     return null;
   }
   
@@ -252,13 +252,6 @@ export default function Dashboard() {
                 <Phone className="w-4 h-4" />
                 +1 945 212-1609
               </a>
-              {user?.role === "admin" && (
-                <Link href="/admin">
-                  <Button variant="outline" className="border-[#0033A0] text-[#0033A0]">
-                    Admin Panel
-                  </Button>
-                </Link>
-              )}
               
               {/* Profile Dropdown */}
               <div className="relative">
