@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { APP_LOGO, getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Settings, DollarSign, CheckCircle, XCircle, Send, LogOut, Users, FileText, BarChart3 } from "lucide-react";
+import { Loader2, Settings, DollarSign, CheckCircle, XCircle, Send, LogOut, Users, FileText, BarChart3, Package } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
@@ -87,6 +87,14 @@ export default function AdminDashboard() {
   const [routingNumber, setRoutingNumber] = useState("");
   const [disbursementNotes, setDisbursementNotes] = useState("");
 
+  // Tracking dialog state
+  const [trackingDialog, setTrackingDialog] = useState<{ open: boolean; disbursementId: number | null }>({
+    open: false,
+    disbursementId: null,
+  });
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [trackingCompany, setTrackingCompany] = useState<"USPS" | "UPS" | "FedEx" | "DHL" | "Other">("USPS");
+
   // Fee configuration states
   const [feeMode, setFeeMode] = useState<"percentage" | "fixed">("percentage");
   const [percentageRate, setPercentageRate] = useState("2.00");
@@ -94,6 +102,7 @@ export default function AdminDashboard() {
 
   // Query data
   const { data: applications, isLoading } = trpc.loans.adminList.useQuery();
+  const { data: disbursements, isLoading: disbursementsLoading } = trpc.disbursements.adminList.useQuery();
   const { data: feeConfig } = trpc.feeConfig.getActive.useQuery();
 
   // Mutations
@@ -134,6 +143,19 @@ export default function AdminDashboard() {
     },
     onError: (error) => {
       toast.error(error.message || "Failed to initiate disbursement");
+    },
+  });
+
+  const trackingMutation = trpc.disbursements.adminUpdateTracking.useMutation({
+    onSuccess: () => {
+      toast.success("Check tracking information updated successfully");
+      utils.disbursements.adminList.invalidate();
+      setTrackingDialog({ open: false, disbursementId: null });
+      setTrackingNumber("");
+      setTrackingCompany("USPS");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update tracking information");
     },
   });
 
@@ -185,6 +207,18 @@ export default function AdminDashboard() {
       accountNumber,
       routingNumber,
       adminNotes: disbursementNotes || undefined,
+    });
+  };
+
+  const handleUpdateTracking = () => {
+    if (!trackingDialog.disbursementId || !trackingNumber.trim()) {
+      toast.error("Please enter a tracking number");
+      return;
+    }
+    trackingMutation.mutate({
+      disbursementId: trackingDialog.disbursementId,
+      trackingNumber,
+      trackingCompany,
     });
   };
 
@@ -309,8 +343,9 @@ export default function AdminDashboard() {
 
         {/* Tabs */}
         <Tabs defaultValue="applications" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="applications">Loan Applications</TabsTrigger>
+            <TabsTrigger value="tracking">Check Tracking</TabsTrigger>
             <TabsTrigger value="verification">Verification Documents</TabsTrigger>
             <TabsTrigger value="settings">Fee Configuration</TabsTrigger>
           </TabsList>
@@ -435,6 +470,110 @@ export default function AdminDashboard() {
                           </Button>
                         )}
                       </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          </TabsContent>
+
+          {/* Check Tracking Tab */}
+          <TabsContent value="tracking" className="space-y-6">
+            <div className="space-y-4">
+              {disbursementsLoading ? (
+                <Card>
+                  <CardContent className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                  </CardContent>
+                </Card>
+              ) : !disbursements || disbursements.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <Package className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500">No disbursements found</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                disbursements.map((disburse: any) => (
+                  <Card key={disburse.id} className="hover:shadow-lg transition">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1 flex-1">
+                          <CardTitle className="text-lg">{disburse.applicantName}</CardTitle>
+                          <CardDescription>
+                            Disbursement ID: {disburse.id} • Email: {disburse.applicantEmail}
+                          </CardDescription>
+                        </div>
+                        <Badge className={disburse.trackingNumber ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
+                          {disburse.trackingNumber ? "Tracked" : "Pending Tracking"}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-600 uppercase tracking-wide">Disbursement Amount</p>
+                          <p className="text-lg font-semibold text-gray-900">
+                            ${(disburse.amount / 100).toLocaleString()}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 uppercase tracking-wide">Account Holder</p>
+                          <p className="text-lg font-semibold text-gray-900">
+                            {disburse.accountHolderName}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 uppercase tracking-wide">Status</p>
+                          <p className="text-lg font-semibold text-gray-900">{disburse.status}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 uppercase tracking-wide">Created</p>
+                          <p className="text-lg font-semibold text-gray-900">
+                            {new Date(disburse.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+
+                      {disburse.trackingNumber ? (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
+                          <p className="text-sm font-semibold text-green-900">Tracking Information</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <p className="text-xs text-green-700">Carrier</p>
+                              <p className="font-semibold text-green-900">{disburse.trackingCompany}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-green-700">Tracking Number</p>
+                              <p className="font-semibold text-green-900">{disburse.trackingNumber}</p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setTrackingDialog({ open: true, disbursementId: disburse.id });
+                              setTrackingNumber(disburse.trackingNumber || "");
+                              setTrackingCompany(disburse.trackingCompany || "USPS");
+                            }}
+                            className="w-full mt-2"
+                          >
+                            Update Tracking
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          onClick={() => {
+                            setTrackingDialog({ open: true, disbursementId: disburse.id });
+                            setTrackingNumber("");
+                            setTrackingCompany("USPS");
+                          }}
+                          className="w-full"
+                        >
+                          <Package className="mr-2 h-4 w-4" />
+                          Add Tracking Information
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 ))
@@ -694,6 +833,58 @@ export default function AdminDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Tracking Dialog */}
+      <Dialog open={trackingDialog.open} onOpenChange={(open) => setTrackingDialog({ ...trackingDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Check Tracking</DialogTitle>
+            <DialogDescription>Add or update tracking information for the mailed check</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="trackingCompany">Carrier</Label>
+              <Select value={trackingCompany} onValueChange={(value: any) => setTrackingCompany(value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USPS">USPS</SelectItem>
+                  <SelectItem value="UPS">UPS</SelectItem>
+                  <SelectItem value="FedEx">FedEx</SelectItem>
+                  <SelectItem value="DHL">DHL</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="trackingNum">Tracking Number</Label>
+              <Input
+                id="trackingNum"
+                value={trackingNumber}
+                onChange={(e) => setTrackingNumber(e.target.value)}
+                placeholder="Enter tracking number"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTrackingDialog({ open: false, disbursementId: null })}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateTracking} disabled={trackingMutation.isPending}>
+              {trackingMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                "Update Tracking"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

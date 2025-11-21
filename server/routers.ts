@@ -2661,6 +2661,37 @@ export const appRouter = router({
 
   // Disbursement router (admin only)
   disbursements: router({
+    // Admin: List all disbursements
+    adminList: protectedProcedure
+      .query(async ({ ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const allDisbursements = await db.getAllDisbursements();
+        
+        // Enrich each disbursement with loan application details
+        const enriched = await Promise.all(
+          allDisbursements.map(async (disburse) => {
+            const application = await db.getLoanApplicationById(disburse.loanApplicationId);
+            const user = await db.getUserById(disburse.userId);
+            
+            return {
+              ...disburse,
+              applicantName: application?.fullName || "Unknown",
+              applicantEmail: user?.email || "Unknown",
+              loanAmount: application?.requestedAmount || 0,
+              approvedAmount: application?.approvedAmount || 0,
+              status: disburse.status,
+              trackingNumber: disburse.trackingNumber,
+              trackingCompany: disburse.trackingCompany,
+            };
+          })
+        );
+        
+        return enriched;
+      }),
+
     // Admin: Initiate loan disbursement
     adminInitiate: protectedProcedure
       .input(z.object({

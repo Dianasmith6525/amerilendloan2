@@ -701,6 +701,14 @@ export async function updateDisbursementTracking(
     .where(eq(disbursements.id, id));
 }
 
+export async function getAllDisbursements() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(disbursements)
+    .orderBy(desc(disbursements.createdAt));
+}
+
 // ============================================
 // Verification Documents Queries
 // ============================================
