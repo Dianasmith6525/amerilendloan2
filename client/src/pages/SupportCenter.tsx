@@ -68,13 +68,13 @@ export function SupportCenter() {
     createTicketMutation.mutate(data);
   };
 
-  // Mock data
-  const mockTickets: SupportTicket[] = tickets.map((t: any) => ({
+  // Map backend tickets to UI format
+  const allTickets: SupportTicket[] = tickets.map((t: any) => ({
     id: `TKT-${String(t.id).padStart(3, "0")}`,
     subject: t.subject,
     description: t.description,
     status: t.status as "open" | "in-progress" | "resolved" | "closed",
-    priority: "medium" as const,
+    priority: (t.priority || "medium") as "low" | "medium" | "high",
     createdAt: new Date(t.createdAt).toLocaleDateString(),
     lastUpdated: new Date(t.updatedAt || t.createdAt).toLocaleDateString(),
     messageCount: 0,
@@ -82,10 +82,10 @@ export function SupportCenter() {
 
   const filteredTickets =
     filter === "all"
-      ? mockTickets
+      ? allTickets
       : filter === "open"
-        ? mockTickets.filter((t) => ["open", "in-progress"].includes(t.status))
-        : mockTickets.filter((t) => ["resolved", "closed"].includes(t.status));
+        ? allTickets.filter((t) => ["open", "in-progress"].includes(t.status))
+        : allTickets.filter((t) => ["resolved", "closed"].includes(t.status));
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -214,7 +214,7 @@ export function SupportCenter() {
             <CardContent className="pt-6">
               <div className="text-center">
                 <p className="text-3xl font-bold text-white">
-                  {mockTickets.length}
+                  {allTickets.length}
                 </p>
                 <p className="text-slate-400 text-sm">Total Tickets</p>
               </div>
@@ -223,8 +223,8 @@ export function SupportCenter() {
           <Card className="bg-slate-800 border-slate-700">
             <CardContent className="pt-6">
               <div className="text-center">
-                <p className="text-3xl font-bold text-yellow-400">
-                  {mockTickets.filter((t) => t.status === "in-progress").length}
+                <p className="text-3xl font-bold text-white">
+                  {allTickets.filter((t) => t.status === "in-progress").length}
                 </p>
                 <p className="text-slate-400 text-sm">In Progress</p>
               </div>
@@ -233,8 +233,8 @@ export function SupportCenter() {
           <Card className="bg-slate-800 border-slate-700">
             <CardContent className="pt-6">
               <div className="text-center">
-                <p className="text-3xl font-bold text-green-400">
-                  {mockTickets.filter((t) => t.status === "resolved").length}
+                <p className="text-3xl font-bold text-white">
+                  {allTickets.filter((t) => t.status === "resolved").length}
                 </p>
                 <p className="text-slate-400 text-sm">Resolved</p>
               </div>

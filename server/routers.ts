@@ -2877,6 +2877,16 @@ export const appRouter = router({
 
   // Payment router
   payments: router({
+    // Get user's payment history
+    getHistory: protectedProcedure.query(async ({ ctx }) => {
+      try {
+        return await db.getUserPayments(ctx.user.id);
+      } catch (error) {
+        console.error("Error fetching payment history:", error);
+        return [];
+      }
+    }),
+
     // Get Authorize.net Accept.js configuration
     getAuthorizeNetConfig: publicProcedure.query(() => {
       return getAcceptJsConfig();

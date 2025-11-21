@@ -611,6 +611,29 @@ export async function getPaymentsByLoanApplicationId(loanApplicationId: number) 
     .orderBy(desc(payments.createdAt));
 }
 
+export async function getUserPayments(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { payments, loanApplications } = await import("../drizzle/schema");
+  
+  // Get all payments for user's loan applications
+  const result = await db.select({
+    payment: payments,
+    loan: loanApplications,
+  })
+    .from(payments)
+    .leftJoin(loanApplications, eq(payments.loanApplicationId, loanApplications.id))
+    .where(eq(payments.userId, userId))
+    .orderBy(desc(payments.createdAt));
+  
+  return result.map((r) => ({
+    ...r.payment,
+    loanTrackingNumber: r.loan?.trackingNumber,
+    loanAmount: r.loan?.loanAmount,
+  }));
+}
+
 export async function updatePaymentStatus(
   id: number,
   status: Payment["status"],

@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Download, Filter, TrendingUp, CreditCard } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useState } from "react";
+import { trpc } from "@/lib/trpc";
 
 interface Payment {
   id: string;
@@ -23,89 +24,42 @@ interface Payment {
 export function PaymentHistory() {
   const [filterStatus, setFilterStatus] = useState<"all" | "paid" | "pending" | "failed">("all");
 
-  // Mock data
-  const mockPayments: Payment[] = [
-    {
-      id: "PAY-001",
-      loanId: "1",
-      loanNumber: "LN-2024-001",
-      amount: 500.0,
-      principalPaid: 420.0,
-      interestPaid: 80.0,
-      date: "2024-01-15",
-      dueDate: "2024-01-15",
-      status: "paid",
-      paymentMethod: "Bank Transfer",
-      transactionId: "TXN-2024-001",
-    },
-    {
-      id: "PAY-002",
-      loanId: "1",
-      loanNumber: "LN-2024-001",
-      amount: 500.0,
-      principalPaid: 420.0,
-      interestPaid: 80.0,
-      date: "2024-01-01",
-      dueDate: "2024-01-01",
-      status: "paid",
-      paymentMethod: "Credit Card",
-      transactionId: "TXN-2024-002",
-    },
-    {
-      id: "PAY-003",
-      loanId: "1",
-      loanNumber: "LN-2024-001",
-      amount: 500.0,
-      principalPaid: 0,
-      interestPaid: 0,
-      date: "2024-02-10",
-      dueDate: "2024-02-10",
-      status: "pending",
-      paymentMethod: "Autopay",
-      transactionId: "TXN-2024-003",
-    },
-    {
-      id: "PAY-004",
-      loanId: "2",
-      loanNumber: "LN-2024-002",
-      amount: 425.5,
-      principalPaid: 350.0,
-      interestPaid: 75.5,
-      date: "2024-01-10",
-      dueDate: "2024-01-10",
-      status: "paid",
-      paymentMethod: "Bank Transfer",
-      transactionId: "TXN-2024-004",
-    },
-    {
-      id: "PAY-005",
-      loanId: "2",
-      loanNumber: "LN-2024-002",
-      amount: 425.5,
-      principalPaid: 0,
-      interestPaid: 0,
-      date: "2024-01-25",
-      dueDate: "2024-01-25",
-      status: "failed",
-      paymentMethod: "Credit Card",
-      transactionId: "TXN-2024-005",
-    },
-  ];
+  // Fetch real payment history from backend
+  const { data: paymentsData = [], isLoading } = trpc.payments.getHistory.useQuery();
+
+  // Map backend payments to UI format
+  const allPayments: Payment[] = paymentsData.map((p: any) => ({
+    id: `PAY-${String(p.id).padStart(3, '0')}`,
+    loanId: String(p.loanApplicationId),
+    loanNumber: p.loanTrackingNumber || `LN-${p.loanApplicationId}`,
+    amount: p.amount / 100, // Convert cents to dollars
+    principalPaid: 0, // TODO: Calculate if loan repayment data available
+    interestPaid: 0,  // TODO: Calculate if loan repayment data available
+    date: new Date(p.completedAt || p.createdAt).toLocaleDateString(),
+    dueDate: new Date(p.createdAt).toLocaleDateString(),
+    status: p.status === "succeeded" ? "paid" : p.status,
+    paymentMethod: p.paymentMethod === "card" 
+      ? `Card ${p.cardBrand || ''} ****${p.cardLast4 || ''}`.trim()
+      : p.paymentMethod === "crypto"
+      ? `${p.cryptoCurrency || 'Crypto'}`
+      : "Other",
+    transactionId: p.paymentIntentId || p.cryptoTxHash || `TXN-${p.id}`,
+  }));
 
   const filteredPayments =
     filterStatus === "all"
-      ? mockPayments
-      : mockPayments.filter((p) => p.status === filterStatus);
+      ? allPayments
+      : allPayments.filter((p) => p.status === filterStatus);
 
-  const totalPaid = mockPayments
+  const totalPaid = allPayments
     .filter((p) => p.status === "paid")
     .reduce((sum, p) => sum + p.amount, 0);
 
-  const totalPending = mockPayments
+  const totalPending = allPayments
     .filter((p) => p.status === "pending")
     .reduce((sum, p) => sum + p.amount, 0);
 
-  const totalFailed = mockPayments
+  const totalFailed = allPayments
     .filter((p) => p.status === "failed")
     .reduce((sum, p) => sum + p.amount, 0);
 
@@ -228,7 +182,12 @@ export function PaymentHistory() {
               </TabsList>
 
               <TabsContent value={filterStatus}>
-                {filteredPayments.length === 0 ? (
+                {isLoading ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className="text-slate-400">Loading payment history...</p>
+                  </div>
+                ) : filteredPayments.length === 0 ? (
                   <div className="text-center py-12">
                     <CreditCard className="w-12 h-12 text-slate-500 mx-auto mb-4 opacity-50" />
                     <p className="text-slate-400">No payments found</p>

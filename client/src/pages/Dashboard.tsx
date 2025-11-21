@@ -76,31 +76,82 @@ export default function Dashboard() {
   const [expandedLoan, setExpandedLoan] = useState<number | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [newMessage, setNewMessage] = useState("");
-  const [messages, setMessages] = useState([
-    { id: 1, sender: "Admin", message: "Hi! Thank you for choosing AmeriLend. How can we help?", timestamp: new Date(Date.now() - 86400000), isAdmin: true },
-  ]);
   const [showMessages, setShowMessages] = useState(false);
-  const [payments] = useState([
-    { id: 1, loanId: 1, date: new Date(Date.now() - 2592000000), amount: 250, balance: 4750, status: "completed" },
-    { id: 2, loanId: 1, date: new Date(Date.now() - 1296000000), amount: 250, balance: 4500, status: "completed" },
-  ]);
+  
+  // Fetch real support tickets for messages
+  const { data: supportTickets = [], refetch: refetchTickets } = trpc.userFeatures.support.listTickets.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  
+  // Get messages from the most recent ticket, or show empty state
+  const latestTicket = supportTickets.length > 0 ? supportTickets[0] : null;
+  const { data: ticketMessages = [] } = trpc.userFeatures.support.getMessages.useQuery(
+    { ticketId: latestTicket?.id || 0 },
+    { enabled: !!latestTicket }
+  );
+  
+  const messages = ticketMessages.map((msg: any) => ({
+    id: msg.id,
+    sender: msg.isFromUser ? (user?.name || "You") : "Support Team",
+    message: msg.message,
+    timestamp: new Date(msg.createdAt),
+    isAdmin: !msg.isFromUser,
+  }));
+  // Fetch real payment history
+  const { data: paymentsData = [], isLoading: paymentsLoading } = trpc.payments.getHistory.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  
+  const payments = paymentsData.map((p: any) => ({
+    id: p.id,
+    loanId: p.loanApplicationId,
+    date: new Date(p.createdAt),
+    amount: p.amount / 100, // Convert cents to dollars
+    status: p.status === "succeeded" ? "completed" : p.status,
+    trackingNumber: p.loanTrackingNumber || `LN-${p.loanApplicationId}`,
+    paymentMethod: p.paymentMethod === "card" 
+      ? `${p.cardBrand || "Card"} ****${p.cardLast4 || ""}` 
+      : `${p.cryptoCurrency || "Crypto"}`,
+  }));
 
   const handleLogout = () => {
     logout();
     window.location.href = "/";
   };
 
+  const createTicketMutation = trpc.userFeatures.support.createTicket.useMutation({
+    onSuccess: () => {
+      refetchTickets();
+      toast.success("Support ticket created!");
+      setNewMessage("");
+    },
+  });
+  
+  const addMessageMutation = trpc.userFeatures.support.addMessage.useMutation({
+    onSuccess: () => {
+      refetchTickets();
+      toast.success("Message sent to support team!");
+      setNewMessage("");
+    },
+  });
+  
   const handleSendMessage = () => {
     if (!newMessage.trim()) return;
-    setMessages([...messages, {
-      id: messages.length + 1,
-      sender: user?.name || "You",
-      message: newMessage,
-      timestamp: new Date(),
-      isAdmin: false,
-    }]);
-    toast.success("Message sent to support team!");
-    setNewMessage("");
+    
+    if (latestTicket) {
+      // Add message to existing ticket
+      addMessageMutation.mutate({
+        ticketId: latestTicket.id,
+        message: newMessage,
+      });
+    } else {
+      // Create new ticket
+      createTicketMutation.mutate({
+        subject: "General Inquiry",
+        description: newMessage,
+        category: "other",
+      });
+    }
   };
 
   // Calculate dashboard statistics
@@ -923,41 +974,57 @@ export default function Dashboard() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {loans && loans.filter(loan => loan.status === "fee_paid" || loan.status === "disbursed").length > 0 ? (
-                          loans
-                            .filter(loan => loan.status === "fee_paid" || loan.status === "disbursed")
-                            .map((loan) => (
-                              <tr key={loan.id} className="hover:bg-gray-50">
-                                <td className="py-3 px-4 text-sm text-gray-800">
-                                  {formatDate(loan.createdAt)}
-                                </td>
-                                <td className="py-3 px-4 text-sm text-gray-800">
-                                  Processing Fee
-                                </td>
-                                <td className="py-3 px-4 text-sm font-semibold text-gray-800">
-                                  {formatCurrency(loan.approvedAmount ? loan.approvedAmount * 0.05 : 0)}
-                                </td>
-                                <td className="py-3 px-4">
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                    <CheckCircle2 className="w-3 h-3 mr-1" />
-                                    Paid
-                                  </span>
-                                </td>
-                                <td className="py-3 px-4 text-sm font-mono text-[#0033A0]">
-                                  {loan.trackingNumber}
-                                </td>
-                                <td className="py-3 px-4 text-right">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-xs"
-                                  >
-                                    <Download className="w-3 h-3 mr-1" />
-                                    Receipt
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))
+                        {paymentsLoading ? (
+                          <tr>
+                            <td colSpan={6} className="text-center py-12">
+                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0033A0] mx-auto mb-3"></div>
+                              <p className="text-gray-600">Loading payment history...</p>
+                            </td>
+                          </tr>
+                        ) : payments && payments.length > 0 ? (
+                          payments.map((payment: any) => (
+                            <tr key={payment.id} className="hover:bg-gray-50">
+                              <td className="py-3 px-4 text-sm text-gray-800">
+                                {formatDate(payment.date)}
+                              </td>
+                              <td className="py-3 px-4 text-sm text-gray-800">
+                                {payment.paymentMethod}
+                              </td>
+                              <td className="py-3 px-4 text-sm font-semibold text-gray-800">
+                                {formatCurrency(payment.amount)}
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                  payment.status === "completed" || payment.status === "succeeded"
+                                    ? "bg-green-100 text-green-800"
+                                    : payment.status === "pending"
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : "bg-red-100 text-red-800"
+                                }`}>
+                                  {payment.status === "completed" || payment.status === "succeeded" ? (
+                                    <><CheckCircle2 className="w-3 h-3 mr-1" />Paid</>
+                                  ) : payment.status === "pending" ? (
+                                    <><Clock className="w-3 h-3 mr-1" />Pending</>
+                                  ) : (
+                                    <><XCircle className="w-3 h-3 mr-1" />Failed</>
+                                  )}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-sm font-mono text-[#0033A0]">
+                                {payment.trackingNumber}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-xs"
+                                >
+                                  <Download className="w-3 h-3 mr-1" />
+                                  Receipt
+                                </Button>
+                              </td>
+                            </tr>
+                          ))
                         ) : (
                           <tr>
                             <td colSpan={6} className="text-center py-12">

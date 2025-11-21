@@ -21,68 +21,46 @@ interface Notification {
 export function NotificationCenter() {
   const [filter, setFilter] = useState<"all" | "unread">("all");
 
-  // Mock data for demonstration - replace with actual TRPC call
-  const mockNotifications: Notification[] = [
-    {
-      id: "1",
-      title: "Payment Received",
-      message: "Your payment of $500.00 has been successfully processed.",
-      type: "success",
-      read: false,
-      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      actionUrl: "/payment-history",
-    },
-    {
-      id: "2",
-      title: "Upcoming Payment Due",
-      message: "Your next payment of $425.50 is due in 5 days.",
-      type: "info",
-      read: false,
-      createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-      actionUrl: "/loans/1",
-    },
-    {
-      id: "3",
-      title: "KYC Verification Approved",
-      message: "Your identity verification has been approved. All documents are valid.",
-      type: "success",
-      read: true,
-      createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: "4",
-      title: "Loan Application Status",
-      message: "Your loan application has been updated. Click to view details.",
-      type: "info",
-      read: true,
-      createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      actionUrl: "/apply",
-    },
-    {
-      id: "5",
-      title: "Payment Failed",
-      message: "Your payment attempt failed. Please update your payment method.",
-      type: "error",
-      read: true,
-      createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-      actionUrl: "/settings",
-    },
-    {
-      id: "6",
-      title: "Referral Reward Earned",
-      message: "You earned $50 referral credit for a successful referral.",
-      type: "success",
-      read: true,
-      createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-      actionUrl: "/referrals",
-    },
-  ];
+  // Fetch real notifications from backend
+  const { data: notificationsData = [], isLoading } = trpc.userFeatures.notifications.list.useQuery({ 
+    limit: 50 
+  });
+
+  // Map database fields to component interface
+  const allNotifications = notificationsData.map((n: any) => ({
+    id: String(n.id),
+    title: n.title,
+    message: n.message,
+    type: mapNotificationType(n.type),
+    read: n.isRead,
+    createdAt: n.createdAt,
+    actionUrl: n.actionUrl,
+  }));
 
   const notifications = filter === "unread" 
-    ? mockNotifications.filter(n => !n.read)
-    : mockNotifications;
+    ? allNotifications.filter(n => !n.read)
+    : allNotifications;
 
-  const unreadCount = mockNotifications.filter(n => !n.read).length;
+  const unreadCount = allNotifications.filter(n => !n.read).length;
+
+  // Map backend notification types to UI types
+  function mapNotificationType(dbType: string): "info" | "warning" | "error" | "success" {
+    switch (dbType) {
+      case "payment_confirmation":
+      case "approval_notice":
+        return "success";
+      case "payment_failure":
+      case "denial_notice":
+      case "delinquency_notice":
+        return "error";
+      case "payment_due":
+      case "payment_reminder":
+      case "document_request":
+        return "warning";
+      default:
+        return "info";
+    }
+  }
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -142,7 +120,12 @@ export function NotificationCenter() {
               </TabsList>
 
               <TabsContent value="all" className="space-y-3">
-                {notifications.length === 0 ? (
+                {isLoading ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className="text-slate-400">Loading notifications...</p>
+                  </div>
+                ) : notifications.length === 0 ? (
                   <div className="text-center py-12">
                     <Bell className="w-12 h-12 text-slate-500 mx-auto mb-4 opacity-50" />
                     <p className="text-slate-400">No notifications yet</p>

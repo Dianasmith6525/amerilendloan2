@@ -5,6 +5,8 @@ import { Plus, Trash2, CheckCircle, AlertCircle, Lock, CreditCard } from "lucide
 import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 interface BankAccount {
   id: string;
@@ -21,42 +23,32 @@ interface BankAccount {
 export function BankAccountManagement() {
   const [showAddAccount, setShowAddAccount] = useState(false);
 
-  // Mock data
-  const mockAccounts: BankAccount[] = [
-    {
-      id: "ACC-001",
-      accountName: "My Checking Account",
-      accountNumber: "****1234",
-      routingNumber: "****5678",
-      bankName: "Chase Bank",
-      accountType: "checking",
-      status: "verified",
-      isPrimary: true,
-      addedDate: "2024-01-01",
+  // Fetch real bank accounts from backend
+  const { data: bankAccounts = [], isLoading, refetch } = trpc.userFeatures.bankAccounts.list.useQuery();
+
+  // Remove bank account mutation
+  const removeAccountMutation = trpc.userFeatures.bankAccounts.remove.useMutation({
+    onSuccess: () => {
+      toast.success("Bank account removed successfully");
+      refetch();
     },
-    {
-      id: "ACC-002",
-      accountName: "Savings Account",
-      accountNumber: "****5678",
-      routingNumber: "****1234",
-      bankName: "Bank of America",
-      accountType: "savings",
-      status: "verified",
-      isPrimary: false,
-      addedDate: "2024-01-10",
+    onError: (error) => {
+      toast.error(error.message || "Failed to remove bank account");
     },
-    {
-      id: "ACC-003",
-      accountName: "Wells Fargo Checking",
-      accountNumber: "****9999",
-      routingNumber: "****4444",
-      bankName: "Wells Fargo",
-      accountType: "checking",
-      status: "pending",
-      isPrimary: false,
-      addedDate: "2024-01-15",
-    },
-  ];
+  });
+
+  // Map backend accounts to UI format
+  const accounts: BankAccount[] = bankAccounts.map((acc: any) => ({
+    id: String(acc.id),
+    accountName: acc.accountHolderName || "Bank Account",
+    accountNumber: `****${acc.accountNumber.slice(-4)}`,
+    routingNumber: `****${acc.routingNumber.slice(-4)}`,
+    bankName: acc.bankName || "Bank",
+    accountType: acc.accountType,
+    status: acc.isVerified ? "verified" : "pending",
+    isPrimary: acc.isPrimary || false,
+    addedDate: new Date(acc.createdAt || Date.now()).toLocaleDateString(),
+  }));
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -174,8 +166,23 @@ export function BankAccountManagement() {
         </div>
 
         {/* Accounts List */}
-        <div className="space-y-4 mb-8">
-          {mockAccounts.map((account) => (
+        <div className="space-y-4">
+          {isLoading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+              <p className="text-slate-400">Loading bank accounts...</p>
+            </div>
+          ) : accounts.length === 0 ? (
+            <div className="text-center py-12">
+              <CreditCard className="w-12 h-12 text-slate-500 mx-auto mb-4 opacity-50" />
+              <p className="text-slate-400 mb-4">No bank accounts added yet</p>
+              <Button onClick={() => setShowAddAccount(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Your First Account
+              </Button>
+            </div>
+          ) : (
+            accounts.map((account) => (
             <Card
               key={account.id}
               className={`bg-slate-800 border-slate-700 transition-all hover:border-slate-600 ${
@@ -255,7 +262,8 @@ export function BankAccountManagement() {
                 )}
               </CardContent>
             </Card>
-          ))}
+          ))
+          )}
         </div>
 
         {/* Security Info */}

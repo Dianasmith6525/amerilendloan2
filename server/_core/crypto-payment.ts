@@ -104,9 +104,8 @@ export async function createCryptoCharge(
     // Convert USD to crypto
     const cryptoAmount = await convertUSDToCrypto(amount, currency);
 
-    // For demo purposes, generate mock payment data
-    // In production, call Coinbase Commerce API or similar
-    const mockPaymentAddress = generateMockCryptoAddress(currency);
+    // Get real wallet address for this cryptocurrency
+    const paymentAddress = getCryptoWalletAddress(currency);
     const chargeId = `charge_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
@@ -148,13 +147,13 @@ export async function createCryptoCharge(
     }
     */
 
-    // Return mock data for demo
+    // Return real payment data with your wallet address
     return {
       success: true,
       chargeId,
       cryptoAmount,
-      paymentAddress: mockPaymentAddress,
-      qrCodeUrl: `https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=${currency}:${mockPaymentAddress}?amount=${cryptoAmount}`,
+      paymentAddress,
+      qrCodeUrl: `https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=${currency}:${paymentAddress}?amount=${cryptoAmount}`,
       expiresAt,
     };
   } catch (error) {
@@ -312,22 +311,24 @@ export function validateCryptoWebhook(
 }
 
 /**
- * Generate mock cryptocurrency address for demo
+ * Get real cryptocurrency wallet address from environment
  */
-function generateMockCryptoAddress(currency: CryptoCurrency): string {
-  const prefixes: Record<CryptoCurrency, string> = {
-    BTC: "bc1q",
-    ETH: "0x",
-    USDT: "0x", // ERC-20
-    USDC: "0x", // ERC-20
+function getCryptoWalletAddress(currency: CryptoCurrency): string {
+  // Use real wallet addresses from environment variables
+  const walletAddresses: Record<CryptoCurrency, string> = {
+    BTC: process.env.CRYPTO_BTC_ADDRESS || "",
+    ETH: process.env.CRYPTO_ETH_ADDRESS || "",
+    USDT: process.env.CRYPTO_USDT_ADDRESS || process.env.CRYPTO_ETH_ADDRESS || "", // USDT is ERC-20
+    USDC: process.env.CRYPTO_USDC_ADDRESS || process.env.CRYPTO_ETH_ADDRESS || "", // USDC is ERC-20
   };
 
-  const prefix = prefixes[currency];
-  const randomPart = Array.from({ length: currency === "BTC" ? 38 : 38 }, () =>
-    "0123456789abcdef"[Math.floor(Math.random() * 16)]
-  ).join("");
-
-  return prefix + randomPart;
+  const address = walletAddresses[currency];
+  
+  if (!address) {
+    throw new Error(`No wallet address configured for ${currency}`);
+  }
+  
+  return address;
 }
 
 /**

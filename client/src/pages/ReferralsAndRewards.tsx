@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Copy, Gift, Users, TrendingUp, Share2, CheckCircle } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useState } from "react";
+import { trpc } from "@/lib/trpc";
 
 interface Referral {
   id: string;
@@ -27,79 +28,31 @@ interface Reward {
 export function ReferralsAndRewards() {
   const [copied, setCopied] = useState(false);
 
-  // Mock data
+  // Fetch referrals and rewards from backend
+  const { data: referralsData = [], isLoading: loadingReferrals } = trpc.userFeatures.referrals.list.useQuery();
+  const { data: rewardsData, isLoading: loadingRewards } = trpc.userFeatures.referrals.getRewardsBalance.useQuery();
+
+  // Mock referral code and link (TODO: Get from user account or system settings)
   const referralCode = "AMERILEND2024";
   const referralLink = `https://amerilendloan.com/apply?ref=${referralCode}`;
 
-  const mockReferrals: Referral[] = [
-    {
-      id: "REF-001",
-      name: "John Smith",
-      email: "john@example.com",
-      status: "completed",
-      referralDate: "2024-01-10",
-      rewardAmount: 50,
-    },
-    {
-      id: "REF-002",
-      name: "Sarah Johnson",
-      email: "sarah@example.com",
-      status: "completed",
-      referralDate: "2024-01-05",
-      rewardAmount: 50,
-    },
-    {
-      id: "REF-003",
-      name: "Mike Davis",
-      email: "mike@example.com",
-      status: "pending",
-      referralDate: "2024-01-15",
-      rewardAmount: 0,
-    },
-    {
-      id: "REF-004",
-      name: "Emily Wilson",
-      email: "emily@example.com",
-      status: "expired",
-      referralDate: "2023-12-01",
-      rewardAmount: 0,
-    },
-  ];
+  // Map referrals
+  const referrals: Referral[] = referralsData.map((ref: any) => ({
+    id: `REF-${String(ref.id).padStart(3, '0')}`,
+    name: ref.referredUserId ? `User ${ref.referredUserId}` : "Pending",
+    email: ref.referralCode || "",
+    status: ref.status,
+    referralDate: new Date(ref.createdAt).toLocaleDateString(),
+    rewardAmount: ref.status === "completed" ? (ref.referrerBonus || 0) / 100 : 0,
+  }));
 
-  const mockRewards: Reward[] = [
-    {
-      id: "RWD-001",
-      title: "Referral Reward - John Smith",
-      description: "Successfully referred John Smith for a loan",
-      rewardAmount: 50,
-      earnedDate: "2024-01-15",
-      expiryDate: "2024-07-15",
-      status: "active",
-    },
-    {
-      id: "RWD-002",
-      title: "Referral Reward - Sarah Johnson",
-      description: "Successfully referred Sarah Johnson for a loan",
-      rewardAmount: 50,
-      earnedDate: "2024-01-10",
-      expiryDate: "2024-07-10",
-      status: "active",
-    },
-    {
-      id: "RWD-003",
-      title: "Welcome Bonus",
-      description: "Joined the referral program",
-      rewardAmount: 25,
-      earnedDate: "2023-12-01",
-      expiryDate: "2024-06-01",
-      status: "redeemed",
-    },
-  ];
+  // Calculate stats from rewards balance
+  const completedReferrals = referrals.filter((r) => r.status === "completed").length;
+  const totalEarned = rewardsData ? rewardsData.totalEarned / 100 : 0;
+  const rewardBalance = rewardsData ? rewardsData.creditBalance / 100 : 0;
 
-  const completedReferrals = mockReferrals.filter((r) => r.status === "completed").length;
-  const totalEarned = mockRewards.reduce((sum, r) => sum + r.rewardAmount, 0);
-  const activeRewards = mockRewards.filter((r) => r.status === "active");
-  const rewardBalance = activeRewards.reduce((sum, r) => sum + r.rewardAmount, 0);
+  // Mock rewards list (since we only have balance, not individual reward transactions)
+  const mockRewards: Reward[] = [];
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(referralLink);
@@ -201,8 +154,8 @@ export function ReferralsAndRewards() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-slate-400 text-sm mb-1">Active Referrals</p>
-                  <p className="text-2xl font-bold text-yellow-400">
-                    {mockReferrals.filter((r) => r.status === "pending").length}
+                  <p className="text-3xl font-bold text-white">
+                    {referrals.filter((r) => r.status === "pending").length}
                   </p>
                 </div>
                 <div className="bg-yellow-500/20 p-3 rounded-lg">
@@ -277,14 +230,19 @@ export function ReferralsAndRewards() {
             <CardDescription>Track the status of all your referrals</CardDescription>
           </CardHeader>
           <CardContent>
-            {mockReferrals.length === 0 ? (
+            {loadingReferrals ? (
+              <div className="text-center py-12">
+                <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                <p className="text-slate-400">Loading referrals...</p>
+              </div>
+            ) : referrals.length === 0 ? (
               <div className="text-center py-12">
                 <Users className="w-12 h-12 text-slate-500 mx-auto mb-4 opacity-50" />
                 <p className="text-slate-400">No referrals yet. Start sharing your code!</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {mockReferrals.map((referral) => (
+                {referrals.map((referral) => (
                   <div
                     key={referral.id}
                     className="p-4 rounded-lg border border-slate-600 bg-slate-700/50 hover:bg-slate-700 transition-all flex items-center justify-between"
