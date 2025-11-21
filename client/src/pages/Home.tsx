@@ -224,72 +224,62 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="relative bg-white py-8 sm:py-12 md:py-20 overflow-hidden">
-        {/* Background Video */}
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="absolute inset-0 w-full h-full object-cover opacity-20"
-        >
-          <source src="/hero-background.mp4" type="video/mp4" />
-          Your browser does not support the video tag.
-        </video>
+      {/* Hero Section - OppLoans Style */}
+      <section className="relative bg-gradient-to-br from-[#0033A0] via-[#0044BB] to-[#0055CC] py-16 sm:py-24 md:py-32 overflow-hidden">
+        {/* Decorative Background Elements */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 left-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
+        </div>
         
-        {/* Content Overlay */}
+        {/* Content */}
         <div className="container mx-auto px-4 sm:px-6 relative z-10">
-          <div className="max-w-3xl mx-auto text-center">
-            {/* Hero Content */}
-            <div>
-              <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-bold text-[#0033A0] mb-4 sm:mb-6 leading-tight">
-                Online Loans
-                <br />
-                Designed for You
-              </h1>
+          <div className="max-w-4xl mx-auto text-center">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 sm:mb-8 leading-tight">
+              Online Loans
+              <br />
+              Designed for You
+            </h1>
 
-              <ul className="space-y-3 sm:space-y-4 mb-6 sm:mb-8 inline-block text-left">
-                <li className="flex items-start gap-2 sm:gap-3">
-                  <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm sm:text-base md:text-lg text-gray-700">
-                    Same-day funding available.<sup>1</sup>
-                  </span>
-                </li>
-                <li className="flex items-start gap-2 sm:gap-3">
-                  <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm sm:text-base md:text-lg text-gray-700">
-                    Applying does NOT affect your FICO® credit score.<sup>2</sup>
-                  </span>
-                </li>
-                <li className="flex items-start gap-2 sm:gap-3">
-                  <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm sm:text-base md:text-lg text-gray-700">No hidden fees.</span>
-                </li>
-              </ul>
+            <ul className="space-y-3 mb-8 sm:mb-10 text-white/95 max-w-2xl mx-auto">
+              <li className="flex items-start gap-3 text-left">
+                <CheckCircle2 className="w-6 h-6 flex-shrink-0 mt-0.5" />
+                <span className="text-base sm:text-lg">
+                  Same-day funding available.<sup className="text-sm">1</sup>
+                </span>
+              </li>
+              <li className="flex items-start gap-3 text-left">
+                <CheckCircle2 className="w-6 h-6 flex-shrink-0 mt-0.5" />
+                <span className="text-base sm:text-lg">
+                  Applying does NOT affect your FICO® credit score.<sup className="text-sm">2</sup>
+                </span>
+              </li>
+              <li className="flex items-start gap-3 text-left">
+                <CheckCircle2 className="w-6 h-6 flex-shrink-0 mt-0.5" />
+                <span className="text-base sm:text-lg">No hidden fees.</span>
+              </li>
+            </ul>
 
-              <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
-                <Link href="/apply">
-                  <Button className="bg-[#FFA500] hover:bg-[#FF8C00] text-white font-semibold px-6 sm:px-8 py-3 sm:py-6 text-sm sm:text-base md:text-lg w-full sm:w-auto">
-                    Apply Now
-                  </Button>
-                </Link>
-                <Link href="/prequalify">
-                  <Button className="bg-[#0033A0] hover:bg-[#002080] text-white font-semibold px-6 sm:px-8 py-3 sm:py-6 text-sm sm:text-base md:text-lg border-2 border-[#0033A0] w-full sm:w-auto">
-                    Get Prequalified
-                  </Button>
-                </Link>
-              </div>
-
-              <p className="text-xs sm:text-sm text-gray-500 mt-3 sm:mt-4">
-                Did you receive a code in the mail?{" "}
-                <Link href="/apply">
-                  <a className="text-[#0033A0] underline hover:text-[#002080] cursor-pointer font-medium">
-                    Click here
-                  </a>
-                </Link>
-              </p>
+            <div className="flex flex-col sm:flex-row justify-center gap-4 mb-6">
+              <Link href="/apply">
+                <Button size="lg" className="bg-[#FFA500] hover:bg-[#FF8C00] text-white font-bold px-10 py-6 text-lg rounded-lg shadow-lg hover:shadow-xl transition-all w-full sm:w-auto">
+                  Apply Now
+                </Button>
+              </Link>
             </div>
+
+            <p className="text-sm text-white/90">
+              Applying does NOT affect your FICO® credit score.<sup className="text-xs">2</sup>
+            </p>
+            
+            <p className="text-sm text-white/80 mt-4">
+              Did you receive a code in the mail?{" "}
+              <Link href="/tracking">
+                <a className="text-white underline hover:text-white/80 font-medium">
+                  Click here
+                </a>
+              </Link>
+            </p>
           </div>
         </div>
       </section>
@@ -699,6 +689,98 @@ export default function Home() {
                 <Link href="/apply?type=green-energy">
                   <Button className="w-full bg-lime-600 hover:bg-lime-700 text-white py-2 text-sm">Apply Now</Button>
                 </Link>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Why AmeriLend Section - OppLoans Style */}
+      <section className="bg-gray-50 py-16 md:py-24">
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-[#0033A0] text-center mb-4">
+            Why AmeriLend Is Right For You
+          </h2>
+          <p className="text-center text-gray-600 mb-12 max-w-2xl mx-auto">
+            We're committed to providing accessible, transparent, and customer-focused financial solutions
+          </p>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 max-w-6xl mx-auto">
+            {/* Easy to Apply */}
+            <Card className="border-t-4 border-t-[#FFA500] hover:shadow-xl transition-shadow">
+              <CardContent className="p-6">
+                <div className="w-14 h-14 rounded-full bg-[#FFA500]/10 flex items-center justify-center mb-4">
+                  <CheckCircle2 className="w-7 h-7 text-[#FFA500]" />
+                </div>
+                <h3 className="text-xl font-bold text-[#0033A0] mb-3">Easy to Apply</h3>
+                <p className="text-gray-600 leading-relaxed">
+                  Our online application process is convenient and only requires personal and employment information for quick and easy completion.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Same-Day Funding */}
+            <Card className="border-t-4 border-t-[#0033A0] hover:shadow-xl transition-shadow">
+              <CardContent className="p-6">
+                <div className="w-14 h-14 rounded-full bg-[#0033A0]/10 flex items-center justify-center mb-4">
+                  <Clock className="w-7 h-7 text-[#0033A0]" />
+                </div>
+                <h3 className="text-xl font-bold text-[#0033A0] mb-3">Same-Day Funding Available</h3>
+                <p className="text-gray-600 leading-relaxed">
+                  If approved, you may receive money in your account as soon as the same business day!<sup className="text-xs">1</sup>
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Loan Support */}
+            <Card className="border-t-4 border-t-green-500 hover:shadow-xl transition-shadow">
+              <CardContent className="p-6">
+                <div className="w-14 h-14 rounded-full bg-green-500/10 flex items-center justify-center mb-4">
+                  <Headphones className="w-7 h-7 text-green-500" />
+                </div>
+                <h3 className="text-xl font-bold text-[#0033A0] mb-3">Loan Support At Every Step</h3>
+                <p className="text-gray-600 leading-relaxed">
+                  Our top-rated Loan Advocates are available to provide support at every step of the application process. We succeed when you do!
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Safe and Secure */}
+            <Card className="border-t-4 border-t-blue-500 hover:shadow-xl transition-shadow">
+              <CardContent className="p-6">
+                <div className="w-14 h-14 rounded-full bg-blue-500/10 flex items-center justify-center mb-4">
+                  <Shield className="w-7 h-7 text-blue-500" />
+                </div>
+                <h3 className="text-xl font-bold text-[#0033A0] mb-3">Safe and Secure</h3>
+                <p className="text-gray-600 leading-relaxed">
+                  We are dedicated to protecting your information and communications with advanced 256-bit encryption technology.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Transparent Process */}
+            <Card className="border-t-4 border-t-purple-500 hover:shadow-xl transition-shadow">
+              <CardContent className="p-6">
+                <div className="w-14 h-14 rounded-full bg-purple-500/10 flex items-center justify-center mb-4">
+                  <FileText className="w-7 h-7 text-purple-500" />
+                </div>
+                <h3 className="text-xl font-bold text-[#0033A0] mb-3">Transparent Process</h3>
+                <p className="text-gray-600 leading-relaxed">
+                  We supply you with an easy-to-read schedule with predictable payments and the ability to set up automatic payments.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Build Credit History */}
+            <Card className="border-t-4 border-t-teal-500 hover:shadow-xl transition-shadow">
+              <CardContent className="p-6">
+                <div className="w-14 h-14 rounded-full bg-teal-500/10 flex items-center justify-center mb-4">
+                  <TrendingUp className="w-7 h-7 text-teal-500" />
+                </div>
+                <h3 className="text-xl font-bold text-[#0033A0] mb-3">Build Credit History</h3>
+                <p className="text-gray-600 leading-relaxed">
+                  We report your payment history to the three major credit bureaus, so every on-time payment you make may help boost your credit history.
+                </p>
               </CardContent>
             </Card>
           </div>
