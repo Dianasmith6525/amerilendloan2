@@ -19,6 +19,7 @@ import { useState, useRef } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { AISupport } from "@/components/AISupport";
+import AiSupportWidget from "@/components/AiSupportWidget";
 import TestimonialsSection from "@/components/TestimonialsSection";
 import { ApplicationTracking } from "@/components/ApplicationTracking";
 
@@ -26,7 +27,6 @@ import { ApplicationTracking } from "@/components/ApplicationTracking";
 export default function Home() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
   const { isAuthenticated } = useAuth();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -1727,62 +1727,8 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* Floating AI Support Chat Button - Enhanced */}
-      <div className="fixed bottom-6 right-6 z-50">
-        {/* Pulse Animation Ring */}
-        {!chatOpen && (
-          <div className="absolute inset-0 rounded-full bg-[#0033A0] animate-ping opacity-75"></div>
-        )}
-        
-        <button
-          onClick={() => setChatOpen(!chatOpen)}
-          className="relative w-16 h-16 bg-gradient-to-br from-[#0033A0] to-[#0055CC] hover:from-[#002080] hover:to-[#0044BB] text-white rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 hover:scale-110 group"
-          title="Chat with AI Support"
-        >
-          <div className="relative">
-            <img src="/customer-service.png" alt="AI Support" className="w-8 h-8 group-hover:scale-110 transition-transform" />
-            {/* Online Indicator */}
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white animate-pulse"></span>
-          </div>
-        </button>
-        
-        {/* Tooltip */}
-        {!chatOpen && (
-          <div className="absolute bottom-full right-0 mb-2 px-3 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-            Need help? Chat with AI
-          </div>
-        )}
-      </div>
-
-      {/* Enhanced AI Support Chat Window */}
-      {chatOpen && (
-        <div className="fixed bottom-24 right-6 z-50 w-96 rounded-lg shadow-2xl overflow-hidden animate-in slide-in-from-bottom-5 duration-300">
-          <div className="relative bg-white">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-[#0033A0] to-[#0055CC] text-white px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <img src="/customer-service.png" alt="AI" className="w-6 h-6" />
-                <div>
-                  <h3 className="font-semibold text-sm">AI Support Assistant</h3>
-                  <p className="text-xs opacity-90">Online • Usually replies instantly</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setChatOpen(false)}
-                className="bg-white/20 hover:bg-white/30 text-white rounded-full w-7 h-7 flex items-center justify-center text-lg transition-colors"
-                title="Close Support"
-              >
-                ✕
-              </button>
-            </div>
-            
-            {/* Chat Content */}
-            <div className="overflow-y-auto max-h-96 bg-gray-50">
-              <AISupport />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* AI Support Widget - Unauthenticated users */}
+      <AiSupportWidget isAuthenticated={false} />
     </div>
   );
 }

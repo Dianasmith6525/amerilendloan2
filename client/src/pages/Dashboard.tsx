@@ -6,6 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import AiSupportWidget from "@/components/AiSupportWidget";
 import {
   CheckCircle2,
   Clock,
@@ -347,7 +348,7 @@ export default function Dashboard() {
       {/* Welcome Banner */}
       <div className="bg-[#0033A0] text-white py-8">
         <div className="container mx-auto px-4">
-          <h1 className="text-3xl font-bold mb-2">Welcome back, {user?.name || "Valued Customer"}!</h1>
+          <h1 className="text-3xl font-bold mb-2">Welcome back, {user?.firstName || user?.name || "there"}!</h1>
           <p className="text-white/90">
             Manage your loan applications and track your progress.
           </p>
@@ -706,24 +707,22 @@ export default function Dashboard() {
                                   </div>
                                 )}
 
-                                {loan.status === "approved" && (
-                                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-                                    <h4 className="font-bold text-green-800 mb-2 flex items-center gap-2">
-                                      <CheckCircle2 className="w-4 h-4" />
-                                      Next Steps
-                                    </h4>
-                                    <p className="text-sm text-green-800 mb-3">
-                                      Congratulations! Your loan has been approved. Pay the processing fee to proceed with disbursement.
-                                    </p>
-                                    <Link href={`/payment/${loan.id}`}>
-                                      <Button className="bg-[#FFA500] hover:bg-[#FF8C00] text-white">
-                                        Pay Processing Fee ({formatCurrency(loan.approvedAmount ? loan.approvedAmount * 0.05 : 0)})
-                                      </Button>
-                                    </Link>
-                                  </div>
-                                )}
-
-                                {loan.status === "fee_paid" && (
+                {loan.status === "approved" && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                    <h4 className="font-bold text-green-800 mb-2 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Next Steps
+                    </h4>
+                    <p className="text-sm text-green-800 mb-3">
+                      Congratulations! Your loan has been approved. Pay the processing fee to proceed with disbursement.
+                    </p>
+                    <Link href={`/payment/${loan.id}`}>
+                      <Button className="bg-[#FFA500] hover:bg-[#FF8C00] text-white">
+                        Pay Processing Fee ({formatCurrency(loan.processingFeeAmount || 0)})
+                      </Button>
+                    </Link>
+                  </div>
+                )}                                {loan.status === "fee_paid" && (
                                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                                     <h4 className="font-bold text-blue-800 mb-2 flex items-center gap-2">
                                       <Clock className="w-4 h-4" />
@@ -1117,6 +1116,9 @@ export default function Dashboard() {
           </div>
         </div>
       </footer>
+
+      {/* AI Support Widget - Only for authenticated users */}
+      <AiSupportWidget isAuthenticated={true} />
     </div>
   );
 }
