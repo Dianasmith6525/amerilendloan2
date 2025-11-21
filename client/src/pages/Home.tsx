@@ -238,8 +238,8 @@ export default function Home() {
             <source src="/hero-background.mp4" type="video/mp4" />
             Your browser does not support the video tag.
           </video>
-          {/* Video Overlay for better text readability with enhanced blur */}
-          <div className="absolute inset-0 bg-gradient-to-br from-[#0033A0]/30 via-[#0044BB]/25 to-[#0055CC]/30 backdrop-blur-sm"></div>
+          {/* Video Overlay for better text readability - minimal blur */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[#0033A0]/30 via-[#0044BB]/25 to-[#0055CC]/30"></div>
         </div>
 
         {/* Decorative Background Elements */}

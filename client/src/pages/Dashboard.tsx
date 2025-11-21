@@ -511,7 +511,7 @@ export default function Dashboard() {
                   ) : loans && loans.length > 0 ? (
                     <div className="space-y-4">
                       {loans.map((loan) => (
-                        <Card key={loan.id} className="border-l-4 border-l-[#0033A0]">
+                        <Card key={loan.id} id={`loan-${loan.id}`} className="border-l-4 border-l-[#0033A0]">
                           <CardContent className="p-6">
                             <button
                               onClick={() => setExpandedLoan(expandedLoan === loan.id ? null : loan.id)}
@@ -794,14 +794,18 @@ export default function Dashboard() {
                                   <div className="border-t border-gray-200 pt-4 mt-4">
                                     <h4 className="font-semibold text-gray-800 mb-3">Documents</h4>
                                     <div className="flex flex-wrap gap-2">
-                                      <Button variant="outline" size="sm">
-                                        <Download className="w-3 h-3 mr-1" />
-                                        Loan Agreement
-                                      </Button>
-                                      <Button variant="outline" size="sm">
-                                        <Download className="w-3 h-3 mr-1" />
-                                        Truth in Lending Disclosure
-                                      </Button>
+                                      <a href="/public/legal/loan-agreement" target="_blank" rel="noopener noreferrer">
+                                        <Button variant="outline" size="sm">
+                                          <Download className="w-3 h-3 mr-1" />
+                                          Loan Agreement
+                                        </Button>
+                                      </a>
+                                      <a href="/public/legal/truth-in-lending" target="_blank" rel="noopener noreferrer">
+                                        <Button variant="outline" size="sm">
+                                          <Download className="w-3 h-3 mr-1" />
+                                          Truth in Lending Disclosure
+                                        </Button>
+                                      </a>
                                       {(loan.status === "fee_paid" || loan.status === "disbursed") && (
                                         <Button variant="outline" size="sm">
                                           <Download className="w-3 h-3 mr-1" />
@@ -819,7 +823,16 @@ export default function Dashboard() {
                                 )}
 
                                 <div className="flex gap-2">
-                                  <Button variant="outline" className="flex-1">
+                                  <Button 
+                                    variant="outline" 
+                                    className="flex-1"
+                                    onClick={() => {
+                                      const loanCard = document.getElementById(`loan-${loan.id}`);
+                                      if (loanCard) {
+                                        loanCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                      }
+                                    }}
+                                  >
                                     View Full Details
                                   </Button>
                                   {loan.status === "pending" && (
@@ -869,7 +882,7 @@ export default function Dashboard() {
                   <div className="space-y-6">
                     {loans && loans.length > 0 ? (
                       loans.map((loan) => (
-                        <div key={loan.id} className="border-l-2 border-[#0033A0] pl-6 pb-6 relative">
+                        <div key={loan.id} id={`loan-${loan.id}`} className="border-l-2 border-[#0033A0] pl-6 pb-6 relative">
                           <div className="absolute -left-3 w-6 h-6 bg-[#0033A0] rounded-full border-4 border-white"></div>
                           <div className="bg-gray-50 p-4 rounded-lg">
                             <p className="font-semibold text-gray-800 mb-1">
