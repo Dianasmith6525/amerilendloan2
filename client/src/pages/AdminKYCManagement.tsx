@@ -2,118 +2,81 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle, XCircle, Clock, FileText, Download, Filter } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { CheckCircle, XCircle, Clock, FileText, Download, Filter, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 interface KYCVerification {
-  id: string;
-  userId: string;
+  userId: number;
   userName: string;
   userEmail: string;
-  status: "approved" | "pending" | "rejected";
-  submittedAt: string;
-  reviewedAt?: string;
+  status: "pending" | "approved" | "rejected";
+  submittedAt: Date;
   documents: Document[];
-  notes: string;
 }
 
 interface Document {
-  id: string;
-  type: "id" | "proof_of_address" | "income_verification" | "other";
+  id: number;
+  type: string;
   fileName: string;
-  uploadedAt: string;
-  status: "verified" | "pending" | "rejected";
+  uploadedAt: Date;
+  status: string;
   notes: string;
 }
 
 export function AdminKYCManagement() {
-  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "approved" | "rejected">("pending");
   const [selectedKYC, setSelectedKYC] = useState<KYCVerification | null>(null);
   const [adminNotes, setAdminNotes] = useState("");
 
-  // Mock data - replace with TRPC call
-  const mockKYCVerifications: KYCVerification[] = [
-    {
-      id: "KYC-001",
-      userId: "USR-001",
-      userName: "John Smith",
-      userEmail: "john.smith@example.com",
-      status: "pending",
-      submittedAt: "2024-01-20",
-      documents: [
-        {
-          id: "DOC-001",
-          type: "id",
-          fileName: "drivers_license.pdf",
-          uploadedAt: "2024-01-20",
-          status: "verified",
-          notes: "Valid driver's license, no issues",
-        },
-        {
-          id: "DOC-002",
-          type: "proof_of_address",
-          fileName: "utility_bill.pdf",
-          uploadedAt: "2024-01-20",
-          status: "pending",
-          notes: "Needs manual review",
-        },
-      ],
-      notes: "Awaiting address verification",
-    },
-    {
-      id: "KYC-002",
-      userId: "USR-002",
-      userName: "Sarah Johnson",
-      userEmail: "sarah.j@example.com",
-      status: "approved",
-      submittedAt: "2024-01-15",
-      reviewedAt: "2024-01-17",
-      documents: [
-        {
-          id: "DOC-003",
-          type: "id",
-          fileName: "passport.pdf",
-          uploadedAt: "2024-01-15",
-          status: "verified",
-          notes: "Valid passport",
-        },
-        {
-          id: "DOC-004",
-          type: "proof_of_address",
-          fileName: "lease_agreement.pdf",
-          uploadedAt: "2024-01-15",
-          status: "verified",
-          notes: "Valid lease agreement",
-        },
-      ],
-      notes: "All documents verified and approved",
-    },
-    {
-      id: "KYC-003",
-      userId: "USR-003",
-      userName: "Michael Davis",
-      userEmail: "m.davis@example.com",
-      status: "rejected",
-      submittedAt: "2024-01-18",
-      reviewedAt: "2024-01-19",
-      documents: [
-        {
-          id: "DOC-005",
-          type: "id",
-          fileName: "expired_id.pdf",
-          uploadedAt: "2024-01-18",
-          status: "rejected",
-          notes: "ID is expired",
-        },
-      ],
-      notes: "ID expired - user must resubmit with valid ID",
-    },
-  ];
+  // Fetch pending KYC verifications
+  const { data: kycVerifications = [], isLoading } = trpc.admin.listPendingKYC.useQuery();
+  const utils = trpc.useUtils();
 
-  const filteredKYC = mockKYCVerifications.filter((kyc) => {
-    if (filterStatus === "all") return true;
-    return kyc.status === filterStatus;
+  // Mutations
+  const approveKYCMutation = trpc.admin.approveKYC.useMutation({
+    onSuccess: () => {
+      toast.success("KYC approved successfully");
+      utils.admin.listPendingKYC.invalidate();
+      setSelectedKYC(null);
+      setAdminNotes("");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to approve KYC");
+    },
   });
+
+  const rejectKYCMutation = trpc.admin.rejectKYC.useMutation({
+    onSuccess: () => {
+      toast.success("KYC rejected successfully");
+      utils.admin.listPendingKYC.invalidate();
+      setSelectedKYC(null);
+      setAdminNotes("");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to reject KYC");
+    },
+  });
+
+  const handleApprove = () => {
+    if (!selectedKYC) return;
+    approveKYCMutation.mutate({
+      userId: selectedKYC.userId,
+      notes: adminNotes || undefined,
+    });
+  };
+
+  const handleReject = () => {
+    if (!selectedKYC || !adminNotes.trim()) {
+      toast.error("Please provide a rejection reason");
+      return;
+    }
+    rejectKYCMutation.mutate({
+      userId: selectedKYC.userId,
+      reason: adminNotes,
+    });
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -177,7 +140,7 @@ export function AdminKYCManagement() {
           <Card className="bg-slate-800 border-slate-700">
             <CardContent className="pt-6">
               <div className="text-center">
-                <p className="text-3xl font-bold text-white">{mockKYCVerifications.length}</p>
+                <p className="text-3xl font-bold text-white">{kycVerifications.length}</p>
                 <p className="text-slate-400 text-sm">Total Submissions</p>
               </div>
             </CardContent>
@@ -186,7 +149,7 @@ export function AdminKYCManagement() {
             <CardContent className="pt-6">
               <div className="text-center">
                 <p className="text-3xl font-bold text-yellow-400">
-                  {mockKYCVerifications.filter((k) => k.status === "pending").length}
+                  {kycVerifications.filter((k) => k.status === "pending").length}
                 </p>
                 <p className="text-slate-400 text-sm">Pending Review</p>
               </div>
@@ -196,7 +159,7 @@ export function AdminKYCManagement() {
             <CardContent className="pt-6">
               <div className="text-center">
                 <p className="text-3xl font-bold text-green-400">
-                  {mockKYCVerifications.filter((k) => k.status === "approved").length}
+                  {kycVerifications.filter((k) => k.status === "approved").length}
                 </p>
                 <p className="text-slate-400 text-sm">Approved</p>
               </div>
@@ -206,7 +169,7 @@ export function AdminKYCManagement() {
             <CardContent className="pt-6">
               <div className="text-center">
                 <p className="text-3xl font-bold text-red-400">
-                  {mockKYCVerifications.filter((k) => k.status === "rejected").length}
+                  {kycVerifications.filter((k) => k.status === "rejected").length}
                 </p>
                 <p className="text-slate-400 text-sm">Rejected</p>
               </div>
@@ -222,29 +185,23 @@ export function AdminKYCManagement() {
                 <CardTitle>KYC Submissions</CardTitle>
                 <CardDescription>Review user identity verification documents</CardDescription>
               </div>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as any)}
-                className="bg-slate-700 border border-slate-600 text-white rounded-md px-3 py-2"
-              >
-                <option value="all">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-              </select>
             </div>
           </CardHeader>
           <CardContent>
-            {filteredKYC.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+              </div>
+            ) : kycVerifications.length === 0 ? (
               <div className="text-center py-12">
                 <FileText className="w-12 h-12 text-slate-500 mx-auto mb-4 opacity-50" />
                 <p className="text-slate-400">No KYC submissions found</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredKYC.map((kyc) => (
+                {kycVerifications.map((kyc) => (
                   <div
-                    key={kyc.id}
+                    key={kyc.userId}
                     onClick={() => setSelectedKYC(kyc)}
                     className="p-4 rounded-lg border border-slate-600 bg-slate-700/50 hover:bg-slate-700 cursor-pointer transition-all"
                   >
@@ -255,13 +212,10 @@ export function AdminKYCManagement() {
                       </div>
                       <div className="flex gap-2">
                         {getStatusBadge(kyc.status)}
-                        {kyc.reviewedAt && (
-                          <p className="text-xs text-slate-400">Reviewed: {kyc.reviewedAt}</p>
-                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-slate-400">
-                      <span>Submitted: {kyc.submittedAt}</span>
+                      <span>Submitted: {new Date(kyc.submittedAt).toLocaleDateString()}</span>
                       <span>•</span>
                       <span>{kyc.documents.length} documents</span>
                     </div>
@@ -293,8 +247,7 @@ export function AdminKYCManagement() {
                 <div className="flex gap-2">
                   {getStatusBadge(selectedKYC.status)}
                   <p className="text-slate-400 text-sm">
-                    Submitted: {selectedKYC.submittedAt}
-                    {selectedKYC.reviewedAt && ` • Reviewed: ${selectedKYC.reviewedAt}`}
+                    Submitted: {new Date(selectedKYC.submittedAt).toLocaleDateString()}
                   </p>
                 </div>
               </div>
@@ -331,10 +284,10 @@ export function AdminKYCManagement() {
               {/* Admin Notes */}
               <div>
                 <h3 className="text-white font-semibold mb-3">Admin Notes</h3>
-                <textarea
-                  value={adminNotes || selectedKYC.notes}
+                <Textarea
+                  value={adminNotes}
                   onChange={(e) => setAdminNotes(e.target.value)}
-                  className="w-full bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm"
+                  className="bg-slate-700 border-slate-600 text-white"
                   rows={4}
                   placeholder="Add notes about this KYC submission..."
                 />
@@ -343,13 +296,40 @@ export function AdminKYCManagement() {
               {/* Actions */}
               {selectedKYC.status === "pending" && (
                 <div className="flex gap-2 pt-4 border-t border-slate-600">
-                  <Button className="bg-green-600 hover:bg-green-700 flex-1">
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Approve
+                  <Button 
+                    onClick={handleApprove}
+                    disabled={approveKYCMutation.isPending}
+                    className="bg-green-600 hover:bg-green-700 flex-1"
+                  >
+                    {approveKYCMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Approving...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Approve
+                      </>
+                    )}
                   </Button>
-                  <Button variant="destructive" className="flex-1">
-                    <XCircle className="w-4 h-4 mr-2" />
-                    Reject
+                  <Button 
+                    onClick={handleReject}
+                    disabled={rejectKYCMutation.isPending || !adminNotes.trim()}
+                    variant="destructive" 
+                    className="flex-1"
+                  >
+                    {rejectKYCMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Rejecting...
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="w-4 h-4 mr-2" />
+                        Reject
+                      </>
+                    )}
                   </Button>
                 </div>
               )}
