@@ -18,7 +18,9 @@ import { SupportModal } from "@/components/SupportModal";
 // Declare Accept.js types
 declare global {
   interface Window {
-    Accept: any;
+    Accept?: {
+      dispatchData: (secureData: any, callback: (response: any) => void) => void;
+    };
   }
 }
 

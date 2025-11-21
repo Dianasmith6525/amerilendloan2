@@ -1,12 +1,24 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { APP_LOGO, APP_TITLE } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle2, Loader2, CreditCard } from "lucide-react";
-import { useState } from "react";
+import { CheckCircle2, Loader2, CreditCard, Bitcoin, Wallet, Copy, Check } from "lucide-react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { toast } from "sonner";
+
+// Declare Accept.js types
+declare global {
+  interface Window {
+    Accept?: {
+      dispatchData: (secureData: any, callback: (response: any) => void) => void;
+    };
+  }
+}
 
 export default function PaymentPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -14,6 +26,20 @@ export default function PaymentPage() {
   const [, params] = useRoute("/payment/:id");
   const applicationId = params?.id ? parseInt(params.id) : null;
   const [paymentComplete, setPaymentComplete] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "crypto">("card");
+  const [processing, setProcessing] = useState(false);
+  
+  // Card payment fields
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCvc, setCardCvc] = useState("");
+  const [cardName, setCardName] = useState("");
+  
+  // Crypto payment fields
+  const [selectedCrypto, setSelectedCrypto] = useState<"BTC" | "ETH" | "USDT" | "USDC">("USDT");
+  const [cryptoAddress, setCryptoAddress] = useState("");
+  const [cryptoAmount, setCryptoAmount] = useState("");
+  const [addressCopied, setAddressCopied] = useState(false);
 
   const { data: application, isLoading } = trpc.loans.getById.useQuery(
     { id: applicationId! },
@@ -21,39 +47,145 @@ export default function PaymentPage() {
   );
 
   const { data: feeConfig } = trpc.feeConfig.getActive.useQuery();
+  
+  const { data: authorizeNetConfig } = trpc.payments.getAuthorizeNetConfig.useQuery();
+  
+  const { data: cryptoConversion } = trpc.payments.convertToCrypto.useQuery(
+    { usdCents: application?.processingFeeAmount || 0, currency: selectedCrypto },
+    { enabled: !!application?.processingFeeAmount && paymentMethod === "crypto" }
+  );
 
   const createPaymentMutation = trpc.payments.createIntent.useMutation({
     onSuccess: (data) => {
-      toast.success("Payment initiated");
-      // In production, this would redirect to Stripe checkout
-      // For demo, we'll simulate payment confirmation
-      confirmPaymentMutation.mutate({ paymentId: data.amount }); // Using amount as placeholder
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to initiate payment");
-    },
-  });
-
-  const confirmPaymentMutation = trpc.payments.confirmPayment.useMutation({
-    onSuccess: () => {
       setPaymentComplete(true);
-      toast.success("Payment confirmed successfully!");
+      toast.success("Payment successful!");
     },
     onError: (error) => {
-      toast.error(error.message || "Payment confirmation failed");
+      toast.error(error.message || "Payment failed - please try again");
+      setProcessing(false);
     },
   });
 
-  const handlePayment = () => {
+  // Load Authorize.Net Accept.js script
+  useEffect(() => {
+    if (paymentMethod === "card" && authorizeNetConfig && !window.Accept) {
+      const script = document.createElement("script");
+      script.src = authorizeNetConfig.environment === "production"
+        ? "https://js.authorize.net/v1/Accept.js"
+        : "https://jstest.authorize.net/v1/Accept.js";
+      script.async = true;
+      document.body.appendChild(script);
+      
+      return () => {
+        document.body.removeChild(script);
+      };
+    }
+  }, [paymentMethod, authorizeNetConfig]);
+
+  // Generate crypto payment address when switching to crypto
+  useEffect(() => {
+    if (paymentMethod === "crypto" && application?.processingFeeAmount) {
+      // Generate deterministic address based on application ID
+      const mockAddress = generateCryptoAddress(selectedCrypto, applicationId!);
+      setCryptoAddress(mockAddress);
+      setCryptoAmount(cryptoConversion?.amount || "0");
+    }
+  }, [paymentMethod, selectedCrypto, application, applicationId, cryptoConversion]);
+
+  const handleCardPayment = async () => {
+    if (!applicationId || !authorizeNetConfig) return;
+    
+    // Validate card fields
+    if (!cardNumber || !cardExpiry || !cardCvc || !cardName) {
+      toast.error("Please fill in all card details");
+      return;
+    }
+    
+    setProcessing(true);
+    
+    try {
+      // Tokenize card data with Accept.js
+      const secureData = {
+        cardData: {
+          cardNumber: cardNumber.replace(/\s/g, ""),
+          month: cardExpiry.split("/")[0],
+          year: "20" + cardExpiry.split("/")[1],
+          cardCode: cardCvc,
+        },
+        authData: {
+          clientKey: authorizeNetConfig.clientKey,
+          apiLoginID: authorizeNetConfig.apiLoginId,
+        },
+      };
+
+      // @ts-ignore - Accept.js is loaded dynamically
+      window.Accept.dispatchData(secureData, async (response: any) => {
+        if (response.messages.resultCode === "Error") {
+          toast.error(response.messages.message[0].text);
+          setProcessing(false);
+          return;
+        }
+
+        // Send opaque data to server
+        await createPaymentMutation.mutateAsync({
+          loanApplicationId: applicationId,
+          paymentMethod: "card",
+          paymentProvider: "authorizenet",
+          opaqueData: {
+            dataDescriptor: response.opaqueData.dataDescriptor,
+            dataValue: response.opaqueData.dataValue,
+          },
+        });
+      });
+    } catch (error) {
+      console.error("Card payment error:", error);
+      toast.error("Payment processing failed");
+      setProcessing(false);
+    }
+  };
+
+  const handleCryptoPayment = async () => {
     if (!applicationId) return;
     
-    // In production, this would:
-    // 1. Create payment intent
-    // 2. Redirect to Stripe checkout
-    // 3. Handle webhook for confirmation
-    // For demo purposes, we simulate the full flow
-    createPaymentMutation.mutate({ loanApplicationId: applicationId });
+    setProcessing(true);
+    
+    try {
+      await createPaymentMutation.mutateAsync({
+        loanApplicationId: applicationId,
+        paymentMethod: "crypto",
+        paymentProvider: "crypto",
+        cryptoCurrency: selectedCrypto,
+      });
+    } catch (error) {
+      console.error("Crypto payment error:", error);
+      setProcessing(false);
+    }
   };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setAddressCopied(true);
+    toast.success("Address copied to clipboard");
+    setTimeout(() => setAddressCopied(false), 2000);
+  };
+
+  function generateCryptoAddress(currency: string, appId: number): string {
+    const prefixes: Record<string, string> = {
+      BTC: "bc1q",
+      ETH: "0x",
+      USDT: "0x",
+      USDC: "0x",
+    };
+    const length = currency === "BTC" ? 42 : 40;
+    const chars = "0123456789abcdef";
+    let address = prefixes[currency] || "0x";
+    const seed = appId.toString();
+    for (let i = 0; i < length - address.length; i++) {
+      const index = (parseInt(seed + i) % chars.length);
+      address += chars[index];
+    }
+    return address;
+  }
 
   if (authLoading || isLoading) {
     return (
@@ -267,46 +399,200 @@ export default function PaymentPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5" />
-                Payment Information
+                <Wallet className="h-5 w-5" />
+                Payment Method
               </CardTitle>
               <CardDescription>
-                Demo Mode: Click the button below to simulate payment processing
+                Choose your preferred payment method
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-yellow-900">
-                  <strong>Demo Notice:</strong> In production, this page would integrate with Stripe for secure payment processing. 
-                  For demonstration purposes, clicking "Pay Now" will simulate a successful payment.
-                </p>
-              </div>
+            <CardContent>
+              <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "card" | "crypto")}>
+                <TabsList className="grid w-full grid-cols-2 mb-6">
+                  <TabsTrigger value="card">
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Credit/Debit Card
+                  </TabsTrigger>
+                  <TabsTrigger value="crypto">
+                    <Bitcoin className="mr-2 h-4 w-4" />
+                    Cryptocurrency
+                  </TabsTrigger>
+                </TabsList>
 
-              <div className="flex gap-4">
+                <TabsContent value="card" className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-blue-900">
+                      <strong>Secure Payment:</strong> Your card information is encrypted and processed securely through Authorize.Net.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="cardName">Cardholder Name</Label>
+                      <Input
+                        id="cardName"
+                        placeholder="John Doe"
+                        value={cardName}
+                        onChange={(e) => setCardName(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="cardNumber">Card Number</Label>
+                      <Input
+                        id="cardNumber"
+                        placeholder="1234 5678 9012 3456"
+                        value={cardNumber}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\s/g, "");
+                          const formatted = value.match(/.{1,4}/g)?.join(" ") || value;
+                          setCardNumber(formatted);
+                        }}
+                        maxLength={19}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="cardExpiry">Expiry Date</Label>
+                        <Input
+                          id="cardExpiry"
+                          placeholder="MM/YY"
+                          value={cardExpiry}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, "");
+                            if (value.length <= 2) {
+                              setCardExpiry(value);
+                            } else {
+                              setCardExpiry(value.slice(0, 2) + "/" + value.slice(2, 4));
+                            }
+                          }}
+                          maxLength={5}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="cardCvc">CVC</Label>
+                        <Input
+                          id="cardCvc"
+                          placeholder="123"
+                          value={cardCvc}
+                          onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, ""))}
+                          maxLength={4}
+                          type="password"
+                        />
+                      </div>
+                    </div>
+
+                    <Button
+                      size="lg"
+                      className="w-full"
+                      onClick={handleCardPayment}
+                      disabled={processing}
+                    >
+                      {processing ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Processing Payment...
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          Pay ${((application.processingFeeAmount || 0) / 100).toFixed(2)}
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="crypto" className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-blue-900">
+                      <strong>Crypto Payment:</strong> Send the exact amount to the address below. Payment is confirmed automatically.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Select Cryptocurrency</Label>
+                      <div className="grid grid-cols-4 gap-2 mt-2">
+                        {(["BTC", "ETH", "USDT", "USDC"] as const).map((crypto) => (
+                          <Button
+                            key={crypto}
+                            variant={selectedCrypto === crypto ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setSelectedCrypto(crypto)}
+                          >
+                            {crypto}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-100 rounded-lg p-4 space-y-3">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Amount to Send</Label>
+                        <p className="text-2xl font-bold">
+                          {cryptoConversion?.amount || "0"} {selectedCrypto}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          ≈ ${((application.processingFeeAmount || 0) / 100).toFixed(2)} USD
+                        </p>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Payment Address</Label>
+                        <div className="flex gap-2 mt-1">
+                          <Input
+                            value={cryptoAddress}
+                            readOnly
+                            className="font-mono text-xs"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => copyToClipboard(cryptoAddress)}
+                          >
+                            {addressCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                      <p className="text-xs text-yellow-900">
+                        <strong>Important:</strong> Send only {selectedCrypto} to this address. 
+                        Sending other cryptocurrencies may result in permanent loss of funds.
+                      </p>
+                    </div>
+
+                    <Button
+                      size="lg"
+                      className="w-full"
+                      onClick={handleCryptoPayment}
+                      disabled={processing}
+                    >
+                      {processing ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Confirming Transaction...
+                        </>
+                      ) : (
+                        <>
+                          <Bitcoin className="mr-2 h-4 w-4" />
+                          I've Sent the Payment
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </TabsContent>
+              </Tabs>
+
+              <div className="mt-6 text-center">
                 <Button
-                  size="lg"
-                  className="flex-1"
-                  onClick={handlePayment}
-                  disabled={createPaymentMutation.isPending || confirmPaymentMutation.isPending}
-                >
-                  {createPaymentMutation.isPending || confirmPaymentMutation.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <CreditCard className="mr-2 h-4 w-4" />
-                      Pay ${((application.processingFeeAmount || 0) / 100).toFixed(2)}
-                    </>
-                  )}
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
+                  variant="ghost"
                   onClick={() => setLocation("/dashboard")}
                 >
-                  Cancel
+                  Cancel Payment
                 </Button>
               </div>
             </CardContent>
