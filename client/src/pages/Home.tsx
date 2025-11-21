@@ -22,6 +22,7 @@ import { AISupport } from "@/components/AISupport";
 import AiSupportWidget from "@/components/AiSupportWidget";
 import TestimonialsSection from "@/components/TestimonialsSection";
 import { ApplicationTracking } from "@/components/ApplicationTracking";
+import { LoanCalculator } from "@/components/LoanCalculator";
 
 
 export default function Home() {
@@ -36,13 +37,15 @@ export default function Home() {
 
   const scrollLeft = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: -400, behavior: 'smooth' });
+      const scrollAmount = window.innerWidth < 640 ? -200 : -400;
+      scrollContainerRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
     }
   };
 
   const scrollRight = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: 400, behavior: 'smooth' });
+      const scrollAmount = window.innerWidth < 640 ? 200 : 400;
+      scrollContainerRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
     }
   };
 
@@ -251,7 +254,7 @@ export default function Home() {
         {/* Content */}
         <div className="container mx-auto px-4 sm:px-6 relative z-10">
           <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 sm:mb-8 leading-tight">
+            <h1 className="text-3xl xs:text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 sm:mb-8 leading-tight">
               Online Loans
               <br />
               Designed for You
@@ -278,7 +281,7 @@ export default function Home() {
 
             <div className="flex flex-col sm:flex-row justify-center gap-4 mb-6">
               <Link href="/apply">
-                <Button size="lg" className="bg-[#FFA500] hover:bg-[#FF8C00] text-white font-bold px-10 py-6 text-lg rounded-lg shadow-lg hover:shadow-xl transition-all w-full sm:w-auto">
+                <Button size="lg" className="bg-[#FFA500] hover:bg-[#FF8C00] text-white font-bold px-6 sm:px-10 py-4 sm:py-6 text-base sm:text-lg rounded-lg shadow-lg hover:shadow-xl transition-all w-full sm:w-auto">
                   Apply Now
                 </Button>
               </Link>
@@ -301,65 +304,7 @@ export default function Home() {
       </section>
 
       {/* Quick Loan Calculator - Above the Fold */}
-      <section className="bg-gradient-to-br from-gray-50 to-white py-12 md:py-16 border-b">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto">
-            <h2 className="text-2xl md:text-3xl font-bold text-[#0033A0] text-center mb-8">
-              Calculate Your Loan
-            </h2>
-            <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 border border-gray-200">
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Loan Amount
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-3 text-gray-500 font-medium">$</span>
-                    <input
-                      type="range"
-                      min="500"
-                      max="5000"
-                      step="100"
-                      defaultValue="2000"
-                      className="w-full mb-2"
-                      title="Loan Amount Slider"
-                      aria-label="Loan Amount"
-                    />
-                    <div className="text-center text-2xl font-bold text-[#0033A0]">$2,000</div>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Loan Term
-                  </label>
-                  <select className="w-full p-3 border border-gray-300 rounded-lg text-gray-700 font-medium" title="Select Loan Term" aria-label="Loan Term">
-                    <option>6 months</option>
-                    <option>12 months</option>
-                    <option>18 months</option>
-                    <option>24 months</option>
-                  </select>
-                </div>
-              </div>
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg border-l-4 border-[#0033A0]">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-700 font-medium">Estimated Monthly Payment:</span>
-                  <span className="text-2xl font-bold text-[#0033A0]">$189</span>
-                </div>
-                <p className="text-xs text-gray-600 mt-2">
-                  Representative Example: APR 35.99%. Rates from 5.99% to 195% APR. Actual rate depends on credit profile.
-                </p>
-              </div>
-              <div className="mt-6">
-                <Link href="/apply">
-                  <Button className="w-full bg-[#FFA500] hover:bg-[#FF8C00] text-white font-bold py-4 text-lg">
-                    Get Your Personalized Rate
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      <LoanCalculator />
 
       {/* Live Statistics Section */}
       <section className="bg-[#0033A0] py-8 md:py-12">
@@ -380,131 +325,6 @@ export default function Home() {
             <div className="text-center">
               <div className="text-3xl md:text-4xl font-bold text-white mb-2">24/7</div>
               <div className="text-sm text-white/80">Support Available</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Trust Seals Section - OppLoans Style */}
-      <section className="bg-white py-8 md:py-12 border-b">
-        <div className="container mx-auto px-4">
-          <h3 className="text-center text-lg md:text-xl font-bold text-gray-800 mb-6">
-            Read What People Are Saying
-          </h3>
-          <div className="flex flex-wrap justify-center items-center gap-8 md:gap-12">
-            {/* Trustpilot */}
-            <a 
-              href="https://www.trustpilot.com" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="hover:scale-110 transition-transform duration-300"
-            >
-              <img 
-                src="/trustpilot-logo.svg" 
-                alt="Trustpilot Reviews" 
-                className="h-8 md:h-10 w-auto opacity-80 hover:opacity-100"
-              />
-            </a>
-            
-            {/* BBB */}
-            <a 
-              href="https://www.bbb.org" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="hover:scale-110 transition-transform duration-300"
-            >
-              <img 
-                src="/bbb-logo.svg" 
-                alt="Better Business Bureau Accredited" 
-                className="h-12 md:h-14 w-auto opacity-80 hover:opacity-100"
-              />
-            </a>
-            
-            {/* LendingTree */}
-            <a 
-              href="https://www.lendingtree.com" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="hover:scale-110 transition-transform duration-300"
-            >
-              <img 
-                src="/lending-tree-logo.svg" 
-                alt="LendingTree Reviews" 
-                className="h-8 md:h-10 w-auto opacity-80 hover:opacity-100"
-              />
-            </a>
-
-            {/* SSL Secure Badge */}
-            <div className="flex items-center gap-2 hover:scale-110 transition-transform duration-300">
-              <img 
-                src="/ssl-seal.png" 
-                alt="SSL Secure" 
-                className="h-12 md:h-14 w-auto"
-              />
-            </div>
-          </div>
-          <p className="text-center text-sm text-gray-500 mt-6 max-w-3xl mx-auto">
-            The testimonials on our third-party review websites reflect the individual's opinion and may not be illustrative of all individual experiences with AmeriLend.
-          </p>
-        </div>
-      </section>
-
-      {/* Security & Licensing Section */}
-      <section className="bg-gray-50 py-12 md:py-16 border-b">
-        <div className="container mx-auto px-4">
-          <div className="max-w-6xl mx-auto">
-            <h3 className="text-center text-xl md:text-2xl font-bold text-gray-800 mb-8">
-              Your Security is Our Priority
-            </h3>
-            <div className="grid md:grid-cols-3 gap-8 mb-8">
-              <div className="bg-white p-6 rounded-lg shadow-md text-center">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Shield className="w-8 h-8 text-green-600" />
-                </div>
-                <h4 className="font-bold text-gray-800 mb-2">256-Bit SSL Encryption</h4>
-                <p className="text-sm text-gray-600">
-                  Bank-level security protects your personal and financial information
-                </p>
-              </div>
-              <div className="bg-white p-6 rounded-lg shadow-md text-center">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Shield className="w-8 h-8 text-blue-600" />
-                </div>
-                <h4 className="font-bold text-gray-800 mb-2">Licensed & Regulated</h4>
-                <p className="text-sm text-gray-600">
-                  Licensed in all 50 states and compliant with federal lending laws
-                </p>
-              </div>
-              <div className="bg-white p-6 rounded-lg shadow-md text-center">
-                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Shield className="w-8 h-8 text-purple-600" />
-                </div>
-                <h4 className="font-bold text-gray-800 mb-2">Privacy Protected</h4>
-                <p className="text-sm text-gray-600">
-                  We never sell your information to third parties. CCPA compliant.
-                </p>
-              </div>
-            </div>
-            
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <h4 className="font-semibold text-gray-800 mb-3 text-center">Representative APR Example</h4>
-              <div className="grid md:grid-cols-3 gap-4 text-sm">
-                <div className="text-center p-4 bg-gray-50 rounded">
-                  <div className="font-semibold text-gray-700">Loan Amount</div>
-                  <div className="text-xl font-bold text-[#0033A0]">$2,000</div>
-                </div>
-                <div className="text-center p-4 bg-gray-50 rounded">
-                  <div className="font-semibold text-gray-700">APR</div>
-                  <div className="text-xl font-bold text-[#0033A0]">35.99%</div>
-                </div>
-                <div className="text-center p-4 bg-gray-50 rounded">
-                  <div className="font-semibold text-gray-700">Total Repayable</div>
-                  <div className="text-xl font-bold text-[#0033A0]">$2,719</div>
-                </div>
-              </div>
-              <p className="text-xs text-gray-600 mt-4 text-center">
-                Representative example based on 12-month term. Your actual APR will depend on your credit profile, income, and other factors. APR ranges from 5.99% to 195%. Loans originated by our bank partners.
-              </p>
             </div>
           </div>
         </div>
@@ -705,7 +525,7 @@ export default function Home() {
 
           <div className="flex overflow-x-auto scroll-smooth gap-4 pb-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {/* Personal Loan */}
-            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-white flex-shrink-0 w-full sm:w-96">
+            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-white flex-shrink-0 w-80 sm:w-72">
               <CardContent className="p-4 h-full flex flex-col">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
@@ -728,7 +548,7 @@ export default function Home() {
             </Card>
 
             {/* Debt Consolidation */}
-            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-purple-500 bg-gradient-to-br from-purple-50 to-white flex-shrink-0 w-full sm:w-96">
+            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-purple-500 bg-gradient-to-br from-purple-50 to-white flex-shrink-0 w-80 sm:w-72">
               <CardContent className="p-4 h-full flex flex-col">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center flex-shrink-0">
@@ -749,7 +569,7 @@ export default function Home() {
             </Card>
 
             {/* Medical Loan */}
-            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-red-500 bg-gradient-to-br from-red-50 to-white flex-shrink-0 w-full sm:w-96">
+            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-red-500 bg-gradient-to-br from-red-50 to-white flex-shrink-0 w-80 sm:w-72">
               <CardContent className="p-4 h-full flex flex-col">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 rounded-lg bg-red-500 flex items-center justify-center flex-shrink-0">
@@ -772,7 +592,7 @@ export default function Home() {
             </Card>
 
             {/* Home Improvement */}
-            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-amber-500 bg-gradient-to-br from-amber-50 to-white flex-shrink-0 w-full sm:w-96">
+            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-amber-500 bg-gradient-to-br from-amber-50 to-white flex-shrink-0 w-80 sm:w-72">
               <CardContent className="p-4 h-full flex flex-col">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 rounded-lg bg-amber-500 flex items-center justify-center flex-shrink-0">
@@ -795,7 +615,7 @@ export default function Home() {
             </Card>
 
             {/* Auto Loan */}
-            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-green-500 bg-gradient-to-br from-green-50 to-white flex-shrink-0 w-full sm:w-96">
+            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-green-500 bg-gradient-to-br from-green-50 to-white flex-shrink-0 w-80 sm:w-72">
               <CardContent className="p-4 h-full flex flex-col">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center flex-shrink-0">
@@ -818,7 +638,7 @@ export default function Home() {
             </Card>
 
             {/* Business Loan */}
-            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-indigo-500 bg-gradient-to-br from-indigo-50 to-white flex-shrink-0 w-full sm:w-96">
+            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-indigo-500 bg-gradient-to-br from-indigo-50 to-white flex-shrink-0 w-80 sm:w-72">
               <CardContent className="p-4 h-full flex flex-col">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 rounded-lg bg-indigo-500 flex items-center justify-center flex-shrink-0">
@@ -841,7 +661,7 @@ export default function Home() {
             </Card>
 
             {/* Emergency Loan */}
-            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-orange-500 bg-gradient-to-br from-orange-50 to-white flex-shrink-0 w-full sm:w-96">
+            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-orange-500 bg-gradient-to-br from-orange-50 to-white flex-shrink-0 w-80 sm:w-72">
               <CardContent className="p-4 h-full flex flex-col">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
@@ -862,7 +682,7 @@ export default function Home() {
             </Card>
 
             {/* Wedding Loan */}
-            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-pink-500 bg-gradient-to-br from-pink-50 to-white flex-shrink-0 w-full sm:w-96">
+            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-pink-500 bg-gradient-to-br from-pink-50 to-white flex-shrink-0 w-80 sm:w-72">
               <CardContent className="p-4 h-full flex flex-col">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 rounded-lg bg-pink-500 flex items-center justify-center flex-shrink-0">
@@ -885,7 +705,7 @@ export default function Home() {
             </Card>
 
             {/* Vacation Loan */}
-            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-cyan-500 bg-gradient-to-br from-cyan-50 to-white flex-shrink-0 w-full sm:w-96">
+            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-cyan-500 bg-gradient-to-br from-cyan-50 to-white flex-shrink-0 w-80 sm:w-72">
               <CardContent className="p-4 h-full flex flex-col">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 rounded-lg bg-cyan-500 flex items-center justify-center flex-shrink-0">
@@ -908,7 +728,7 @@ export default function Home() {
             </Card>
 
             {/* Student Loan Refinance */}
-            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-teal-500 bg-gradient-to-br from-teal-50 to-white flex-shrink-0 w-full sm:w-96">
+            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-teal-500 bg-gradient-to-br from-teal-50 to-white flex-shrink-0 w-80 sm:w-72">
               <CardContent className="p-4 h-full flex flex-col">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 rounded-lg bg-teal-500 flex items-center justify-center flex-shrink-0">
@@ -931,7 +751,7 @@ export default function Home() {
             </Card>
 
             {/* Moving/Relocation Loan */}
-            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-rose-500 bg-gradient-to-br from-rose-50 to-white flex-shrink-0 w-full sm:w-96">
+            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-rose-500 bg-gradient-to-br from-rose-50 to-white flex-shrink-0 w-80 sm:w-72">
               <CardContent className="p-4 h-full flex flex-col">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 rounded-lg bg-rose-500 flex items-center justify-center flex-shrink-0">
@@ -954,7 +774,7 @@ export default function Home() {
             </Card>
 
             {/* Green Energy Loan */}
-            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-lime-500 bg-gradient-to-br from-lime-50 to-white flex-shrink-0 w-full sm:w-96">
+            <Card className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-lime-500 bg-gradient-to-br from-lime-50 to-white flex-shrink-0 w-80 sm:w-72">
               <CardContent className="p-4 h-full flex flex-col">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 rounded-lg bg-lime-500 flex items-center justify-center flex-shrink-0">
@@ -1078,7 +898,7 @@ export default function Home() {
             About AmeriLend
           </h2>
 
-          <div className="grid md:grid-cols-2 gap-12 items-center max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-6 md:gap-12 items-center max-w-6xl mx-auto">
             <div>
               <h3 className="text-2xl font-bold text-[#0033A0] mb-6">
                 Making Personal Loans Accessible to Everyone
@@ -1374,14 +1194,14 @@ export default function Home() {
       <section className="bg-white py-16">
         <div className="container mx-auto px-4">
           <div className="mt-0 pt-0">
-            <p className="text-center text-gray-700 text-lg mb-8">Trusted by leading platforms</p>
-            <div className="flex flex-wrap justify-center items-center gap-12 md:gap-16">
+            <p className="text-center text-gray-700 text-base md:text-lg mb-6 md:mb-8">Trusted by leading platforms</p>
+            <div className="flex flex-wrap justify-center items-center gap-6 sm:gap-8 md:gap-12 lg:gap-16">
               {/* LendingTree Logo */}
               <div className="flex items-center justify-center">
                 <img 
                   src="/lending-tree-logo.svg" 
                   alt="LendingTree" 
-                  className="h-12 md:h-14 w-auto"
+                  className="h-8 sm:h-10 md:h-12 lg:h-14 w-auto"
                 />
               </div>
 
@@ -1390,7 +1210,7 @@ export default function Home() {
                 <img 
                   src="/trustpilot-logo.svg" 
                   alt="Trustpilot" 
-                  className="h-12 md:h-14 w-auto"
+                  className="h-8 sm:h-10 md:h-12 lg:h-14 w-auto"
                 />
               </div>
 
@@ -1399,7 +1219,7 @@ export default function Home() {
                 <img 
                   src="/images/bbb.png" 
                   alt="Better Business Bureau" 
-                  className="h-12 md:h-14 w-auto"
+                  className="h-10 sm:h-12 md:h-12 lg:h-14 w-auto"
                 />
               </div>
             </div>
@@ -1481,11 +1301,11 @@ export default function Home() {
             Making Personal Finance Approachable
           </h2>
 
-          <div className="grid md:grid-cols-3 gap-12 max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-6 md:gap-12 max-w-6xl mx-auto">
             {/* Article 1 */}
             <Card className="border-l-4 border-l-green-500 hover:shadow-lg transition-shadow flex flex-col h-full">
-              <CardContent className="p-6 flex flex-col items-center">
-                <div className="w-48 h-48 rounded-full bg-[#0033A0]/10 mx-auto mb-4 flex items-center justify-center overflow-hidden border-4 border-[#0033A0]/20 flex-shrink-0">
+              <CardContent className="p-4 md:p-6 flex flex-col items-center">
+                <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 rounded-full bg-[#0033A0]/10 mx-auto mb-4 flex items-center justify-center overflow-hidden border-4 border-[#0033A0]/20 flex-shrink-0">
                   <img 
                     src="/images/financial-guide.jpg" 
                     alt="Financial Guide" 
@@ -1503,8 +1323,8 @@ export default function Home() {
 
             {/* Article 2 */}
             <Card className="border-l-4 border-l-orange-500 hover:shadow-lg transition-shadow flex flex-col h-full">
-              <CardContent className="p-6 flex flex-col items-center">
-                <div className="w-48 h-48 rounded-full bg-[#FFA500]/10 mx-auto mb-4 flex items-center justify-center overflow-hidden border-4 border-[#FFA500]/20 flex-shrink-0">
+              <CardContent className="p-4 md:p-6 flex flex-col items-center">
+                <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 rounded-full bg-[#FFA500]/10 mx-auto mb-4 flex items-center justify-center overflow-hidden border-4 border-[#FFA500]/20 flex-shrink-0">
                   <img 
                     src="/images/budget-tight.jpg" 
                     alt="Budget Management" 
@@ -1522,8 +1342,8 @@ export default function Home() {
 
             {/* Article 3 */}
             <Card className="border-l-4 border-l-red-500 hover:shadow-lg transition-shadow flex flex-col h-full">
-              <CardContent className="p-6 flex flex-col items-center">
-                <div className="w-48 h-48 rounded-full bg-red-500/10 mx-auto mb-4 flex items-center justify-center overflow-hidden border-4 border-red-500/20 flex-shrink-0">
+              <CardContent className="p-4 md:p-6 flex flex-col items-center">
+                <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 rounded-full bg-red-500/10 mx-auto mb-4 flex items-center justify-center overflow-hidden border-4 border-red-500/20 flex-shrink-0">
                   <img 
                     src="/images/smart-spending.jpg" 
                     alt="Smart Spending" 
@@ -1546,7 +1366,7 @@ export default function Home() {
       <footer className="bg-gray-900 text-white py-12">
         <div className="container mx-auto px-4">
           {/* Contact Section */}
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-8 mb-12 pb-8 border-b border-gray-800">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-6 md:gap-8 mb-12 pb-8 border-b border-gray-800">
             <div>
               <h4 className="font-semibold mb-3">Contact Us</h4>
               <p className="text-sm text-gray-400">Need help? Reach out to our team.</p>
