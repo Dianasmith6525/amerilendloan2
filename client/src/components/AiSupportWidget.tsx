@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageCircle, X, Send, Loader2 } from "lucide-react";
+import { X, Send, Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 interface Message {
@@ -70,7 +70,7 @@ export default function AiSupportWidget({ isAuthenticated = false }: AiSupportWi
           className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 bg-[#0033A0] hover:bg-[#002080] text-white rounded-full p-3 sm:p-4 shadow-lg transition-all hover:scale-110 flex items-center gap-2 group"
           aria-label="Open AI Support"
         >
-          <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6" />
+          <img src="/icons/support.png" alt="Support" className="w-5 h-5 sm:w-6 sm:h-6" />
           <span className="hidden sm:block max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap">
             Ask AI Support
           </span>
@@ -83,7 +83,7 @@ export default function AiSupportWidget({ isAuthenticated = false }: AiSupportWi
           <Card className="h-full sm:h-[600px] sm:max-h-[calc(100vh-3rem)] flex flex-col rounded-none sm:rounded-lg">
             <CardHeader className="bg-gradient-to-r from-[#0033A0] to-[#0055CC] text-white p-3 sm:p-4 flex flex-row items-center justify-between space-y-0">
               <div className="flex items-center gap-2">
-                <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                <img src="/icons/support.png" alt="Support" className="w-4 h-4 sm:w-5 sm:h-5" />
                 <CardTitle className="text-base sm:text-lg">
                   {isAuthenticated ? "Personal AI Assistant" : "AI Support"}
                 </CardTitle>
@@ -101,7 +101,7 @@ export default function AiSupportWidget({ isAuthenticated = false }: AiSupportWi
               {messages.length === 0 && (
                 <div className="text-center py-6 sm:py-8">
                   <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
-                    <MessageCircle className="w-6 h-6 sm:w-8 sm:h-8 text-[#0033A0]" />
+                    <img src="/icons/support.png" alt="Support" className="w-6 h-6 sm:w-8 sm:h-8" />
                   </div>
                   <h3 className="font-semibold text-gray-800 mb-2 text-sm sm:text-base">
                     {isAuthenticated ? "Hi! I'm your personal AI assistant" : "Hi! How can I help you today?"}
@@ -144,7 +144,7 @@ export default function AiSupportWidget({ isAuthenticated = false }: AiSupportWi
                   >
                     {msg.role === "assistant" && (
                       <div className="flex items-center gap-2 mb-1 sm:mb-2">
-                        <MessageCircle className="w-3 h-3 sm:w-4 sm:h-4 text-[#0033A0]" />
+                        <img src="/icons/support.png" alt="Support" className="w-3 h-3 sm:w-4 sm:h-4" />
                         <span className="text-xs font-semibold text-[#0033A0]">AI Assistant</span>
                       </div>
                     )}
