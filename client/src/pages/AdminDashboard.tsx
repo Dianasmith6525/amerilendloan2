@@ -283,6 +283,65 @@ export default function AdminDashboard() {
           <p className="text-gray-600 mt-2">Manage loan applications, verify documents, and configure settings</p>
         </div>
 
+        {/* Quick Navigation Links */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <Link href="/admin/settings">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer border-blue-200 hover:border-blue-400">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <Settings className="h-8 w-8 text-blue-600" />
+                  <div>
+                    <p className="font-semibold text-gray-900">Settings</p>
+                    <p className="text-xs text-gray-600">Configure system</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/admin/users">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer border-purple-200 hover:border-purple-400">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <Users className="h-8 w-8 text-purple-600" />
+                  <div>
+                    <p className="font-semibold text-gray-900">Users</p>
+                    <p className="text-xs text-gray-600">Manage users</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/admin/kyc">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer border-green-200 hover:border-green-400">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <FileText className="h-8 w-8 text-green-600" />
+                  <div>
+                    <p className="font-semibold text-gray-900">KYC</p>
+                    <p className="text-xs text-gray-600">Verify identities</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/admin/support">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer border-orange-200 hover:border-orange-400">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <Package className="h-8 w-8 text-orange-600" />
+                  <div>
+                    <p className="font-semibold text-gray-900">Support</p>
+                    <p className="text-xs text-gray-600">Manage tickets</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
+
         {/* Real-Time Statistics */}
         {statsLoading ? (
           <div className="flex items-center justify-center py-12">
