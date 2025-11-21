@@ -22,6 +22,13 @@
       "when": 1763407874075,
       "tag": "0002_exotic_risque",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1763684689237,
+      "tag": "0003_woozy_sinister_six",
+      "breakpoints": true
     }
   ]
 }

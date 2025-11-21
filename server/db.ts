@@ -1469,3 +1469,416 @@ export async function searchLoanApplications(searchTerm: string, status?: string
     .where(and(...conditions))
     .orderBy(desc(loanApplications.createdAt));
 }
+
+// ============================================
+// PHASE 1: DEVICE & SESSION MANAGEMENT
+// ============================================
+
+export async function createUserDevice(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { userDevices } = await import("../drizzle/schema");
+  return db.insert(userDevices).values(data);
+}
+
+export async function getUserDevices(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { userDevices } = await import("../drizzle/schema");
+  return db.select().from(userDevices).where(eq(userDevices.userId, userId));
+}
+
+
+
+// 2FA Functions
+export async function enableTwoFactor(userId: number, method: string, secret?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { userTwoFactorAuth } = await import("../drizzle/schema");
+  
+  const existing = await db.select().from(userTwoFactorAuth).where(eq(userTwoFactorAuth.userId, userId)).limit(1);
+  
+  if (existing.length > 0) {
+    return db.update(userTwoFactorAuth)
+      .set({ method: method as any, isEnabled: true, secret, verifiedAt: new Date() })
+      .where(eq(userTwoFactorAuth.userId, userId));
+  }
+  
+  return db.insert(userTwoFactorAuth).values({
+    userId,
+    method: method as any,
+    isEnabled: true,
+    secret,
+    verifiedAt: new Date(),
+  });
+}
+
+export async function disableTwoFactor(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { userTwoFactorAuth } = await import("../drizzle/schema");
+  return db.update(userTwoFactorAuth)
+    .set({ isEnabled: false, verifiedAt: null })
+    .where(eq(userTwoFactorAuth.userId, userId));
+}
+
+// ============================================
+// PHASE 2: USER PROFILE & PREFERENCES
+// ============================================
+
+export async function getUserPreferences(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { userPreferences } = await import("../drizzle/schema");
+  const result = await db.select().from(userPreferences).where(eq(userPreferences.userId, userId)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updateUserPreferences(userId: number, prefs: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { userPreferences } = await import("../drizzle/schema");
+  
+  const existing = await db.select().from(userPreferences).where(eq(userPreferences.userId, userId)).limit(1);
+  
+  if (existing.length > 0) {
+    return await db.update(userPreferences).set(prefs).where(eq(userPreferences.userId, userId));
+  }
+  
+  return await db.insert(userPreferences).values({
+    userId,
+    ...prefs,
+  });
+}
+
+// Bank accounts
+export async function addBankAccount(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { bankAccounts } = await import("../drizzle/schema");
+  return db.insert(bankAccounts).values(data);
+}
+
+export async function getUserBankAccounts(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { bankAccounts } = await import("../drizzle/schema");
+  return db.select().from(bankAccounts).where(eq(bankAccounts.userId, userId));
+}
+
+export async function removeBankAccount(accountId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { bankAccounts } = await import("../drizzle/schema");
+  return db.delete(bankAccounts).where(eq(bankAccounts.id, accountId));
+}
+
+// ============================================
+// PHASE 3: KYC/IDENTITY VERIFICATION
+// ============================================
+
+export async function getKycVerification(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { kycVerification } = await import("../drizzle/schema");
+  const result = await db.select().from(kycVerification).where(eq(kycVerification.userId, userId)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updateKycVerification(userId: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { kycVerification } = await import("../drizzle/schema");
+  
+  const existing = await getKycVerification(userId);
+  
+  if (existing) {
+    return db.update(kycVerification).set(data).where(eq(kycVerification.userId, userId));
+  }
+  
+  return db.insert(kycVerification).values({
+    userId,
+    ...data,
+  });
+}
+
+export async function uploadDocument(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { uploadedDocuments } = await import("../drizzle/schema");
+  return db.insert(uploadedDocuments).values(data);
+}
+
+export async function getUserDocuments(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { uploadedDocuments } = await import("../drizzle/schema");
+  return db.select().from(uploadedDocuments).where(eq(uploadedDocuments.userId, userId)).orderBy(desc(uploadedDocuments.createdAt));
+}
+
+// ============================================
+// PHASE 4 & 5: LOAN OFFERS
+// ============================================
+
+export async function createLoanOffer(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { loanOffers } = await import("../drizzle/schema");
+  return db.insert(loanOffers).values(data);
+}
+
+export async function getUserLoanOffers(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { loanOffers } = await import("../drizzle/schema");
+  return db.select().from(loanOffers)
+    .where(eq(loanOffers.userId, userId))
+    .orderBy(desc(loanOffers.createdAt));
+}
+
+export async function acceptLoanOffer(offerId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { loanOffers } = await import("../drizzle/schema");
+  return db.update(loanOffers).set({ acceptedAt: new Date() }).where(eq(loanOffers.id, offerId));
+}
+
+// ============================================
+// PHASE 6: LOAN REPAYMENT & PAYMENTS
+// ============================================
+
+export async function createPaymentSchedule(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { paymentSchedules } = await import("../drizzle/schema");
+  return db.insert(paymentSchedules).values(data);
+}
+
+export async function getPaymentSchedule(loanApplicationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { paymentSchedules } = await import("../drizzle/schema");
+  return db.select().from(paymentSchedules)
+    .where(eq(paymentSchedules.loanApplicationId, loanApplicationId))
+    .orderBy((t) => t.installmentNumber);
+}
+
+export async function updatePaymentScheduleStatus(scheduleId: number, status: string, paidAt?: Date) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { paymentSchedules } = await import("../drizzle/schema");
+  return db.update(paymentSchedules)
+    .set({ status, paidAt: paidAt || null })
+    .where(eq(paymentSchedules.id, scheduleId));
+}
+
+// Autopay settings
+export async function getAutopaySettings(loanApplicationId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { autopaySettings } = await import("../drizzle/schema");
+  const result = await db.select().from(autopaySettings)
+    .where(eq(autopaySettings.loanApplicationId, loanApplicationId)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updateAutopaySettings(loanApplicationId: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { autopaySettings } = await import("../drizzle/schema");
+  
+  const existing = await getAutopaySettings(loanApplicationId);
+  
+  if (existing) {
+    return db.update(autopaySettings).set(data).where(eq(autopaySettings.loanApplicationId, loanApplicationId));
+  }
+  
+  return db.insert(autopaySettings).values({
+    loanApplicationId,
+    ...data,
+  });
+}
+
+// ============================================
+// PHASE 7: DELINQUENCY & COLLECTIONS
+// ============================================
+
+export async function createDelinquencyRecord(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { delinquencyRecords } = await import("../drizzle/schema");
+  
+  const existing = await db.select().from(delinquencyRecords)
+    .where(eq(delinquencyRecords.loanApplicationId, data.loanApplicationId)).limit(1);
+  
+  if (existing.length > 0) {
+    return db.update(delinquencyRecords).set(data)
+      .where(eq(delinquencyRecords.loanApplicationId, data.loanApplicationId));
+  }
+  
+  return db.insert(delinquencyRecords).values(data);
+}
+
+export async function getDelinquencyRecord(loanApplicationId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { delinquencyRecords } = await import("../drizzle/schema");
+  const result = await db.select().from(delinquencyRecords)
+    .where(eq(delinquencyRecords.loanApplicationId, loanApplicationId)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+// ============================================
+// PHASE 9: NOTIFICATIONS & SUPPORT
+// ============================================
+
+export async function createNotification(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { userNotifications } = await import("../drizzle/schema");
+  return db.insert(userNotifications).values(data);
+}
+
+export async function getUserNotifications(userId: number, limitCount?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { userNotifications } = await import("../drizzle/schema");
+  const query = db.select().from(userNotifications)
+    .where(eq(userNotifications.userId, userId))
+    .orderBy(desc(userNotifications.createdAt));
+  
+  if (limitCount) {
+    return query.limit(limitCount);
+  }
+  
+  return query;
+}
+
+export async function markNotificationAsRead(notificationId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { userNotifications } = await import("../drizzle/schema");
+  return db.update(userNotifications)
+    .set({ isRead: true, readAt: new Date() })
+    .where(eq(userNotifications.id, notificationId));
+}
+
+// Support tickets
+export async function createSupportTicket(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { supportTickets } = await import("../drizzle/schema");
+  return db.insert(supportTickets).values(data);
+}
+
+export async function getUserSupportTickets(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { supportTickets } = await import("../drizzle/schema");
+  return db.select().from(supportTickets)
+    .where(eq(supportTickets.userId, userId))
+    .orderBy(desc(supportTickets.createdAt));
+}
+
+export async function getTicketMessages(ticketId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { ticketMessages } = await import("../drizzle/schema");
+  return db.select().from(ticketMessages)
+    .where(eq(ticketMessages.ticketId, ticketId))
+    .orderBy((t) => t.createdAt);
+}
+
+export async function addTicketMessage(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { ticketMessages } = await import("../drizzle/schema");
+  return db.insert(ticketMessages).values(data);
+}
+
+// ============================================
+// PHASE 10: REFERRAL & REWARDS
+// ============================================
+
+export async function createReferral(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { referralProgram } = await import("../drizzle/schema");
+  return db.insert(referralProgram).values(data);
+}
+
+export async function getUserReferrals(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { referralProgram } = await import("../drizzle/schema");
+  return db.select().from(referralProgram)
+    .where(eq(referralProgram.referrerId, userId))
+    .orderBy(desc(referralProgram.createdAt));
+}
+
+export async function getUserRewardsBalance(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { userRewardsBalance } = await import("../drizzle/schema");
+  const result = await db.select().from(userRewardsBalance)
+    .where(eq(userRewardsBalance.userId, userId)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updateRewardsBalance(userId: number, creditAmount: number, redeemed: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { userRewardsBalance } = await import("../drizzle/schema");
+  
+  const existing = await getUserRewardsBalance(userId);
+  
+  if (existing) {
+    return db.update(userRewardsBalance).set({
+      creditBalance: existing.creditBalance + creditAmount,
+      totalEarned: existing.totalEarned + creditAmount,
+      totalRedeemed: existing.totalRedeemed + redeemed,
+    }).where(eq(userRewardsBalance.userId, userId));
+  }
+  
+  return db.insert(userRewardsBalance).values({
+    userId,
+    creditBalance: creditAmount,
+    totalEarned: creditAmount,
+    totalRedeemed: redeemed,
+  });
+}
+

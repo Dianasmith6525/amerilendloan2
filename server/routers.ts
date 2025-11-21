@@ -116,6 +116,364 @@ const getFallbackResponse = (userMessage: string): string => {
   return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
 };
 
+// ============================================
+// USER FEATURES ROUTERS (PHASES 1-10)
+// ============================================
+
+const userDeviceRouter = router({
+  create: protectedProcedure
+    .input(z.object({
+      deviceName: z.string(),
+      userAgent: z.string(),
+      ipAddress: z.string(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        await db.createUserDevice({
+          userId: ctx.user.id,
+          ...input,
+          isTrusted: false,
+          lastAccessedAt: new Date(),
+        });
+        return { success: true };
+      } catch (error) {
+        console.error("Error creating device:", error);
+        return { success: false, error: "Failed to add device" };
+      }
+    }),
+
+  list: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      return await db.getUserDevices(ctx.user.id);
+    } catch (error) {
+      console.error("Error fetching devices:", error);
+      return [];
+    }
+  }),
+
+  remove: protectedProcedure
+    .input(z.object({ deviceId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        await db.removeTrustedDevice(input.deviceId, ctx.user.id);
+        return { success: true };
+      } catch (error) {
+        console.error("Error removing device:", error);
+        return { success: false, error: "Failed to remove device" };
+      }
+    }),
+});
+
+const userPreferencesRouter = router({
+  get: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const prefs = await db.getUserPreferences(ctx.user.id);
+      return prefs || {
+        userId: ctx.user.id,
+        communicationPreferences: {},
+        notificationSettings: {},
+      };
+    } catch (error) {
+      console.error("Error fetching preferences:", error);
+      return null;
+    }
+  }),
+
+  update: protectedProcedure
+    .input(z.object({
+      communicationPreferences: z.record(z.string(), z.any()).optional(),
+      notificationSettings: z.record(z.string(), z.any()).optional(),
+      marketingOptIn: z.boolean().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        await db.updateUserPreferences(ctx.user.id, input);
+        return { success: true };
+      } catch (error) {
+        console.error("Error updating preferences:", error);
+        return { success: false, error: "Failed to update preferences" };
+      }
+    }),
+});
+
+const bankAccountRouter = router({
+  add: protectedProcedure
+    .input(z.object({
+      accountHolderName: z.string(),
+      bankName: z.string(),
+      accountNumber: z.string(),
+      routingNumber: z.string(),
+      accountType: z.enum(["checking", "savings"]),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        await db.addBankAccount({
+          userId: ctx.user.id,
+          ...input,
+          isVerified: false,
+          isPrimary: false,
+        });
+        return { success: true };
+      } catch (error) {
+        console.error("Error adding bank account:", error);
+        return { success: false, error: "Failed to add account" };
+      }
+    }),
+
+  list: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      return await db.getUserBankAccounts(ctx.user.id);
+    } catch (error) {
+      console.error("Error fetching bank accounts:", error);
+      return [];
+    }
+  }),
+
+  remove: protectedProcedure
+    .input(z.object({ accountId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        await db.removeBankAccount(input.accountId);
+        return { success: true };
+      } catch (error) {
+        console.error("Error removing bank account:", error);
+        return { success: false, error: "Failed to remove account" };
+      }
+    }),
+});
+
+const kycRouter = router({
+  getStatus: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const kyc = await db.getKycVerification(ctx.user.id);
+      return kyc || { status: "not_started", userId: ctx.user.id };
+    } catch (error) {
+      console.error("Error fetching KYC:", error);
+      return null;
+    }
+  }),
+
+  uploadDocument: protectedProcedure
+    .input(z.object({
+      documentType: z.enum(["drivers_license", "passport", "ssn", "income_verification"]),
+      documentUrl: z.string(),
+      expiryDate: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        await db.uploadDocument({
+          userId: ctx.user.id,
+          ...input,
+          status: "pending_review",
+        });
+        return { success: true };
+      } catch (error) {
+        console.error("Error uploading document:", error);
+        return { success: false, error: "Failed to upload document" };
+      }
+    }),
+
+  getDocuments: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      return await db.getUserDocuments(ctx.user.id);
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      return [];
+    }
+  }),
+});
+
+const loanOfferRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      return await db.getUserLoanOffers(ctx.user.id);
+    } catch (error) {
+      console.error("Error fetching loan offers:", error);
+      return [];
+    }
+  }),
+
+  accept: protectedProcedure
+    .input(z.object({ offerId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        await db.acceptLoanOffer(input.offerId);
+        return { success: true };
+      } catch (error) {
+        console.error("Error accepting offer:", error);
+        return { success: false, error: "Failed to accept offer" };
+      }
+    }),
+});
+
+const paymentScheduleRouter = router({
+  get: protectedProcedure
+    .input(z.object({ loanApplicationId: z.number() }))
+    .query(async ({ input }) => {
+      try {
+        return await db.getPaymentSchedule(input.loanApplicationId);
+      } catch (error) {
+        console.error("Error fetching payment schedule:", error);
+        return [];
+      }
+    }),
+
+  autopaySettings: router({
+    get: protectedProcedure
+      .input(z.object({ loanApplicationId: z.number() }))
+      .query(async ({ input }) => {
+        try {
+          return await db.getAutopaySettings(input.loanApplicationId);
+        } catch (error) {
+          console.error("Error fetching autopay settings:", error);
+          return null;
+        }
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        loanApplicationId: z.number(),
+        isEnabled: z.boolean(),
+        paymentDay: z.number().optional(),
+        bankAccountId: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          await db.updateAutopaySettings(input.loanApplicationId, input);
+          return { success: true };
+        } catch (error) {
+          console.error("Error updating autopay:", error);
+          return { success: false, error: "Failed to update autopay" };
+        }
+      }),
+  }),
+});
+
+const notificationRouter = router({
+  list: protectedProcedure
+    .input(z.object({ limit: z.number().optional() }))
+    .query(async ({ input, ctx }) => {
+      try {
+        return await db.getUserNotifications(ctx.user.id, input.limit);
+      } catch (error) {
+        console.error("Error fetching notifications:", error);
+        return [];
+      }
+    }),
+
+  markAsRead: protectedProcedure
+    .input(z.object({ notificationId: z.number() }))
+    .mutation(async ({ input }) => {
+      try {
+        await db.markNotificationAsRead(input.notificationId);
+        return { success: true };
+      } catch (error) {
+        console.error("Error marking notification as read:", error);
+        return { success: false, error: "Failed to update notification" };
+      }
+    }),
+});
+
+const supportRouter = router({
+  createTicket: protectedProcedure
+    .input(z.object({
+      subject: z.string(),
+      description: z.string(),
+      category: z.enum(["billing", "technical", "account", "loan", "other"]),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const result = await db.createSupportTicket({
+          userId: ctx.user.id,
+          ...input,
+          status: "open",
+        });
+        return { success: true, result };
+      } catch (error) {
+        console.error("Error creating support ticket:", error);
+        return { success: false, error: "Failed to create ticket" };
+      }
+    }),
+
+  listTickets: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      return await db.getUserSupportTickets(ctx.user.id);
+    } catch (error) {
+      console.error("Error fetching tickets:", error);
+      return [];
+    }
+  }),
+
+  addMessage: protectedProcedure
+    .input(z.object({
+      ticketId: z.number(),
+      message: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      try {
+        await db.addTicketMessage({
+          ticketId: input.ticketId,
+          message: input.message,
+          isFromUser: true,
+        });
+        return { success: true };
+      } catch (error) {
+        console.error("Error adding ticket message:", error);
+        return { success: false, error: "Failed to add message" };
+      }
+    }),
+
+  getMessages: protectedProcedure
+    .input(z.object({ ticketId: z.number() }))
+    .query(async ({ input }) => {
+      try {
+        return await db.getTicketMessages(input.ticketId);
+      } catch (error) {
+        console.error("Error fetching ticket messages:", error);
+        return [];
+      }
+    }),
+});
+
+const referralRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      return await db.getUserReferrals(ctx.user.id);
+    } catch (error) {
+      console.error("Error fetching referrals:", error);
+      return [];
+    }
+  }),
+
+  getRewardsBalance: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const balance = await db.getUserRewardsBalance(ctx.user.id);
+      return balance || {
+        userId: ctx.user.id,
+        creditBalance: 0,
+        totalEarned: 0,
+        totalRedeemed: 0,
+      };
+    } catch (error) {
+      console.error("Error fetching rewards balance:", error);
+      return null;
+    }
+  }),
+});
+
+// Merge all user feature routers
+const userFeaturesRouter = router({
+  devices: userDeviceRouter,
+  preferences: userPreferencesRouter,
+  bankAccounts: bankAccountRouter,
+  kyc: kycRouter,
+  loanOffers: loanOfferRouter,
+  payments: paymentScheduleRouter,
+  notifications: notificationRouter,
+  support: supportRouter,
+  referrals: referralRouter,
+});
+
 export const appRouter = router({
   system: systemRouter,
   
@@ -4223,6 +4581,9 @@ Format as JSON with array of applications including their recommendation.`;
         }
       }),
   }),
+
+  // User Features Router (Phases 1-10)
+  userFeatures: userFeaturesRouter,
 });
 
 // Helper function to determine next steps based on application status
