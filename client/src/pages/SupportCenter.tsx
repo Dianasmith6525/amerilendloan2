@@ -7,6 +7,11 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 interface SupportTicket {
   id: string;
@@ -19,54 +24,61 @@ interface SupportTicket {
   messageCount: number;
 }
 
+// Form schema matching backend validation
+const ticketFormSchema = z.object({
+  subject: z.string().min(1, "Subject is required"),
+  category: z.enum(["billing", "technical", "account", "loan", "other"]),
+  description: z.string().min(10, "Description must be at least 10 characters"),
+});
+
+type TicketFormData = z.infer<typeof ticketFormSchema>;
+
 export function SupportCenter() {
   const [filter, setFilter] = useState<"all" | "open" | "resolved">("all");
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [showNewTicket, setShowNewTicket] = useState(false);
 
+  // Fetch tickets from backend
+  const { data: tickets = [], refetch } = trpc.userFeatures.support.listTickets.useQuery();
+
+  // Create ticket mutation
+  const createTicketMutation = trpc.userFeatures.support.createTicket.useMutation({
+    onSuccess: () => {
+      toast.success("Support ticket created successfully!");
+      setShowNewTicket(false);
+      refetch();
+      form.reset();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to create ticket");
+    },
+  });
+
+  // Form setup
+  const form = useForm<TicketFormData>({
+    resolver: zodResolver(ticketFormSchema),
+    defaultValues: {
+      subject: "",
+      category: "other",
+      description: "",
+    },
+  });
+
+  const onSubmit = (data: TicketFormData) => {
+    createTicketMutation.mutate(data);
+  };
+
   // Mock data
-  const mockTickets: SupportTicket[] = [
-    {
-      id: "TKT-001",
-      subject: "Payment not processed",
-      description: "My payment was deducted but not reflected in my account",
-      status: "in-progress",
-      priority: "high",
-      createdAt: "2024-01-15",
-      lastUpdated: "2024-01-16",
-      messageCount: 3,
-    },
-    {
-      id: "TKT-002",
-      subject: "KYC document verification pending",
-      description: "Waiting for approval of my identity documents",
-      status: "open",
-      priority: "medium",
-      createdAt: "2024-01-10",
-      lastUpdated: "2024-01-10",
-      messageCount: 1,
-    },
-    {
-      id: "TKT-003",
-      subject: "Loan application query",
-      description: "Questions about loan terms and conditions",
-      status: "resolved",
-      priority: "low",
-      createdAt: "2024-01-05",
-      lastUpdated: "2024-01-08",
-      messageCount: 5,
-    },
-    {
-      id: "TKT-004",
-      subject: "Unable to update profile information",
-      description: "Getting error when trying to update phone number",
-      status: "closed",
-      priority: "medium",
-      createdAt: "2023-12-28",
-      lastUpdated: "2023-12-30",
-      messageCount: 2,
-    },
-  ];
+  const mockTickets: SupportTicket[] = tickets.map((t: any) => ({
+    id: `TKT-${String(t.id).padStart(3, "0")}`,
+    subject: t.subject,
+    description: t.description,
+    status: t.status as "open" | "in-progress" | "resolved" | "closed",
+    priority: "medium" as const,
+    createdAt: new Date(t.createdAt).toLocaleDateString(),
+    lastUpdated: new Date(t.updatedAt || t.createdAt).toLocaleDateString(),
+    messageCount: 0,
+  }));
 
   const filteredTickets =
     filter === "all"
@@ -144,38 +156,54 @@ export function SupportCenter() {
                   Describe your issue and we'll get back to you soon
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <div>
                   <label className="text-white text-sm font-medium mb-2 block">Subject</label>
                   <Input
+                    {...form.register("subject")}
                     placeholder="Brief subject of your issue"
                     className="bg-slate-700 border-slate-600 text-white"
                   />
+                  {form.formState.errors.subject && (
+                    <p className="text-red-400 text-xs mt-1">{form.formState.errors.subject.message}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-white text-sm font-medium mb-2 block">Category</label>
-                  <select className="w-full bg-slate-700 border border-slate-600 text-white rounded-md px-3 py-2">
-                    <option>Payment & Billing</option>
-                    <option>Loan Application</option>
-                    <option>KYC Verification</option>
-                    <option>Technical Issue</option>
-                    <option>Other</option>
+                  <select
+                    {...form.register("category")}
+                    className="w-full bg-slate-700 border border-slate-600 text-white rounded-md px-3 py-2"
+                    aria-label="Support ticket category"
+                  >
+                    <option value="billing">Payment & Billing</option>
+                    <option value="loan">Loan Application</option>
+                    <option value="account">KYC Verification</option>
+                    <option value="technical">Technical Issue</option>
+                    <option value="other">Other</option>
                   </select>
+                  {form.formState.errors.category && (
+                    <p className="text-red-400 text-xs mt-1">{form.formState.errors.category.message}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-white text-sm font-medium mb-2 block">Description</label>
                   <Textarea
+                    {...form.register("description")}
                     placeholder="Describe your issue in detail"
                     className="bg-slate-700 border-slate-600 text-white min-h-24"
                   />
+                  {form.formState.errors.description && (
+                    <p className="text-red-400 text-xs mt-1">{form.formState.errors.description.message}</p>
+                  )}
                 </div>
                 <Button
-                  onClick={() => setShowNewTicket(false)}
+                  type="submit"
+                  disabled={createTicketMutation.isPending}
                   className="w-full bg-blue-600 hover:bg-blue-700"
                 >
-                  Submit Ticket
+                  {createTicketMutation.isPending ? "Creating..." : "Submit Ticket"}
                 </Button>
-              </div>
+              </form>
             </DialogContent>
           </Dialog>
         </div>
