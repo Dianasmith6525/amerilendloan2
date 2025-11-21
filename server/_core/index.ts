@@ -3,6 +3,7 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import multer from "multer";
+import rateLimit from "express-rate-limit";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
@@ -148,6 +149,41 @@ async function startServer() {
     
     next();
   });
+
+  // Rate limiting configurations
+  // General API rate limit (100 requests per 15 minutes)
+  const generalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: { error: "Too many requests, please try again later." },
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  });
+
+  // Strict rate limit for authentication endpoints (5 attempts per 15 minutes)
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // Limit each IP to 5 requests per windowMs
+    message: { error: "Too many authentication attempts, please try again later." },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipSuccessfulRequests: true, // Don't count successful requests
+  });
+
+  // Payment endpoint rate limit (10 requests per 5 minutes)
+  const paymentLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 10, // Limit each IP to 10 payment requests per windowMs
+    message: { error: "Too many payment requests, please try again later." },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  // Apply general rate limit to all API routes
+  app.use("/api/trpc", generalLimiter);
+
+  // Apply strict auth limiter to OAuth routes
+  app.use("/api/oauth", authLimiter);
 
   // Configure multer for file uploads
   const upload = multer({
