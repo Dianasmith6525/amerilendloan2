@@ -16,6 +16,14 @@ import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import LegalDocuments from "./pages/LegalDocuments";
 import Careers from "./pages/Careers";
+import UserDashboard from "./pages/UserDashboard";
+import UserProfile from "./pages/UserProfile";
+import LoanDetail from "./pages/LoanDetail";
+import NotificationCenter from "./pages/NotificationCenter";
+import SupportCenter from "./pages/SupportCenter";
+import PaymentHistory from "./pages/PaymentHistory";
+import ReferralsAndRewards from "./pages/ReferralsAndRewards";
+import BankAccountManagement from "./pages/BankAccountManagement";
 
 function Router() {
   return (
@@ -24,7 +32,15 @@ function Router() {
       <Route path={"/prequalify"} component={Prequalify} />
       <Route path={"/apply"} component={ApplyLoan} />
       <Route path={"/dashboard"} component={Dashboard} />
+      <Route path={"/user-dashboard"} component={UserDashboard} />
       <Route path={"/profile"} component={Profile} />
+      <Route path={"/user-profile"} component={UserProfile} />
+      <Route path={"/loans/:id"} component={LoanDetail} />
+      <Route path={"/notifications"} component={NotificationCenter} />
+      <Route path={"/support"} component={SupportCenter} />
+      <Route path={"/payment-history"} component={PaymentHistory} />
+      <Route path={"/referrals"} component={ReferralsAndRewards} />
+      <Route path={"/bank-accounts"} component={BankAccountManagement} />
       <Route path={"/settings"} component={Settings} />
       <Route path={"/admin"} component={AdminDashboard} />
       <Route path={"/payment/:id"} component={PaymentPage} />
