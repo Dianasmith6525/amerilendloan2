@@ -571,3 +571,19 @@ export const paymentAuditLog = pgTable("paymentAuditLog", {
 
 export type PaymentAuditLog = typeof paymentAuditLog.$inferSelect;
 export type InsertPaymentAuditLog = typeof paymentAuditLog.$inferInsert;
+
+/**
+ * Admin activity log - tracks all admin actions on loans, documents, and settings
+ */
+export const adminActivityLog = pgTable("adminActivityLog", {
+  id: serial("id").primaryKey(),
+  adminId: integer("adminId").notNull(),
+  action: varchar("action", { length: 100 }).notNull(), // "approve_loan", "reject_loan", "add_tracking", "update_fee_config", etc.
+  targetType: varchar("targetType", { length: 50 }).notNull(), // "loan", "disbursement", "document", "settings"
+  targetId: integer("targetId"), // ID of the affected loan, disbursement, or document
+  details: text("details"), // JSON stringified details
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AdminActivityLog = typeof adminActivityLog.$inferSelect;
+export type InsertAdminActivityLog = typeof adminActivityLog.$inferInsert;

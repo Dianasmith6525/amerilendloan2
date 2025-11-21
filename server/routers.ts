@@ -1628,6 +1628,129 @@ export const appRouter = router({
       return stats;
     }),
 
+    // Admin: Search loans
+    adminSearch: protectedProcedure
+      .input(z.object({
+        searchTerm: z.string(),
+        status: z.string().optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        return db.searchLoanApplications(input.searchTerm, input.status);
+      }),
+
+    // Admin: Get alerts (applications requiring attention)
+    adminGetAlerts: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      const applications = await db.getAllLoanApplications();
+      
+      const alerts = {
+        pendingReview: applications.filter(a => a.status === "pending" || a.status === "under_review"),
+        feePending: applications.filter(a => a.status === "fee_pending"),
+        pendingDocuments: applications.filter(a => a.status === "approved" || a.status === "fee_paid"),
+        oldestPending: applications.filter(a => a.status === "pending").sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).slice(0, 5),
+      };
+
+      return alerts;
+    }),
+
+    // Admin: Bulk approve loans
+    adminBulkApprove: protectedProcedure
+      .input(z.object({
+        applicationIds: z.array(z.number()),
+        approvedAmount: z.number().int().positive(),
+        adminNotes: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const results = [];
+        for (const id of input.applicationIds) {
+          try {
+            const application = await db.getLoanApplicationById(id);
+            if (!application) continue;
+
+            await db.updateLoanApplicationStatus(id, "approved", {
+              approvedAmount: input.approvedAmount,
+              adminNotes: input.adminNotes,
+              approvedAt: new Date(),
+            });
+
+            // Log activity
+            await db.logAdminActivity({
+              adminId: ctx.user.id,
+              action: "approve_loan",
+              targetType: "loan",
+              targetId: id,
+              details: JSON.stringify({ approvedAmount: input.approvedAmount }),
+            });
+
+            results.push({ id, success: true });
+          } catch (error) {
+            results.push({ id, success: false, error: String(error) });
+          }
+        }
+
+        return results;
+      }),
+
+    // Admin: Bulk reject loans
+    adminBulkReject: protectedProcedure
+      .input(z.object({
+        applicationIds: z.array(z.number()),
+        rejectionReason: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const results = [];
+        for (const id of input.applicationIds) {
+          try {
+            await db.updateLoanApplicationStatus(id, "rejected", {
+              rejectionReason: input.rejectionReason,
+            });
+
+            // Log activity
+            await db.logAdminActivity({
+              adminId: ctx.user.id,
+              action: "reject_loan",
+              targetType: "loan",
+              targetId: id,
+              details: JSON.stringify({ reason: input.rejectionReason }),
+            });
+
+            results.push({ id, success: true });
+          } catch (error) {
+            results.push({ id, success: false, error: String(error) });
+          }
+        }
+
+        return results;
+      }),
+
+    // Admin: Get activity log
+    adminActivityLog: protectedProcedure
+      .input(z.object({
+        limit: z.number().default(50),
+      }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        return db.getAdminActivityLog(input.limit);
+      }),
+
     // Admin: Approve loan application
     adminApprove: protectedProcedure
       .input(z.object({
@@ -1665,6 +1788,15 @@ export const appRouter = router({
           processingFeeAmount,
           adminNotes: input.adminNotes,
           approvedAt: new Date(),
+        });
+
+        // Log activity
+        await db.logAdminActivity({
+          adminId: ctx.user.id,
+          action: "approve_loan",
+          targetType: "loan",
+          targetId: input.id,
+          details: JSON.stringify({ approvedAmount: input.approvedAmount }),
         });
 
         // Send approval notification email to user
@@ -1705,6 +1837,15 @@ export const appRouter = router({
 
         await db.updateLoanApplicationStatus(input.id, "rejected", {
           rejectionReason: input.rejectionReason,
+        });
+
+        // Log activity
+        await db.logAdminActivity({
+          adminId: ctx.user.id,
+          action: "reject_loan",
+          targetType: "loan",
+          targetId: input.id,
+          details: JSON.stringify({ reason: input.rejectionReason }),
         });
 
         // Send rejection notification email to user
@@ -2878,6 +3019,15 @@ export const appRouter = router({
           input.trackingNumber,
           input.trackingCompany
         );
+
+        // Log activity
+        await db.logAdminActivity({
+          adminId: ctx.user.id,
+          action: "add_tracking",
+          targetType: "disbursement",
+          targetId: input.disbursementId,
+          details: JSON.stringify({ carrier: input.trackingCompany, trackingNumber: input.trackingNumber }),
+        });
 
         // Get user information to send tracking notification email
         try {

@@ -1,4 +1,4 @@
-import { desc, eq, or, and, sql } from "drizzle-orm";
+import { desc, eq, or, and, sql, ilike } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import type postgres from "postgres";
 import { 
@@ -18,7 +18,10 @@ import {
   InsertDisbursement,
   verificationDocuments,
   VerificationDocument,
-  InsertVerificationDocument
+  InsertVerificationDocument,
+  adminActivityLog,
+  AdminActivityLog,
+  InsertAdminActivityLog
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { COMPANY_INFO } from './_core/companyConfig';
@@ -1414,7 +1417,55 @@ export async function updateUserByOpenId(openId: string, data: Partial<{ passwor
   if (data.name !== undefined) updateData.name = data.name;
   if (data.email !== undefined) updateData.email = data.email;
   
-  await db.update(users)
+  return db.update(users)
     .set(updateData)
     .where(eq(users.openId, openId));
+}
+
+// ============================================
+// Admin Activity Log Queries
+// ============================================
+
+export async function logAdminActivity(data: InsertAdminActivityLog) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return db.insert(adminActivityLog).values(data);
+}
+
+export async function getAdminActivityLog(limit: number = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select()
+    .from(adminActivityLog)
+    .orderBy(desc(adminActivityLog.createdAt))
+    .limit(limit);
+}
+
+export async function searchLoanApplications(searchTerm: string, status?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const conditions = [];
+  const searchLower = `%${searchTerm.toLowerCase()}%`;
+  
+  // Search by email, phone, name, or tracking number
+  conditions.push(
+    or(
+      ilike(loanApplications.email, searchLower),
+      ilike(loanApplications.phone, searchLower),
+      ilike(loanApplications.fullName, searchLower),
+      ilike(loanApplications.trackingNumber, searchLower)
+    )
+  );
+  
+  if (status) {
+    conditions.push(eq(loanApplications.status, status as any));
+  }
+  
+  return db.select()
+    .from(loanApplications)
+    .where(and(...conditions))
+    .orderBy(desc(loanApplications.createdAt));
 }
