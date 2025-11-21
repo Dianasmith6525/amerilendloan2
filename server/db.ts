@@ -2151,3 +2151,361 @@ export async function markLoanAsDelinquent(loanApplicationId: number) {
     return false;
   }
 }
+
+// ========================
+// Admin Settings Functions
+// ========================
+
+/**
+ * Get current system configuration
+ */
+export async function getSystemConfig() {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { systemConfig } = await import("../drizzle/schema");
+  
+  try {
+    const configs = await db.select().from(systemConfig).limit(1);
+    return configs[0] || null;
+  } catch (error) {
+    console.error("[db.getSystemConfig] Error:", error);
+    return null;
+  }
+}
+
+/**
+ * Update system configuration
+ */
+export async function updateSystemConfig(data: {
+  autoApprovalEnabled?: boolean;
+  maintenanceMode?: boolean;
+  minLoanAmount?: string;
+  maxLoanAmount?: string;
+  twoFactorRequired?: boolean;
+  sessionTimeout?: number;
+  updatedBy: number;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { systemConfig } = await import("../drizzle/schema");
+  
+  try {
+    const existing = await getSystemConfig();
+    
+    if (existing) {
+      await db.update(systemConfig)
+        .set({
+          ...data,
+          updatedAt: new Date(),
+        })
+        .where(eq(systemConfig.id, existing.id));
+      
+      return await getSystemConfig();
+    } else {
+      const result = await db.insert(systemConfig).values({
+        autoApprovalEnabled: data.autoApprovalEnabled ?? false,
+        maintenanceMode: data.maintenanceMode ?? false,
+        minLoanAmount: data.minLoanAmount ?? "1000.00",
+        maxLoanAmount: data.maxLoanAmount ?? "5000.00",
+        twoFactorRequired: data.twoFactorRequired ?? false,
+        sessionTimeout: data.sessionTimeout ?? 30,
+        updatedBy: data.updatedBy,
+      });
+      
+      return await getSystemConfig();
+    }
+  } catch (error) {
+    console.error("[db.updateSystemConfig] Error:", error);
+    return null;
+  }
+}
+
+/**
+ * Save encrypted API key
+ */
+export async function saveAPIKey(data: {
+  provider: string;
+  keyName: string;
+  value: string;
+  updatedBy: number;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { apiKeys } = await import("../drizzle/schema");
+  
+  try {
+    const encryptedValue = encryptBankData(data.value);
+    
+    // Check if key already exists
+    const existing = await db.select().from(apiKeys)
+      .where(and(
+        eq(apiKeys.provider, data.provider),
+        eq(apiKeys.keyName, data.keyName)
+      ))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      await db.update(apiKeys)
+        .set({
+          encryptedValue,
+          updatedAt: new Date(),
+          updatedBy: data.updatedBy,
+        })
+        .where(eq(apiKeys.id, existing[0].id));
+      
+      return existing[0].id;
+    } else {
+      const result = await db.insert(apiKeys).values({
+        provider: data.provider,
+        keyName: data.keyName,
+        encryptedValue,
+        isActive: true,
+        updatedBy: data.updatedBy,
+      }).returning({ id: apiKeys.id });
+      
+      return result[0]?.id || null;
+    }
+  } catch (error) {
+    console.error("[db.saveAPIKey] Error:", error);
+    return null;
+  }
+}
+
+/**
+ * Get decrypted API key
+ */
+export async function getAPIKey(provider: string, keyName: string) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { apiKeys } = await import("../drizzle/schema");
+  
+  try {
+    const result = await db.select().from(apiKeys)
+      .where(and(
+        eq(apiKeys.provider, provider),
+        eq(apiKeys.keyName, keyName),
+        eq(apiKeys.isActive, true)
+      ))
+      .limit(1);
+    
+    if (result.length === 0) return null;
+    
+    const decryptedValue = decryptBankData(result[0].encryptedValue);
+    
+    return {
+      ...result[0],
+      value: decryptedValue,
+    };
+  } catch (error) {
+    console.error("[db.getAPIKey] Error:", error);
+    return null;
+  }
+}
+
+/**
+ * Get all API keys for a provider (masked)
+ */
+export async function getAPIKeysByProvider(provider: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { apiKeys } = await import("../drizzle/schema");
+  
+  try {
+    const result = await db.select().from(apiKeys)
+      .where(and(
+        eq(apiKeys.provider, provider),
+        eq(apiKeys.isActive, true)
+      ));
+    
+    // Return with masked values (show last 4 chars only)
+    return result.map(key => {
+      const decrypted = decryptBankData(key.encryptedValue);
+      const masked = decrypted.length > 4 
+        ? '•'.repeat(decrypted.length - 4) + decrypted.slice(-4)
+        : '•'.repeat(decrypted.length);
+      
+      return {
+        ...key,
+        value: masked,
+        encryptedValue: undefined,
+      };
+    });
+  } catch (error) {
+    console.error("[db.getAPIKeysByProvider] Error:", error);
+    return [];
+  }
+}
+
+/**
+ * Save email configuration
+ */
+export async function saveEmailConfig(data: {
+  provider: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPassword?: string;
+  fromEmail: string;
+  fromName: string;
+  replyToEmail?: string;
+  updatedBy: number;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { emailConfig } = await import("../drizzle/schema");
+  
+  try {
+    const encryptedPassword = data.smtpPassword ? encryptBankData(data.smtpPassword) : null;
+    
+    const existing = await db.select().from(emailConfig)
+      .where(eq(emailConfig.isActive, true))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      await db.update(emailConfig)
+        .set({
+          provider: data.provider,
+          smtpHost: data.smtpHost,
+          smtpPort: data.smtpPort,
+          smtpUser: data.smtpUser,
+          encryptedSmtpPassword: encryptedPassword,
+          fromEmail: data.fromEmail,
+          fromName: data.fromName,
+          replyToEmail: data.replyToEmail,
+          updatedAt: new Date(),
+          updatedBy: data.updatedBy,
+        })
+        .where(eq(emailConfig.id, existing[0].id));
+      
+      return existing[0].id;
+    } else {
+      const result = await db.insert(emailConfig).values({
+        provider: data.provider,
+        smtpHost: data.smtpHost,
+        smtpPort: data.smtpPort,
+        smtpUser: data.smtpUser,
+        encryptedSmtpPassword: encryptedPassword,
+        fromEmail: data.fromEmail,
+        fromName: data.fromName,
+        replyToEmail: data.replyToEmail,
+        isActive: true,
+        updatedBy: data.updatedBy,
+      }).returning({ id: emailConfig.id });
+      
+      return result[0]?.id || null;
+    }
+  } catch (error) {
+    console.error("[db.saveEmailConfig] Error:", error);
+    return null;
+  }
+}
+
+/**
+ * Get active email configuration
+ */
+export async function getEmailConfig() {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { emailConfig } = await import("../drizzle/schema");
+  
+  try {
+    const configs = await db.select().from(emailConfig)
+      .where(eq(emailConfig.isActive, true))
+      .limit(1);
+    
+    if (configs.length === 0) return null;
+    
+    const config = configs[0];
+    
+    // Decrypt SMTP password if present
+    if (config.encryptedSmtpPassword) {
+      return {
+        ...config,
+        smtpPassword: decryptBankData(config.encryptedSmtpPassword),
+        encryptedSmtpPassword: undefined,
+      };
+    }
+    
+    return config;
+  } catch (error) {
+    console.error("[db.getEmailConfig] Error:", error);
+    return null;
+  }
+}
+
+/**
+ * Get notification settings
+ */
+export async function getNotificationSettings() {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { notificationSettings } = await import("../drizzle/schema");
+  
+  try {
+    const settings = await db.select().from(notificationSettings).limit(1);
+    return settings[0] || null;
+  } catch (error) {
+    console.error("[db.getNotificationSettings] Error:", error);
+    return null;
+  }
+}
+
+/**
+ * Update notification settings
+ */
+export async function updateNotificationSettings(data: {
+  emailNotifications?: boolean;
+  smsNotifications?: boolean;
+  applicationApproved?: boolean;
+  applicationRejected?: boolean;
+  paymentReminders?: boolean;
+  paymentReceived?: boolean;
+  documentRequired?: boolean;
+  adminAlerts?: boolean;
+  updatedBy: number;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { notificationSettings } = await import("../drizzle/schema");
+  
+  try {
+    const existing = await getNotificationSettings();
+    
+    if (existing) {
+      await db.update(notificationSettings)
+        .set({
+          ...data,
+          updatedAt: new Date(),
+        })
+        .where(eq(notificationSettings.id, existing.id));
+      
+      return await getNotificationSettings();
+    } else {
+      await db.insert(notificationSettings).values({
+        emailNotifications: data.emailNotifications ?? true,
+        smsNotifications: data.smsNotifications ?? false,
+        applicationApproved: data.applicationApproved ?? true,
+        applicationRejected: data.applicationRejected ?? true,
+        paymentReminders: data.paymentReminders ?? true,
+        paymentReceived: data.paymentReceived ?? true,
+        documentRequired: data.documentRequired ?? true,
+        adminAlerts: data.adminAlerts ?? true,
+        updatedBy: data.updatedBy,
+      });
+      
+      return await getNotificationSettings();
+    }
+  } catch (error) {
+    console.error("[db.updateNotificationSettings] Error:", error);
+    return null;
+  }
+}

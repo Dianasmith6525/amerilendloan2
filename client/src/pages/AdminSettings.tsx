@@ -69,14 +69,43 @@ export default function AdminSettings() {
   const [percentageRate, setPercentageRate] = useState("2.00");
   const [fixedFeeAmount, setFixedFeeAmount] = useState("50.00");
 
-  // Email Settings States
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [smsNotifications, setSmsNotifications] = useState(true);
+  // System Configuration States
   const [autoApprovalEnabled, setAutoApprovalEnabled] = useState(false);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [minLoanAmount, setMinLoanAmount] = useState("500");
+  const [maxLoanAmount, setMaxLoanAmount] = useState("5000");
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false);
+  const [sessionTimeout, setSessionTimeout] = useState("30");
 
-  // Query fee config
+  // Notification Settings States
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [smsNotifications, setSmsNotifications] = useState(false);
+  const [appApprovedNotif, setAppApprovedNotif] = useState(true);
+  const [appRejectedNotif, setAppRejectedNotif] = useState(true);
+  const [paymentReminders, setPaymentReminders] = useState(true);
+  const [paymentReceived, setPaymentReceived] = useState(true);
+  const [documentRequired, setDocumentRequired] = useState(true);
+  const [adminAlerts, setAdminAlerts] = useState(true);
+
+  // Email Configuration States
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState("587");
+  const [smtpUser, setSmtpUser] = useState("");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [fromEmail, setFromEmail] = useState("noreply@amerilend.com");
+  const [fromName, setFromName] = useState("AmeriLend");
+
+  // API Keys States
+  const [authnetLoginId, setAuthnetLoginId] = useState("");
+  const [authnetTransKey, setAuthnetTransKey] = useState("");
+  const [sendgridKey, setSendgridKey] = useState("");
+  const [twilioSid, setTwilioSid] = useState("");
+
+  // Queries
   const { data: feeConfig } = trpc.feeConfig.getActive.useQuery();
+  const { data: systemConfig } = trpc.systemConfig.get.useQuery();
+  const { data: notificationSettings } = trpc.notificationConfig.get.useQuery();
+  const { data: emailConfig } = trpc.emailConfig.get.useQuery();
 
   // Update fee config mutation
   const updateFeeConfigMutation = trpc.feeConfig.adminUpdate.useMutation({
@@ -86,6 +115,49 @@ export default function AdminSettings() {
     },
     onError: (error) => {
       toast.error(error.message || "Failed to update fee configuration");
+    },
+  });
+
+  // System config mutation
+  const updateSystemConfigMutation = trpc.systemConfig.update.useMutation({
+    onSuccess: () => {
+      toast.success("System configuration updated successfully");
+      utils.systemConfig.get.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update system configuration");
+    },
+  });
+
+  // Notification settings mutation
+  const updateNotificationMutation = trpc.notificationConfig.update.useMutation({
+    onSuccess: () => {
+      toast.success("Notification settings updated successfully");
+      utils.notificationConfig.get.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update notification settings");
+    },
+  });
+
+  // Email config mutation
+  const saveEmailConfigMutation = trpc.emailConfig.save.useMutation({
+    onSuccess: () => {
+      toast.success("Email configuration saved successfully");
+      utils.emailConfig.get.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to save email configuration");
+    },
+  });
+
+  // API keys mutation
+  const saveAPIKeyMutation = trpc.apiKeys.save.useMutation({
+    onSuccess: () => {
+      toast.success("API keys saved successfully");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to save API keys");
     },
   });
 
@@ -101,6 +173,43 @@ export default function AdminSettings() {
       }
     }
   }, [feeConfig]);
+
+  // Load system config
+  useEffect(() => {
+    if (systemConfig) {
+      setAutoApprovalEnabled(systemConfig.autoApprovalEnabled || false);
+      setMaintenanceMode(systemConfig.maintenanceMode || false);
+      setMinLoanAmount(systemConfig.minLoanAmount || "500");
+      setMaxLoanAmount(systemConfig.maxLoanAmount || "5000");
+      setTwoFactorRequired(systemConfig.twoFactorRequired || false);
+      setSessionTimeout(String(systemConfig.sessionTimeout || 30));
+    }
+  }, [systemConfig]);
+
+  // Load notification settings
+  useEffect(() => {
+    if (notificationSettings) {
+      setEmailNotifications(notificationSettings.emailNotifications ?? true);
+      setSmsNotifications(notificationSettings.smsNotifications ?? false);
+      setAppApprovedNotif(notificationSettings.applicationApproved ?? true);
+      setAppRejectedNotif(notificationSettings.applicationRejected ?? true);
+      setPaymentReminders(notificationSettings.paymentReminders ?? true);
+      setPaymentReceived(notificationSettings.paymentReceived ?? true);
+      setDocumentRequired(notificationSettings.documentRequired ?? true);
+      setAdminAlerts(notificationSettings.adminAlerts ?? true);
+    }
+  }, [notificationSettings]);
+
+  // Load email config
+  useEffect(() => {
+    if (emailConfig) {
+      setSmtpHost(emailConfig.smtpHost || "");
+      setSmtpPort(String(emailConfig.smtpPort || 587));
+      setSmtpUser(emailConfig.smtpUser || "");
+      setFromEmail(emailConfig.fromEmail || "noreply@amerilend.com");
+      setFromName(emailConfig.fromName || "AmeriLend");
+    }
+  }, [emailConfig]);
 
   const handleUpdateFeeConfig = () => {
     if (feeMode === "percentage") {
@@ -124,6 +233,101 @@ export default function AdminSettings() {
         fixedFeeAmount: Math.round(amount * 100),
       });
     }
+  };
+
+  const handleUpdateSystemConfig = () => {
+    updateSystemConfigMutation.mutate({
+      autoApprovalEnabled,
+      maintenanceMode,
+      minLoanAmount,
+      maxLoanAmount,
+      twoFactorRequired,
+      sessionTimeout: parseInt(sessionTimeout),
+    });
+  };
+
+  const handleUpdateNotifications = () => {
+    updateNotificationMutation.mutate({
+      emailNotifications,
+      smsNotifications,
+      applicationApproved: appApprovedNotif,
+      applicationRejected: appRejectedNotif,
+      paymentReminders,
+      paymentReceived,
+      documentRequired,
+      adminAlerts,
+    });
+  };
+
+  const handleSaveEmailConfig = () => {
+    if (!fromEmail || !fromName) {
+      toast.error("From email and name are required");
+      return;
+    }
+    saveEmailConfigMutation.mutate({
+      provider: smtpHost ? "smtp" : "sendgrid",
+      smtpHost: smtpHost || undefined,
+      smtpPort: smtpPort ? parseInt(smtpPort) : undefined,
+      smtpUser: smtpUser || undefined,
+      smtpPassword: smtpPassword || undefined,
+      fromEmail,
+      fromName,
+    });
+  };
+
+  const handleSaveAPIKeys = () => {
+    const promises = [];
+    if (authnetLoginId) {
+      promises.push(
+        saveAPIKeyMutation.mutateAsync({
+          provider: "authorizenet",
+          keyName: "api_login_id",
+          value: authnetLoginId,
+        })
+      );
+    }
+    if (authnetTransKey) {
+      promises.push(
+        saveAPIKeyMutation.mutateAsync({
+          provider: "authorizenet",
+          keyName: "transaction_key",
+          value: authnetTransKey,
+        })
+      );
+    }
+    if (sendgridKey) {
+      promises.push(
+        saveAPIKeyMutation.mutateAsync({
+          provider: "sendgrid",
+          keyName: "api_key",
+          value: sendgridKey,
+        })
+      );
+    }
+    if (twilioSid) {
+      promises.push(
+        saveAPIKeyMutation.mutateAsync({
+          provider: "twilio",
+          keyName: "account_sid",
+          value: twilioSid,
+        })
+      );
+    }
+    if (promises.length === 0) {
+      toast.error("Please enter at least one API key");
+      return;
+    }
+    Promise.all(promises)
+      .then(() => {
+        toast.success("All API keys saved successfully");
+        setAuthnetLoginId("");
+        setAuthnetTransKey("");
+        setSendgridKey("");
+        setTwilioSid("");
+      })
+      .catch((error) => {
+        toast.error("Failed to save some API keys");
+      });
   };
 
   return (
@@ -321,7 +525,12 @@ export default function AdminSettings() {
                     />
                   </div>
 
-                  <Button className="w-full" onClick={() => toast.success("Notification settings updated")}>
+                  <Button 
+                    className="w-full" 
+                    onClick={handleUpdateNotifications}
+                    disabled={updateNotificationMutation.isPending}
+                  >
+                    {updateNotificationMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Save Notification Settings
                   </Button>
                 </CardContent>
@@ -340,22 +549,68 @@ export default function AdminSettings() {
                 <CardContent className="space-y-4">
                   <div>
                     <Label htmlFor="smtp-host">SMTP Host</Label>
-                    <Input id="smtp-host" placeholder="smtp.example.com" />
+                    <Input 
+                      id="smtp-host" 
+                      placeholder="smtp.example.com" 
+                      value={smtpHost}
+                      onChange={(e) => setSmtpHost(e.target.value)}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="smtp-port">SMTP Port</Label>
-                    <Input id="smtp-port" type="number" placeholder="587" />
+                    <Input 
+                      id="smtp-port" 
+                      type="number" 
+                      placeholder="587" 
+                      value={smtpPort}
+                      onChange={(e) => setSmtpPort(e.target.value)}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="smtp-user">SMTP Username</Label>
-                    <Input id="smtp-user" placeholder="noreply@amerilend.com" />
+                    <Input 
+                      id="smtp-user" 
+                      placeholder="noreply@amerilend.com" 
+                      value={smtpUser}
+                      onChange={(e) => setSmtpUser(e.target.value)}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="smtp-password">SMTP Password</Label>
-                    <Input id="smtp-password" type="password" placeholder="••••••••" />
+                    <Input 
+                      id="smtp-password" 
+                      type="password" 
+                      placeholder="••••••••" 
+                      value={smtpPassword}
+                      onChange={(e) => setSmtpPassword(e.target.value)}
+                    />
                   </div>
-                  <Button className="w-full" variant="outline">
-                    Test Email Configuration
+                  <div>
+                    <Label htmlFor="from-email">From Email</Label>
+                    <Input 
+                      id="from-email" 
+                      type="email"
+                      placeholder="noreply@amerilend.com" 
+                      value={fromEmail}
+                      onChange={(e) => setFromEmail(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="from-name">From Name</Label>
+                    <Input 
+                      id="from-name" 
+                      placeholder="AmeriLend" 
+                      value={fromName}
+                      onChange={(e) => setFromName(e.target.value)}
+                    />
+                  </div>
+                  <Button 
+                    className="w-full"
+                    onClick={handleSaveEmailConfig}
+                    disabled={saveEmailConfigMutation.isPending}
+                  >
+                    {saveEmailConfigMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Email Configuration
                   </Button>
                 </CardContent>
               </Card>
@@ -383,7 +638,11 @@ export default function AdminSettings() {
                         Require 2FA for admin users
                       </p>
                     </div>
-                    <Switch id="two-factor" />
+                    <Switch 
+                      id="two-factor" 
+                      checked={twoFactorRequired}
+                      onCheckedChange={setTwoFactorRequired}
+                    />
                   </div>
 
                   <div className="flex items-center justify-between">
@@ -393,20 +652,21 @@ export default function AdminSettings() {
                         Auto-logout after inactivity
                       </p>
                     </div>
-                    <Input id="session-timeout" type="number" className="w-24" defaultValue="30" />
+                    <Input 
+                      id="session-timeout" 
+                      type="number" 
+                      className="w-24" 
+                      value={sessionTimeout}
+                      onChange={(e) => setSessionTimeout(e.target.value)}
+                    />
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="password-expiry">Password Expiry (days)</Label>
-                      <p className="text-sm text-gray-500">
-                        Force password change after period
-                      </p>
-                    </div>
-                    <Input id="password-expiry" type="number" className="w-24" defaultValue="90" />
-                  </div>
-
-                  <Button className="w-full" onClick={() => toast.success("Security settings updated")}>
+                  <Button 
+                    className="w-full" 
+                    onClick={handleUpdateSystemConfig}
+                    disabled={updateSystemConfigMutation.isPending}
+                  >
+                    {updateSystemConfigMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Save Security Settings
                   </Button>
                 </CardContent>
@@ -425,22 +685,49 @@ export default function AdminSettings() {
                 <CardContent className="space-y-4">
                   <div>
                     <Label htmlFor="authnet-key">Authorize.Net API Login ID</Label>
-                    <Input id="authnet-key" placeholder="Enter API Login ID" />
+                    <Input 
+                      id="authnet-key" 
+                      placeholder="Enter API Login ID" 
+                      value={authnetLoginId}
+                      onChange={(e) => setAuthnetLoginId(e.target.value)}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="authnet-trans-key">Authorize.Net Transaction Key</Label>
-                    <Input id="authnet-trans-key" type="password" placeholder="Enter Transaction Key" />
+                    <Input 
+                      id="authnet-trans-key" 
+                      type="password" 
+                      placeholder="Enter Transaction Key" 
+                      value={authnetTransKey}
+                      onChange={(e) => setAuthnetTransKey(e.target.value)}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="sendgrid-key">SendGrid API Key</Label>
-                    <Input id="sendgrid-key" type="password" placeholder="Enter SendGrid API Key" />
+                    <Input 
+                      id="sendgrid-key" 
+                      type="password" 
+                      placeholder="Enter SendGrid API Key" 
+                      value={sendgridKey}
+                      onChange={(e) => setSendgridKey(e.target.value)}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="twilio-sid">Twilio Account SID</Label>
-                    <Input id="twilio-sid" placeholder="Enter Twilio SID" />
+                    <Input 
+                      id="twilio-sid" 
+                      placeholder="Enter Twilio SID" 
+                      value={twilioSid}
+                      onChange={(e) => setTwilioSid(e.target.value)}
+                    />
                   </div>
-                  <Button className="w-full" variant="outline">
-                    Update API Keys
+                  <Button 
+                    className="w-full"
+                    onClick={handleSaveAPIKeys}
+                    disabled={saveAPIKeyMutation.isPending}
+                  >
+                    {saveAPIKeyMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save API Keys
                   </Button>
                 </CardContent>
               </Card>
@@ -491,15 +778,30 @@ export default function AdminSettings() {
 
                   <div>
                     <Label htmlFor="max-loan-amount">Maximum Loan Amount ($)</Label>
-                    <Input id="max-loan-amount" type="number" defaultValue="5000" />
+                    <Input 
+                      id="max-loan-amount" 
+                      type="number" 
+                      value={maxLoanAmount}
+                      onChange={(e) => setMaxLoanAmount(e.target.value)}
+                    />
                   </div>
 
                   <div>
                     <Label htmlFor="min-loan-amount">Minimum Loan Amount ($)</Label>
-                    <Input id="min-loan-amount" type="number" defaultValue="500" />
+                    <Input 
+                      id="min-loan-amount" 
+                      type="number" 
+                      value={minLoanAmount}
+                      onChange={(e) => setMinLoanAmount(e.target.value)}
+                    />
                   </div>
 
-                  <Button className="w-full" onClick={() => toast.success("System settings updated")}>
+                  <Button 
+                    className="w-full" 
+                    onClick={handleUpdateSystemConfig}
+                    disabled={updateSystemConfigMutation.isPending}
+                  >
+                    {updateSystemConfigMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Save System Settings
                   </Button>
                 </CardContent>

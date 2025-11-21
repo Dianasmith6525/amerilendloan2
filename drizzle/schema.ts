@@ -1005,3 +1005,66 @@ export const userRewardsBalance = pgTable("userRewardsBalance", {
 
 export type UserRewardsBalance = typeof userRewardsBalance.$inferSelect;
 export type InsertUserRewardsBalance = typeof userRewardsBalance.$inferInsert;
+
+// Admin Settings Tables
+export const systemConfig = pgTable("system_config", {
+  id: serial("id").primaryKey(),
+  autoApprovalEnabled: boolean("auto_approval_enabled").default(false).notNull(),
+  maintenanceMode: boolean("maintenance_mode").default(false).notNull(),
+  minLoanAmount: varchar("min_loan_amount", { length: 20 }).default("1000.00").notNull(),
+  maxLoanAmount: varchar("max_loan_amount", { length: 20 }).default("5000.00").notNull(),
+  twoFactorRequired: boolean("two_factor_required").default(false).notNull(),
+  sessionTimeout: integer("session_timeout").default(30).notNull(), // minutes
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: integer("updated_by").references(() => users.id),
+});
+
+export const apiKeys = pgTable("api_keys", {
+  id: serial("id").primaryKey(),
+  provider: varchar("provider", { length: 50 }).notNull(), // 'authorizenet', 'sendgrid', 'twilio', 'coinbase'
+  keyName: varchar("key_name", { length: 100 }).notNull(),
+  encryptedValue: text("encrypted_value").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: integer("updated_by").references(() => users.id),
+});
+
+export const emailConfig = pgTable("email_config", {
+  id: serial("id").primaryKey(),
+  provider: varchar("provider", { length: 50 }).notNull(), // 'sendgrid', 'smtp'
+  smtpHost: varchar("smtp_host", { length: 255 }),
+  smtpPort: integer("smtp_port"),
+  smtpUser: varchar("smtp_user", { length: 255 }),
+  encryptedSmtpPassword: text("encrypted_smtp_password"),
+  fromEmail: varchar("from_email", { length: 255 }).notNull(),
+  fromName: varchar("from_name", { length: 255 }).notNull(),
+  replyToEmail: varchar("reply_to_email", { length: 255 }),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: integer("updated_by").references(() => users.id),
+});
+
+export const notificationSettings = pgTable("notification_settings", {
+  id: serial("id").primaryKey(),
+  emailNotifications: boolean("email_notifications").default(true).notNull(),
+  smsNotifications: boolean("sms_notifications").default(false).notNull(),
+  applicationApproved: boolean("application_approved").default(true).notNull(),
+  applicationRejected: boolean("application_rejected").default(true).notNull(),
+  paymentReminders: boolean("payment_reminders").default(true).notNull(),
+  paymentReceived: boolean("payment_received").default(true).notNull(),
+  documentRequired: boolean("document_required").default(true).notNull(),
+  adminAlerts: boolean("admin_alerts").default(true).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: integer("updated_by").references(() => users.id),
+});
+
+export type SelectSystemConfig = typeof systemConfig.$inferSelect;
+export type InsertSystemConfig = typeof systemConfig.$inferInsert;
+export type SelectApiKey = typeof apiKeys.$inferSelect;
+export type InsertApiKey = typeof apiKeys.$inferInsert;
+export type SelectEmailConfig = typeof emailConfig.$inferSelect;
+export type InsertEmailConfig = typeof emailConfig.$inferInsert;
+export type SelectNotificationSettings = typeof notificationSettings.$inferSelect;
+export type InsertNotificationSettings = typeof notificationSettings.$inferInsert;

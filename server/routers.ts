@@ -2360,6 +2360,244 @@ export const appRouter = router({
       }),
   }),
 
+  // System Configuration Router (admin only)
+  systemConfig: router({
+    // Get current system configuration
+    get: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      const config = await db.getSystemConfig();
+      if (!config) {
+        // Return default configuration
+        return {
+          autoApprovalEnabled: false,
+          maintenanceMode: false,
+          minLoanAmount: "1000.00",
+          maxLoanAmount: "5000.00",
+          twoFactorRequired: false,
+          sessionTimeout: 30,
+        };
+      }
+      return config;
+    }),
+
+    // Update system configuration
+    update: protectedProcedure
+      .input(z.object({
+        autoApprovalEnabled: z.boolean().optional(),
+        maintenanceMode: z.boolean().optional(),
+        minLoanAmount: z.string().regex(/^\d+(\.\d{2})?$/).optional(),
+        maxLoanAmount: z.string().regex(/^\d+(\.\d{2})?$/).optional(),
+        twoFactorRequired: z.boolean().optional(),
+        sessionTimeout: z.number().int().min(5).max(120).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const result = await db.updateSystemConfig({
+          ...input,
+          updatedBy: ctx.user.id,
+        });
+
+        if (!result) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to update system configuration"
+          });
+        }
+
+        // Log admin activity
+        await db.logAdminActivity({
+          adminId: ctx.user.id,
+          action: "update_system_config",
+          targetType: "system",
+          targetId: result.id,
+          details: JSON.stringify(input),
+        });
+
+        return { success: true, config: result };
+      }),
+  }),
+
+  // API Keys Router (admin only)
+  apiKeys: router({
+    // Get masked API keys for a provider
+    getByProvider: protectedProcedure
+      .input(z.object({
+        provider: z.enum(['authorizenet', 'sendgrid', 'twilio', 'coinbase']),
+      }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const keys = await db.getAPIKeysByProvider(input.provider);
+        return keys;
+      }),
+
+    // Save API key (encrypted)
+    save: protectedProcedure
+      .input(z.object({
+        provider: z.enum(['authorizenet', 'sendgrid', 'twilio', 'coinbase']),
+        keyName: z.string().min(1).max(100),
+        value: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const result = await db.saveAPIKey({
+          provider: input.provider,
+          keyName: input.keyName,
+          value: input.value,
+          updatedBy: ctx.user.id,
+        });
+
+        if (!result) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to save API key"
+          });
+        }
+
+        // Log admin activity
+        await db.logAdminActivity({
+          adminId: ctx.user.id,
+          action: "save_api_key",
+          targetType: "api_key",
+          targetId: result,
+          details: JSON.stringify({ provider: input.provider, keyName: input.keyName }),
+        });
+
+        return { success: true, id: result };
+      }),
+  }),
+
+  // Email Configuration Router (admin only)
+  emailConfig: router({
+    // Get active email configuration
+    get: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      const config = await db.getEmailConfig();
+      return config || null;
+    }),
+
+    // Save email configuration
+    save: protectedProcedure
+      .input(z.object({
+        provider: z.enum(['sendgrid', 'smtp']),
+        smtpHost: z.string().optional(),
+        smtpPort: z.number().int().optional(),
+        smtpUser: z.string().optional(),
+        smtpPassword: z.string().optional(),
+        fromEmail: z.string().email(),
+        fromName: z.string().min(1),
+        replyToEmail: z.string().email().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const result = await db.saveEmailConfig({
+          ...input,
+          updatedBy: ctx.user.id,
+        });
+
+        if (!result) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to save email configuration"
+          });
+        }
+
+        // Log admin activity
+        await db.logAdminActivity({
+          adminId: ctx.user.id,
+          action: "save_email_config",
+          targetType: "email_config",
+          targetId: result,
+          details: JSON.stringify({ provider: input.provider }),
+        });
+
+        return { success: true, id: result };
+      }),
+  }),
+
+  // Notification Settings Router (admin only)
+  notificationConfig: router({
+    // Get notification settings
+    get: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      const settings = await db.getNotificationSettings();
+      if (!settings) {
+        return {
+          emailNotifications: true,
+          smsNotifications: false,
+          applicationApproved: true,
+          applicationRejected: true,
+          paymentReminders: true,
+          paymentReceived: true,
+          documentRequired: true,
+          adminAlerts: true,
+        };
+      }
+      return settings;
+    }),
+
+    // Update notification settings
+    update: protectedProcedure
+      .input(z.object({
+        emailNotifications: z.boolean().optional(),
+        smsNotifications: z.boolean().optional(),
+        applicationApproved: z.boolean().optional(),
+        applicationRejected: z.boolean().optional(),
+        paymentReminders: z.boolean().optional(),
+        paymentReceived: z.boolean().optional(),
+        documentRequired: z.boolean().optional(),
+        adminAlerts: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const result = await db.updateNotificationSettings({
+          ...input,
+          updatedBy: ctx.user.id,
+        });
+
+        if (!result) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to update notification settings"
+          });
+        }
+
+        // Log admin activity
+        await db.logAdminActivity({
+          adminId: ctx.user.id,
+          action: "update_notification_settings",
+          targetType: "notification_settings",
+          targetId: result.id,
+          details: JSON.stringify(input),
+        });
+
+        return { success: true, settings: result };
+      }),
+  }),
+
   // Loan calculations router (with input type validation)
   loanCalculator: router({
     // Calculate monthly payment
