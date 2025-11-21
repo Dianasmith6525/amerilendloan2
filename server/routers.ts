@@ -4097,6 +4097,194 @@ export const appRouter = router({
 
         return { success: true };
       }),
+
+    // List all pending KYC verifications (admin only)
+    listPendingKYC: adminProcedure.query(async ({ ctx }) => {
+      try {
+        const documents = await db.getAllVerificationDocuments();
+        const pending = (documents || []).filter(doc => doc.status === "under_review");
+        
+        // Group by userId to get unique users with pending verification
+        const userMap = new Map();
+        for (const doc of pending) {
+          if (!userMap.has(doc.userId)) {
+            const user = await db.getUserById(doc.userId);
+            if (user) {
+              userMap.set(doc.userId, {
+                userId: doc.userId,
+                userName: user.name || "Unknown",
+                userEmail: user.email || "",
+                documents: [],
+                submittedAt: doc.createdAt,
+                status: "pending",
+              });
+            }
+          }
+          if (userMap.has(doc.userId)) {
+            userMap.get(doc.userId).documents.push({
+              id: doc.id,
+              type: doc.documentType,
+              fileName: doc.fileName || "Document",
+              uploadedAt: doc.createdAt,
+              status: doc.status,
+              notes: doc.adminNotes || "",
+            });
+          }
+        }
+        
+        return Array.from(userMap.values());
+      } catch (error) {
+        console.error("Error fetching pending KYC:", error);
+        return [];
+      }
+    }),
+
+    // Approve KYC verification (admin only)
+    approveKYC: adminProcedure
+      .input(z.object({
+        userId: z.number(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          // Update all pending documents for this user to approved
+          const documents = await db.getVerificationDocumentsByUserId(input.userId);
+          for (const doc of documents || []) {
+            if (doc.status === "under_review") {
+              await db.updateVerificationDocumentStatus(
+                doc.id, 
+                "approved",
+                ctx.user.id,
+                { adminNotes: input.notes }
+              );
+            }
+          }
+          
+          return { success: true, message: "KYC approved successfully" };
+        } catch (error) {
+          console.error("Error approving KYC:", error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to approve KYC",
+          });
+        }
+      }),
+
+    // Reject KYC verification (admin only)
+    rejectKYC: adminProcedure
+      .input(z.object({
+        userId: z.number(),
+        reason: z.string(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          // Update all pending documents for this user to rejected
+          const documents = await db.getVerificationDocumentsByUserId(input.userId);
+          for (const doc of documents || []) {
+            if (doc.status === "under_review") {
+              await db.updateVerificationDocumentStatus(
+                doc.id, 
+                "rejected",
+                ctx.user.id,
+                { adminNotes: input.reason }
+              );
+            }
+          }
+          
+          return { success: true, message: "KYC rejected successfully" };
+        } catch (error) {
+          console.error("Error rejecting KYC:", error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to reject KYC",
+          });
+        }
+      }),
+
+    // List support tickets (admin only) 
+    listSupportTickets: adminProcedure
+      .input(z.object({
+        status: z.enum(["open", "in_progress", "waiting_customer", "resolved", "closed", "all"]).optional(),
+      }))
+      .query(async ({ input, ctx }) => {
+        try {
+          const allTickets = await db.getAllSupportTickets() || [];
+          
+          if (input?.status && input.status !== "all") {
+            return allTickets.filter(ticket => ticket.status === input.status);
+          }
+          
+          return allTickets;
+        } catch (error) {
+          console.error("Error fetching support tickets:", error);
+          return [];
+        }
+      }),
+
+    // Get ticket detail with messages (admin only)
+    getSupportTicketDetail: adminProcedure
+      .input(z.object({ ticketId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        try {
+          const ticket = await db.getSupportTicket(input.ticketId);
+          const messages = await db.getTicketMessages(input.ticketId);
+          
+          return {
+            ...ticket,
+            messages: messages || [],
+          };
+        } catch (error) {
+          console.error("Error fetching ticket detail:", error);
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Ticket not found",
+          });
+        }
+      }),
+
+    // Add response to support ticket (admin only)
+    addSupportResponse: adminProcedure
+      .input(z.object({
+        ticketId: z.number(),
+        message: z.string().min(1),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          await db.addTicketMessage({
+            ticketId: input.ticketId,
+            message: input.message,
+            isFromUser: false,
+          });
+          
+          return { success: true, message: "Response added successfully" };
+        } catch (error) {
+          console.error("Error adding ticket response:", error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to add response",
+          });
+        }
+      }),
+
+    // Update ticket status (admin only)
+    updateTicketStatus: adminProcedure
+      .input(z.object({
+        ticketId: z.number(),
+        status: z.enum(["open", "in_progress", "waiting_customer", "resolved", "closed"]),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          await db.updateSupportTicketStatus(input.ticketId, input.status);
+          
+          return { success: true, message: "Ticket status updated" };
+        } catch (error) {
+          console.error("Error updating ticket status:", error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to update ticket status",
+          });
+        }
+      }),
   }),
 
   // Admin AI Assistant Router

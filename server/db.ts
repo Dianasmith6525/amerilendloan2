@@ -1826,6 +1826,36 @@ export async function addTicketMessage(data: any) {
   return db.insert(ticketMessages).values(data);
 }
 
+export async function getAllSupportTickets() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { supportTickets } = await import("../drizzle/schema");
+  return db.select().from(supportTickets)
+    .orderBy(desc(supportTickets.createdAt));
+}
+
+export async function getSupportTicket(ticketId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { supportTickets } = await import("../drizzle/schema");
+  const result = await db.select().from(supportTickets)
+    .where(eq(supportTickets.id, ticketId));
+  
+  return result[0] || null;
+}
+
+export async function updateSupportTicketStatus(ticketId: number, status: "open" | "in_progress" | "waiting_customer" | "resolved" | "closed") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { supportTickets } = await import("../drizzle/schema");
+  return db.update(supportTickets)
+    .set({ status })
+    .where(eq(supportTickets.id, ticketId));
+}
+
 // ============================================
 // PHASE 10: REFERRAL & REWARDS
 // ============================================
