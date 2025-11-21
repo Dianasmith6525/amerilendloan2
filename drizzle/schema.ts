@@ -587,3 +587,421 @@ export const adminActivityLog = pgTable("adminActivityLog", {
 
 export type AdminActivityLog = typeof adminActivityLog.$inferSelect;
 export type InsertAdminActivityLog = typeof adminActivityLog.$inferInsert;
+
+// ============================================
+// PHASE 1: DEVICE & SESSION MANAGEMENT
+// ============================================
+
+export const userDevicesEnum = pgEnum("device_type", ["mobile", "tablet", "desktop", "web"]);
+export const userDevices = pgTable("userDevices", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  deviceName: varchar("deviceName", { length: 255 }), // "Chrome on Windows", "Safari on iPhone"
+  deviceType: userDevicesEnum("deviceType").notNull(),
+  deviceId: varchar("deviceId", { length: 255 }).notNull(), // fingerprint or UUID
+  ipAddress: varchar("ipAddress", { length: 45 }).notNull(),
+  userAgent: text("userAgent").notNull(),
+  lastUsedAt: timestamp("lastUsedAt").defaultNow().notNull(),
+  isTrusted: boolean("isTrusted").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type UserDevice = typeof userDevices.$inferSelect;
+export type InsertUserDevice = typeof userDevices.$inferInsert;
+
+export const twoFactorMethodsEnum = pgEnum("twofa_method", ["sms", "email", "authenticator", "biometric"]);
+export const userTwoFactorAuth = pgTable("userTwoFactorAuth", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
+  method: twoFactorMethodsEnum("method").notNull(),
+  isEnabled: boolean("isEnabled").default(false).notNull(),
+  secret: varchar("secret", { length: 255 }), // for authenticator apps
+  backupCodes: text("backupCodes"), // JSON array of backup codes
+  verifiedAt: timestamp("verifiedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type UserTwoFactorAuth = typeof userTwoFactorAuth.$inferSelect;
+export type InsertUserTwoFactorAuth = typeof userTwoFactorAuth.$inferInsert;
+
+// ============================================
+// PHASE 2: USER PROFILE & PREFERENCES
+// ============================================
+
+export const notificationChannelEnum = pgEnum("notification_channel", ["email", "sms", "push", "in_app"]);
+export const userPreferences = pgTable("userPreferences", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
+  preferredLanguage: varchar("preferredLanguage", { length: 10 }).default("en").notNull(),
+  preferredCurrency: varchar("preferredCurrency", { length: 3 }).default("USD").notNull(),
+  timezone: varchar("timezone", { length: 50 }).default("UTC").notNull(),
+  notificationChannels: text("notificationChannels"), // JSON array of enabled channels
+  receiveMarketingEmails: boolean("receiveMarketingEmails").default(true).notNull(),
+  receiveSmsNotifications: boolean("receiveSmsNotifications").default(true).notNull(),
+  receivePushNotifications: boolean("receivePushNotifications").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type UserPreferences = typeof userPreferences.$inferSelect;
+export type InsertUserPreferences = typeof userPreferences.$inferInsert;
+
+// Multiple addresses support
+export const userAddresses = pgTable("userAddresses", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  type: varchar("type", { length: 50 }).notNull(), // "residential", "business", "mailing"
+  street: varchar("street", { length: 255 }).notNull(),
+  city: varchar("city", { length: 100 }).notNull(),
+  state: varchar("state", { length: 2 }).notNull(),
+  zipCode: varchar("zipCode", { length: 10 }).notNull(),
+  country: varchar("country", { length: 2 }).default("US").notNull(),
+  isVerified: boolean("isVerified").default(false).notNull(),
+  isPrimary: boolean("isPrimary").default(false).notNull(),
+  verifiedAt: timestamp("verifiedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type UserAddress = typeof userAddresses.$inferSelect;
+export type InsertUserAddress = typeof userAddresses.$inferInsert;
+
+// Bank accounts (Plaid/MX integration)
+export const bankAccounts = pgTable("bankAccounts", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  plaidAccountId: varchar("plaidAccountId", { length: 255 }), // from Plaid
+  bankName: varchar("bankName", { length: 255 }).notNull(),
+  accountType: varchar("accountType", { length: 20 }).notNull(), // "checking", "savings", "money_market"
+  accountNumber: varchar("accountNumber", { length: 50 }).notNull(), // masked display
+  routingNumber: varchar("routingNumber", { length: 20 }), 
+  accountHolderName: varchar("accountHolderName", { length: 255 }).notNull(),
+  isVerified: boolean("isVerified").default(false).notNull(),
+  isPrimary: boolean("isPrimary").default(false).notNull(),
+  verifiedAt: timestamp("verifiedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type BankAccount = typeof bankAccounts.$inferSelect;
+export type InsertBankAccount = typeof bankAccounts.$inferInsert;
+
+// ============================================
+// PHASE 3: KYC/IDENTITY VERIFICATION
+// ============================================
+
+export const kycStatusEnum = pgEnum("kyc_status", ["not_started", "pending", "approved", "rejected", "expired"]);
+export const documentTypeEnum = pgEnum("document_type", ["driver_license", "state_id", "passport", "tax_return", "w2", "pay_stub"]);
+
+export const kycVerification = pgTable("kycVerification", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
+  status: kycStatusEnum("status").default("not_started").notNull(),
+  
+  // SSN/ITIN verification
+  ssnVerified: boolean("ssnVerified").default(false).notNull(),
+  ssnVerifiedAt: timestamp("ssnVerifiedAt"),
+  itin: varchar("itin", { length: 20 }), // alternative to SSN
+  itinVerified: boolean("itinVerified").default(false).notNull(),
+  
+  // Address verification (USPS)
+  addressVerified: boolean("addressVerified").default(false).notNull(),
+  addressVerifiedAt: timestamp("addressVerifiedAt"),
+  
+  // Document verification
+  documentsUploaded: boolean("documentsUploaded").default(false).notNull(),
+  documentSubmittedAt: timestamp("documentSubmittedAt"),
+  
+  // Facial recognition / Liveness check
+  facialRecognitionCompleted: boolean("facialRecognitionCompleted").default(false).notNull(),
+  livenessCheckCompleted: boolean("livenessCheckCompleted").default(false).notNull(),
+  
+  // OFAC & sanctions check
+  ofacCheckCompleted: boolean("ofacCheckCompleted").default(false).notNull(),
+  ofacClear: boolean("ofacClear").default(true).notNull(),
+  
+  // Metadata
+  rejectionReason: text("rejectionReason"),
+  approvedAt: timestamp("approvedAt"),
+  expiresAt: timestamp("expiresAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type KycVerification = typeof kycVerification.$inferSelect;
+export type InsertKycVerification = typeof kycVerification.$inferInsert;
+
+// Document storage
+export const uploadedDocuments = pgTable("uploadedDocuments", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  documentType: documentTypeEnum("documentType").notNull(),
+  filename: varchar("filename", { length: 255 }).notNull(),
+  storagePath: varchar("storagePath", { length: 500 }).notNull(), // S3 or file path
+  fileSize: integer("fileSize").notNull(), // in bytes
+  mimeType: varchar("mimeType", { length: 50 }).notNull(),
+  status: varchar("status", { length: 50 }).default("pending").notNull(), // "pending", "verified", "rejected"
+  verifiedBy: integer("verifiedBy"), // admin user id
+  rejectionReason: text("rejectionReason"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  verifiedAt: timestamp("verifiedAt"),
+});
+
+export type UploadedDocument = typeof uploadedDocuments.$inferSelect;
+export type InsertUploadedDocument = typeof uploadedDocuments.$inferInsert;
+
+// ============================================
+// PHASE 4 & 5: LOAN OFFERS & APPLICATIONS EXTENDED
+// ============================================
+
+export const loanTypeExtendedEnum = pgEnum("loan_type_extended", [
+  "personal",
+  "installment",
+  "short_term",
+  "auto",
+  "secured",
+  "unsecured"
+]);
+
+export const loanOffers = pgTable("loanOffers", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  
+  // Offer details
+  loanType: loanTypeExtendedEnum("loanType").notNull(),
+  minAmount: integer("minAmount").notNull(), // in cents
+  maxAmount: integer("maxAmount").notNull(), // in cents
+  suggestedAmount: integer("suggestedAmount"), // in cents
+  
+  // APR & rates
+  aprMin: varchar("aprMin", { length: 10 }).notNull(), // stored as string "4.50"
+  aprMax: varchar("aprMax", { length: 10 }).notNull(), // stored as string "24.99"
+  estimatedApr: varchar("estimatedApr", { length: 10 }), // stored as string
+  
+  // Terms
+  minTerm: integer("minTerm").notNull(), // in months
+  maxTerm: integer("maxTerm").notNull(), // in months
+  recommendedTerm: integer("recommendedTerm"), // in months
+  
+  // Offer type
+  offerType: varchar("offerType", { length: 50 }).notNull(), // "pre_qualified", "pre_approved", "personalized"
+  softPullCompleted: boolean("softPullCompleted").default(false).notNull(),
+  
+  // Status & expiry
+  status: varchar("status", { length: 50 }).default("active").notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  acceptedAt: timestamp("acceptedAt"),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type LoanOffer = typeof loanOffers.$inferSelect;
+export type InsertLoanOffer = typeof loanOffers.$inferInsert;
+
+// ============================================
+// PHASE 6: LOAN REPAYMENT & PAYMENTS EXTENDED
+// ============================================
+
+export const paymentSchedules = pgTable("paymentSchedules", {
+  id: serial("id").primaryKey(),
+  loanApplicationId: integer("loanApplicationId").notNull(),
+  
+  // Schedule details
+  installmentNumber: integer("installmentNumber").notNull(),
+  dueDate: timestamp("dueDate").notNull(),
+  dueAmount: integer("dueAmount").notNull(), // in cents
+  principalAmount: integer("principalAmount").notNull(), // in cents
+  interestAmount: integer("interestAmount").notNull(), // in cents
+  
+  // Payment status
+  status: varchar("status", { length: 50 }).default("pending").notNull(), // "pending", "paid", "late", "waived"
+  paidAmount: integer("paidAmount").default(0).notNull(),
+  paidAt: timestamp("paidAt"),
+  
+  // Late fees
+  lateFeeApplied: boolean("lateFeeApplied").default(false).notNull(),
+  lateFeeAmount: integer("lateFeeAmount").default(0).notNull(),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type PaymentSchedule = typeof paymentSchedules.$inferSelect;
+export type InsertPaymentSchedule = typeof paymentSchedules.$inferInsert;
+
+export const autopaySettings = pgTable("autopaySettings", {
+  id: serial("id").primaryKey(),
+  loanApplicationId: integer("loanApplicationId").notNull().unique(),
+  
+  isEnabled: boolean("isEnabled").default(false).notNull(),
+  paymentMethod: paymentMethodEnum("paymentMethod"), // "card" or from bank account
+  bankAccountId: integer("bankAccountId"), // if using bank account
+  
+  // Auto-retry on failure
+  autoRetry: boolean("autoRetry").default(true).notNull(),
+  maxRetries: integer("maxRetries").default(3).notNull(),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type AutopaySettings = typeof autopaySettings.$inferSelect;
+export type InsertAutopaySettings = typeof autopaySettings.$inferInsert;
+
+// ============================================
+// PHASE 7: DELINQUENCY & COLLECTIONS
+// ============================================
+
+export const delinquencyStatusEnum = pgEnum("delinquency_status", ["current", "1_to_30_days", "31_to_60_days", "61_to_90_days", "90_plus_days", "charged_off"]);
+
+export const delinquencyRecords = pgTable("delinquencyRecords", {
+  id: serial("id").primaryKey(),
+  loanApplicationId: integer("loanApplicationId").notNull(),
+  
+  status: delinquencyStatusEnum("status").notNull(),
+  daysOverdue: integer("daysOverdue").default(0).notNull(),
+  totalOutstanding: integer("totalOutstanding").notNull(), // in cents
+  lastPaymentDate: timestamp("lastPaymentDate"),
+  
+  // Collections
+  collectionAttempts: integer("collectionAttempts").default(0).notNull(),
+  lastCollectionAttempt: timestamp("lastCollectionAttempt"),
+  
+  // Hardship programs
+  hardshipProgram: varchar("hardshipProgram", { length: 100 }), // "forbearance", "extension", "modification"
+  hardshipStartDate: timestamp("hardshipStartDate"),
+  hardshipEndDate: timestamp("hardshipEndDate"),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type DelinquencyRecord = typeof delinquencyRecords.$inferSelect;
+export type InsertDelinquencyRecord = typeof delinquencyRecords.$inferInsert;
+
+// ============================================
+// PHASE 9: NOTIFICATIONS & SUPPORT
+// ============================================
+
+export const notificationTypeEnum = pgEnum("notification_type", [
+  "payment_reminder",
+  "payment_due",
+  "payment_confirmation",
+  "payment_failure",
+  "application_status",
+  "document_request",
+  "approval_notice",
+  "denial_notice",
+  "delinquency_notice",
+  "tila_disclosure",
+  "support_response"
+]);
+
+export const userNotifications = pgTable("userNotifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  type: notificationTypeEnum("type").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  relatedLoanId: integer("relatedLoanId"),
+  actionUrl: varchar("actionUrl", { length: 500 }),
+  
+  // Delivery status
+  sentViaEmail: boolean("sentViaEmail").default(false).notNull(),
+  sentViaSms: boolean("sentViaSms").default(false).notNull(),
+  sentViaPush: boolean("sentViaPush").default(false).notNull(),
+  
+  // Read status
+  isRead: boolean("isRead").default(false).notNull(),
+  readAt: timestamp("readAt"),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type UserNotification = typeof userNotifications.$inferSelect;
+export type InsertUserNotification = typeof userNotifications.$inferInsert;
+
+// Support tickets
+export const supportTicketStatusEnum = pgEnum("ticket_status", ["open", "in_progress", "waiting_customer", "resolved", "closed"]);
+
+export const supportTickets = pgTable("supportTickets", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  subject: varchar("subject", { length: 255 }).notNull(),
+  description: text("description").notNull(),
+  status: supportTicketStatusEnum("status").default("open").notNull(),
+  priority: varchar("priority", { length: 20 }).default("normal").notNull(), // "low", "normal", "high", "urgent"
+  category: varchar("category", { length: 100 }), // "payment", "application", "verification", "account"
+  
+  // Assignment
+  assignedTo: integer("assignedTo"), // admin user id
+  
+  // Timestamps
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  resolvedAt: timestamp("resolvedAt"),
+});
+
+export type SupportTicket = typeof supportTickets.$inferSelect;
+export type InsertSupportTicket = typeof supportTickets.$inferInsert;
+
+// Ticket messages
+export const ticketMessages = pgTable("ticketMessages", {
+  id: serial("id").primaryKey(),
+  ticketId: integer("ticketId").notNull(),
+  userId: integer("userId").notNull(), // can be user or admin
+  message: text("message").notNull(),
+  attachmentUrl: varchar("attachmentUrl", { length: 500 }),
+  
+  isFromAdmin: boolean("isFromAdmin").default(false).notNull(),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TicketMessage = typeof ticketMessages.$inferSelect;
+export type InsertTicketMessage = typeof ticketMessages.$inferInsert;
+
+// ============================================
+// PHASE 10: REFERRAL & REWARDS PROGRAM
+// ============================================
+
+export const referralProgram = pgTable("referralProgram", {
+  id: serial("id").primaryKey(),
+  referrerId: integer("referrerId").notNull(),
+  referredUserId: integer("referredUserId"),
+  
+  referralCode: varchar("referralCode", { length: 50 }).notNull().unique(),
+  referralLink: varchar("referralLink", { length: 500 }).notNull().unique(),
+  
+  status: varchar("status", { length: 50 }).default("pending").notNull(), // "pending", "completed", "expired"
+  completedAt: timestamp("completedAt"),
+  
+  // Rewards
+  referrerBonus: integer("referrerBonus"), // in cents
+  referredBonus: integer("referredBonus"), // in cents
+  bonusType: varchar("bonusType", { length: 50 }).default("credit").notNull(), // "credit", "cashback"
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  expiresAt: timestamp("expiresAt"),
+});
+
+export type ReferralProgram = typeof referralProgram.$inferSelect;
+export type InsertReferralProgram = typeof referralProgram.$inferInsert;
+
+// User account credits/rewards balance
+export const userRewardsBalance = pgTable("userRewardsBalance", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
+  
+  creditBalance: integer("creditBalance").default(0).notNull(), // in cents
+  cashbackBalance: integer("cashbackBalance").default(0).notNull(), // in cents
+  
+  totalEarned: integer("totalEarned").default(0).notNull(),
+  totalRedeemed: integer("totalRedeemed").default(0).notNull(),
+  
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type UserRewardsBalance = typeof userRewardsBalance.$inferSelect;
+export type InsertUserRewardsBalance = typeof userRewardsBalance.$inferInsert;
