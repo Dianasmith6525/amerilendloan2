@@ -2893,6 +2893,31 @@ export const appRouter = router({
         const amount = await convertUSDToCrypto(input.usdCents, input.currency);
         return { amount };
       }),
+
+    // Get crypto wallet address for payment
+    getCryptoAddress: publicProcedure
+      .input(z.object({
+        currency: z.enum(["BTC", "ETH", "USDT", "USDC"]),
+      }))
+      .query(({ input }) => {
+        const walletAddresses: Record<string, string> = {
+          BTC: process.env.CRYPTO_BTC_ADDRESS || "",
+          ETH: process.env.CRYPTO_ETH_ADDRESS || "",
+          USDT: process.env.CRYPTO_USDT_ADDRESS || process.env.CRYPTO_ETH_ADDRESS || "",
+          USDC: process.env.CRYPTO_USDC_ADDRESS || process.env.CRYPTO_ETH_ADDRESS || "",
+        };
+        
+        const address = walletAddresses[input.currency];
+        if (!address) {
+          throw new TRPCError({ 
+            code: "INTERNAL_SERVER_ERROR", 
+            message: `Wallet address not configured for ${input.currency}` 
+          });
+        }
+        
+        return { address };
+      }),
+
     // Create payment intent for processing fee (supports multiple payment methods)
     createIntent: protectedProcedure
       .input(z.object({

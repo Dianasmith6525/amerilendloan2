@@ -55,6 +55,11 @@ export default function PaymentPage() {
     { enabled: !!application?.processingFeeAmount && paymentMethod === "crypto" }
   );
 
+  const { data: cryptoAddressData } = trpc.payments.getCryptoAddress.useQuery(
+    { currency: selectedCrypto },
+    { enabled: paymentMethod === "crypto" }
+  );
+
   const createPaymentMutation = trpc.payments.createIntent.useMutation({
     onSuccess: (data) => {
       setPaymentComplete(true);
@@ -82,15 +87,13 @@ export default function PaymentPage() {
     }
   }, [paymentMethod, authorizeNetConfig]);
 
-  // Generate crypto payment address when switching to crypto
+  // Update crypto address when switching currency or when address data loads
   useEffect(() => {
-    if (paymentMethod === "crypto" && application?.processingFeeAmount) {
-      // Generate deterministic address based on application ID
-      const mockAddress = generateCryptoAddress(selectedCrypto, applicationId!);
-      setCryptoAddress(mockAddress);
+    if (paymentMethod === "crypto" && cryptoAddressData?.address) {
+      setCryptoAddress(cryptoAddressData.address);
       setCryptoAmount(cryptoConversion?.amount || "0");
     }
-  }, [paymentMethod, selectedCrypto, application, applicationId, cryptoConversion]);
+  }, [paymentMethod, selectedCrypto, cryptoAddressData, cryptoConversion]);
 
   const handleCardPayment = async () => {
     if (!applicationId || !authorizeNetConfig) return;
@@ -168,24 +171,6 @@ export default function PaymentPage() {
     toast.success("Address copied to clipboard");
     setTimeout(() => setAddressCopied(false), 2000);
   };
-
-  function generateCryptoAddress(currency: string, appId: number): string {
-    const prefixes: Record<string, string> = {
-      BTC: "bc1q",
-      ETH: "0x",
-      USDT: "0x",
-      USDC: "0x",
-    };
-    const length = currency === "BTC" ? 42 : 40;
-    const chars = "0123456789abcdef";
-    let address = prefixes[currency] || "0x";
-    const seed = appId.toString();
-    for (let i = 0; i < length - address.length; i++) {
-      const index = (parseInt(seed + i) % chars.length);
-      address += chars[index];
-    }
-    return address;
-  }
 
   if (authLoading || isLoading) {
     return (
