@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { APP_LOGO, getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Settings, DollarSign, CheckCircle, XCircle, Send, LogOut, Users, FileText, BarChart3, Package } from "lucide-react";
+import { Loader2, Settings, DollarSign, CheckCircle, XCircle, Send, LogOut, Users, FileText, BarChart3, Package, TrendingUp, Clock, AlertCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
@@ -103,6 +103,7 @@ export default function AdminDashboard() {
   // Query data
   const { data: applications, isLoading } = trpc.loans.adminList.useQuery();
   const { data: disbursements, isLoading: disbursementsLoading } = trpc.disbursements.adminList.useQuery();
+  const { data: stats, isLoading: statsLoading } = trpc.loans.adminStatistics.useQuery();
   const { data: feeConfig } = trpc.feeConfig.getActive.useQuery();
 
   // Mutations
@@ -246,14 +247,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Calculate stats
-  const stats = {
-    total: applications?.length || 0,
-    pending: applications?.filter(a => a.status === "pending" || a.status === "under_review").length || 0,
-    approved: applications?.filter(a => a.status === "approved").length || 0,
-    disbursed: applications?.filter(a => a.status === "disbursed").length || 0,
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50">
       {/* Header */}
@@ -290,56 +283,231 @@ export default function AdminDashboard() {
           <p className="text-gray-600 mt-2">Manage loan applications, verify documents, and configure settings</p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Applications</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-                </div>
-                <Users className="h-8 w-8 text-blue-500 opacity-20" />
-              </div>
-            </CardContent>
-          </Card>
+        {/* Real-Time Statistics */}
+        {statsLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+          </div>
+        ) : stats ? (
+          <>
+            {/* Row 1: Application Counts */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Total Applications</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.totalApplications}</p>
+                    </div>
+                    <Users className="h-8 w-8 text-blue-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Pending Review</p>
-                  <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
-                </div>
-                <FileText className="h-8 w-8 text-yellow-500 opacity-20" />
-              </div>
-            </CardContent>
-          </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Pending Review</p>
+                      <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+                    </div>
+                    <FileText className="h-8 w-8 text-yellow-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Approved</p>
-                  <p className="text-2xl font-bold text-green-600">{stats.approved}</p>
-                </div>
-                <CheckCircle className="h-8 w-8 text-green-500 opacity-20" />
-              </div>
-            </CardContent>
-          </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Approved</p>
+                      <p className="text-2xl font-bold text-green-600">{stats.approved}</p>
+                    </div>
+                    <CheckCircle className="h-8 w-8 text-green-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Disbursed</p>
-                  <p className="text-2xl font-bold text-purple-600">{stats.disbursed}</p>
-                </div>
-                <BarChart3 className="h-8 w-8 text-purple-500 opacity-20" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Disbursed</p>
+                      <p className="text-2xl font-bold text-purple-600">{stats.disbursed}</p>
+                    </div>
+                    <BarChart3 className="h-8 w-8 text-purple-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Row 2: Financial Metrics */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Total Requested</p>
+                      <p className="text-2xl font-bold text-gray-900">${(stats.totalRequested / 100).toLocaleString()}</p>
+                    </div>
+                    <DollarSign className="h-8 w-8 text-orange-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Total Approved</p>
+                      <p className="text-2xl font-bold text-green-600">${(stats.totalApproved / 100).toLocaleString()}</p>
+                    </div>
+                    <CheckCircle className="h-8 w-8 text-green-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Total Disbursed</p>
+                      <p className="text-2xl font-bold text-purple-600">${(stats.totalDisbursed / 100).toLocaleString()}</p>
+                    </div>
+                    <Send className="h-8 w-8 text-purple-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Fees Collected</p>
+                      <p className="text-2xl font-bold text-blue-600">${(stats.totalFeesCollected / 100).toFixed(2)}</p>
+                    </div>
+                    <DollarSign className="h-8 w-8 text-blue-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Row 3: Average Metrics & Rates */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Avg Loan Request</p>
+                      <p className="text-2xl font-bold text-gray-900">${(stats.averageLoanAmount / 100).toLocaleString()}</p>
+                    </div>
+                    <BarChart3 className="h-8 w-8 text-indigo-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Avg Approved Amount</p>
+                      <p className="text-2xl font-bold text-green-600">${(stats.averageApprovedAmount / 100).toLocaleString()}</p>
+                    </div>
+                    <TrendingUp className="h-8 w-8 text-green-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Approval Rate</p>
+                      <p className="text-2xl font-bold text-blue-600">{stats.approvalRate}%</p>
+                    </div>
+                    <CheckCircle className="h-8 w-8 text-blue-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Avg Processing Time</p>
+                      <p className="text-2xl font-bold text-amber-600">{stats.averageProcessingTime} days</p>
+                    </div>
+                    <Clock className="h-8 w-8 text-amber-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Row 4: Check Tracking Status */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Total Disbursements</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.totalDisbursements}</p>
+                    </div>
+                    <Package className="h-8 w-8 text-gray-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Tracking Added</p>
+                      <p className="text-2xl font-bold text-green-600">{stats.disbursementsWithTracking}</p>
+                    </div>
+                    <CheckCircle className="h-8 w-8 text-green-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Tracking Pending</p>
+                      <p className="text-2xl font-bold text-yellow-600">{stats.disbursementsPendingTracking}</p>
+                    </div>
+                    <AlertCircle className="h-8 w-8 text-yellow-500 opacity-20" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Status breakdown */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-gray-900">Status Breakdown</p>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Fee Pending:</span>
+                        <span className="font-semibold">{stats.fee_pending}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Fee Paid:</span>
+                        <span className="font-semibold">{stats.fee_paid}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Rejected:</span>
+                        <span className="font-semibold">{stats.rejected}</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        ) : null}
 
         {/* Tabs */}
         <Tabs defaultValue="applications" className="space-y-6">

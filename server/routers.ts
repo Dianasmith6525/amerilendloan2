@@ -1573,6 +1573,61 @@ export const appRouter = router({
       return db.getAllLoanApplications();
     }),
 
+    // Admin: Get loan statistics
+    adminStatistics: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      const applications = await db.getAllLoanApplications();
+      const disbursements = await db.getAllDisbursements();
+
+      // Calculate statistics
+      const stats = {
+        // Application counts
+        totalApplications: applications.length,
+        pending: applications.filter(a => a.status === "pending" || a.status === "under_review").length,
+        approved: applications.filter(a => a.status === "approved").length,
+        fee_pending: applications.filter(a => a.status === "fee_pending").length,
+        fee_paid: applications.filter(a => a.status === "fee_paid").length,
+        disbursed: applications.filter(a => a.status === "disbursed").length,
+        rejected: applications.filter(a => a.status === "rejected").length,
+
+        // Financial metrics (in cents)
+        totalRequested: applications.reduce((sum, a) => sum + a.requestedAmount, 0),
+        totalApproved: applications.reduce((sum, a) => sum + (a.approvedAmount || 0), 0),
+        totalDisbursed: applications.filter(a => a.status === "disbursed").reduce((sum, a) => sum + (a.approvedAmount || 0), 0),
+        totalFeesCollected: applications.filter(a => a.status === "fee_paid").reduce((sum, a) => sum + (a.processingFeeAmount || 0), 0),
+        averageLoanAmount: applications.length > 0 ? Math.round(applications.reduce((sum, a) => sum + a.requestedAmount, 0) / applications.length) : 0,
+        averageApprovedAmount: applications.filter(a => a.approvedAmount).length > 0 
+          ? Math.round(applications.filter(a => a.approvedAmount).reduce((sum, a) => sum + (a.approvedAmount || 0), 0) / applications.filter(a => a.approvedAmount).length)
+          : 0,
+
+        // Approval rate
+        approvalRate: applications.length > 0 
+          ? Math.round((applications.filter(a => a.status === "approved" || a.status === "fee_pending" || a.status === "fee_paid" || a.status === "disbursed").length / applications.length) * 10000) / 100
+          : 0,
+
+        // Disbursement tracking
+        totalDisbursements: disbursements.length,
+        disbursementsWithTracking: disbursements.filter(d => d.trackingNumber).length,
+        disbursementsPendingTracking: disbursements.filter(d => !d.trackingNumber).length,
+
+        // Average processing time (in days)
+        averageProcessingTime: applications.length > 0
+          ? Math.round(
+              applications.reduce((sum, a) => {
+                const createdDate = new Date(a.createdAt).getTime();
+                const statusDate = a.approvedAt ? new Date(a.approvedAt).getTime() : Date.now();
+                return sum + (statusDate - createdDate) / (1000 * 60 * 60 * 24);
+              }, 0) / applications.length
+            )
+          : 0,
+      };
+
+      return stats;
+    }),
+
     // Admin: Approve loan application
     adminApprove: protectedProcedure
       .input(z.object({
