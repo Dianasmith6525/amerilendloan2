@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { X, Send, Loader2 } from "lucide-react";
+import { X, Send, Loader2, Phone, Mail, User } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 interface Message {
@@ -17,6 +17,7 @@ export default function AiSupportWidget({ isAuthenticated = false }: AiSupportWi
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [showHumanSupport, setShowHumanSupport] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const chatMutation = trpc.system.chatWithAi.useMutation();
@@ -169,36 +170,95 @@ export default function AiSupportWidget({ isAuthenticated = false }: AiSupportWi
 
             {/* Input Area */}
             <div className="p-3 sm:p-4 border-t bg-white">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSend();
-                }}
-                className="flex gap-2"
-              >
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Type your message..."
-                  className="flex-1 px-3 py-2 sm:px-4 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0033A0] focus:border-transparent"
-                  disabled={chatMutation.isPending}
-                />
-                <Button
-                  type="submit"
-                  disabled={!input.trim() || chatMutation.isPending}
-                  className="bg-[#0033A0] hover:bg-[#002080] text-white p-2 sm:px-4"
-                >
-                  {chatMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4 sm:w-5 sm:h-5" />
-                  )}
-                </Button>
-              </form>
-              <p className="text-xs text-gray-500 mt-2 text-center">
-                AI responses are helpful but may not always be accurate
-              </p>
+              {showHumanSupport ? (
+                /* Human Support Options */
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-gray-800 text-sm sm:text-base flex items-center gap-2">
+                      <User className="w-4 h-4 text-[#0033A0]" />
+                      Talk to Human Agent
+                    </h3>
+                    <button
+                      onClick={() => setShowHumanSupport(false)}
+                      className="text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      Back to AI
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <a
+                      href="tel:+19452121609"
+                      className="flex items-center gap-3 p-3 bg-[#0033A0] hover:bg-[#002080] text-white rounded-lg transition-colors"
+                    >
+                      <Phone className="w-5 h-5" />
+                      <div className="text-left">
+                        <p className="font-semibold text-sm">Call Us</p>
+                        <p className="text-xs opacity-90">(945) 212-1609</p>
+                      </div>
+                    </a>
+                    
+                    <a
+                      href="mailto:support@amerilendloan.com"
+                      className="flex items-center gap-3 p-3 bg-white hover:bg-gray-50 text-gray-800 border border-gray-300 rounded-lg transition-colors"
+                    >
+                      <Mail className="w-5 h-5 text-[#0033A0]" />
+                      <div className="text-left">
+                        <p className="font-semibold text-sm">Email Us</p>
+                        <p className="text-xs text-gray-600">support@amerilendloan.com</p>
+                      </div>
+                    </a>
+                  </div>
+                  
+                  <p className="text-xs text-gray-500 text-center mt-3">
+                    Available Monday-Friday, 9 AM - 6 PM EST
+                  </p>
+                </div>
+              ) : (
+                /* AI Chat Input */
+                <>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSend();
+                    }}
+                    className="flex gap-2"
+                  >
+                    <input
+                      type="text"
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      placeholder="Type your message..."
+                      className="flex-1 px-3 py-2 sm:px-4 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0033A0] focus:border-transparent"
+                      disabled={chatMutation.isPending}
+                    />
+                    <Button
+                      type="submit"
+                      disabled={!input.trim() || chatMutation.isPending}
+                      className="bg-[#0033A0] hover:bg-[#002080] text-white p-2 sm:px-4"
+                    >
+                      {chatMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4 sm:w-5 sm:h-5" />
+                      )}
+                    </Button>
+                  </form>
+                  
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="text-xs text-gray-500">
+                      AI responses may not always be accurate
+                    </p>
+                    <button
+                      onClick={() => setShowHumanSupport(true)}
+                      className="text-xs text-[#0033A0] hover:text-[#002080] font-medium flex items-center gap-1"
+                    >
+                      <User className="w-3 h-3" />
+                      Talk to Agent
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </Card>
         </div>
