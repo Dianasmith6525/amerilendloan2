@@ -21,7 +21,13 @@ import {
   InsertVerificationDocument,
   adminActivityLog,
   AdminActivityLog,
-  InsertAdminActivityLog
+  InsertAdminActivityLog,
+  supportTickets,
+  SupportTicket,
+  InsertSupportTicket,
+  ticketMessages,
+  TicketMessage,
+  InsertTicketMessage
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { COMPANY_INFO } from './_core/companyConfig';
@@ -1263,62 +1269,6 @@ export async function get2FASettings(userId: number) {
   return settings[0] || null;
 }
 
-export async function enable2FA(userId: number, data: {
-  method: string;
-  totpSecret?: string | null;
-  phoneNumber?: string;
-  backupCodes?: string;
-}) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  const { twoFactorAuthentication } = await import("../drizzle/schema");
-  
-  const existing = await get2FASettings(userId);
-  
-  if (!existing) {
-    await db.insert(twoFactorAuthentication).values({
-      userId,
-      enabled: true,
-      method: data.method as any,
-      totpSecret: data.totpSecret,
-      totpEnabled: data.method === 'totp',
-      phoneNumber: data.phoneNumber,
-      smsEnabled: data.method === 'sms',
-      backupCodes: data.backupCodes,
-    });
-  } else {
-    await db.update(twoFactorAuthentication)
-      .set({
-        enabled: true,
-        method: data.method as any,
-        totpSecret: data.totpSecret,
-        totpEnabled: data.method === 'totp',
-        phoneNumber: data.phoneNumber,
-        smsEnabled: data.method === 'sms',
-        backupCodes: data.backupCodes,
-        updatedAt: new Date(),
-      })
-      .where(eq(twoFactorAuthentication.userId, userId));
-  }
-}
-
-export async function disable2FA(userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  const { twoFactorAuthentication } = await import("../drizzle/schema");
-  
-  await db.update(twoFactorAuthentication)
-    .set({
-      enabled: false,
-      totpEnabled: false,
-      smsEnabled: false,
-      updatedAt: new Date(),
-    })
-    .where(eq(twoFactorAuthentication.userId, userId));
-}
-
 // ============= Trusted Devices =============
 
 export async function getTrustedDevices(userId: number) {
@@ -1859,73 +1809,6 @@ export async function markNotificationAsRead(notificationId: number) {
   return db.update(userNotifications)
     .set({ isRead: true, readAt: new Date() })
     .where(eq(userNotifications.id, notificationId));
-}
-
-// Support tickets
-export async function createSupportTicket(data: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  const { supportTickets } = await import("../drizzle/schema");
-  return db.insert(supportTickets).values(data);
-}
-
-export async function getUserSupportTickets(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  
-  const { supportTickets } = await import("../drizzle/schema");
-  return db.select().from(supportTickets)
-    .where(eq(supportTickets.userId, userId))
-    .orderBy(desc(supportTickets.createdAt));
-}
-
-export async function getTicketMessages(ticketId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  
-  const { ticketMessages } = await import("../drizzle/schema");
-  return db.select().from(ticketMessages)
-    .where(eq(ticketMessages.ticketId, ticketId))
-    .orderBy((t) => t.createdAt);
-}
-
-export async function addTicketMessage(data: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  const { ticketMessages } = await import("../drizzle/schema");
-  return db.insert(ticketMessages).values(data);
-}
-
-export async function getAllSupportTickets() {
-  const db = await getDb();
-  if (!db) return [];
-  
-  const { supportTickets } = await import("../drizzle/schema");
-  return db.select().from(supportTickets)
-    .orderBy(desc(supportTickets.createdAt));
-}
-
-export async function getSupportTicket(ticketId: number) {
-  const db = await getDb();
-  if (!db) return null;
-  
-  const { supportTickets } = await import("../drizzle/schema");
-  const result = await db.select().from(supportTickets)
-    .where(eq(supportTickets.id, ticketId));
-  
-  return result[0] || null;
-}
-
-export async function updateSupportTicketStatus(ticketId: number, status: "open" | "in_progress" | "waiting_customer" | "resolved" | "closed") {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  const { supportTickets } = await import("../drizzle/schema");
-  return db.update(supportTickets)
-    .set({ status })
-    .where(eq(supportTickets.id, ticketId));
 }
 
 // ============================================
@@ -2606,4 +2489,427 @@ export async function updateCryptoWalletSettings(data: {
     console.error("[db.updateCryptoWalletSettings] Error:", error);
     return null;
   }
+}
+
+// ============================================================================
+// Support Tickets Functions
+// ============================================================================
+
+export async function createSupportTicket(data: {
+  userId: number;
+  subject: string;
+  description: string;
+  category?: string;
+  priority?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  
+  const { supportTickets } = await import("../drizzle/schema");
+  
+  const [ticket] = await db.insert(supportTickets).values({
+    userId: data.userId,
+    subject: data.subject,
+    description: data.description,
+    category: data.category as any,
+    priority: data.priority as any,
+    status: 'open',
+  }).returning();
+  
+  return ticket;
+}
+
+export async function getUserSupportTickets(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { supportTickets } = await import("../drizzle/schema");
+  
+  return await db.select()
+    .from(supportTickets)
+    .where(eq(supportTickets.userId, userId))
+    .orderBy(desc(supportTickets.createdAt));
+}
+
+export async function getSupportTicketById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { supportTickets } = await import("../drizzle/schema");
+  
+  const [ticket] = await db.select()
+    .from(supportTickets)
+    .where(eq(supportTickets.id, id));
+  
+  return ticket || null;
+}
+
+export async function getTicketMessages(ticketId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { ticketMessages, users } = await import("../drizzle/schema");
+  
+  const messages = await db.select({
+    id: ticketMessages.id,
+    ticketId: ticketMessages.ticketId,
+    userId: ticketMessages.userId,
+    message: ticketMessages.message,
+    attachmentUrl: ticketMessages.attachmentUrl,
+    isFromAdmin: ticketMessages.isFromAdmin,
+    createdAt: ticketMessages.createdAt,
+    userName: users.name,
+    userEmail: users.email,
+  })
+    .from(ticketMessages)
+    .leftJoin(users, eq(ticketMessages.userId, users.id))
+    .where(eq(ticketMessages.ticketId, ticketId))
+    .orderBy(ticketMessages.createdAt);
+  
+  return messages;
+}
+
+export async function addTicketMessage(data: {
+  ticketId: number;
+  userId: number;
+  message: string;
+  attachmentUrl?: string;
+  isFromAdmin: boolean;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  
+  const { ticketMessages, supportTickets } = await import("../drizzle/schema");
+  
+  const [message] = await db.insert(ticketMessages).values({
+    ticketId: data.ticketId,
+    userId: data.userId,
+    message: data.message,
+    attachmentUrl: data.attachmentUrl,
+    isFromAdmin: data.isFromAdmin,
+  }).returning();
+  
+  // Update ticket's updatedAt timestamp
+  await db.update(supportTickets)
+    .set({ updatedAt: new Date() })
+    .where(eq(supportTickets.id, data.ticketId));
+  
+  return message;
+}
+
+export async function getAllSupportTickets(status?: string, priority?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { supportTickets, users } = await import("../drizzle/schema");
+  
+  let query = db.select({
+    id: supportTickets.id,
+    userId: supportTickets.userId,
+    subject: supportTickets.subject,
+    description: supportTickets.description,
+    category: supportTickets.category,
+    priority: supportTickets.priority,
+    status: supportTickets.status,
+    assignedTo: supportTickets.assignedTo,
+    resolvedAt: supportTickets.resolvedAt,
+    createdAt: supportTickets.createdAt,
+    updatedAt: supportTickets.updatedAt,
+    userName: users.name,
+    userEmail: users.email,
+  })
+    .from(supportTickets)
+    .leftJoin(users, eq(supportTickets.userId, users.id))
+    .$dynamic();
+  
+  const conditions = [];
+  if (status) {
+    conditions.push(eq(supportTickets.status, status as any));
+  }
+  if (priority) {
+    conditions.push(eq(supportTickets.priority, priority as any));
+  }
+  
+  if (conditions.length > 0) {
+    query = query.where(and(...conditions));
+  }
+  
+  const tickets = await query.orderBy(desc(supportTickets.createdAt));
+  return tickets;
+}
+
+export async function updateSupportTicketStatus(
+  id: number, 
+  status: string, 
+  resolution?: string,
+  resolvedBy?: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  
+  const { supportTickets } = await import("../drizzle/schema");
+  
+  const updateData: any = {
+    status: status as any,
+    updatedAt: new Date(),
+  };
+  
+  if (status === 'resolved' || status === 'closed') {
+    updateData.resolvedAt = new Date();
+    if (resolvedBy) {
+      updateData.resolvedBy = resolvedBy;
+    }
+    if (resolution) {
+      updateData.resolution = resolution;
+    }
+  }
+  
+  await db.update(supportTickets)
+    .set(updateData)
+    .where(eq(supportTickets.id, id));
+}
+
+export async function assignSupportTicket(id: number, assignedTo: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  
+  const { supportTickets } = await import("../drizzle/schema");
+  
+  await db.update(supportTickets)
+    .set({ 
+      assignedTo,
+      updatedAt: new Date(),
+      status: 'in_progress' as any,
+    })
+    .where(eq(supportTickets.id, id));
+}
+
+// =====================
+// Two-Factor Authentication Functions
+// =====================
+
+export async function enable2FA(
+  userId: number,
+  secret: string,
+  method: string,
+  backupCodes: string[]
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { users } = await import("../drizzle/schema");
+
+  await db.update(users)
+    .set({
+      twoFactorEnabled: true,
+      twoFactorSecret: secret,
+      twoFactorMethod: method,
+      twoFactorBackupCodes: JSON.stringify(backupCodes),
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+}
+
+export async function disable2FA(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { users } = await import("../drizzle/schema");
+
+  await db.update(users)
+    .set({
+      twoFactorEnabled: false,
+      twoFactorSecret: null,
+      twoFactorMethod: null,
+      twoFactorBackupCodes: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+}
+
+export async function update2FABackupCodes(userId: number, backupCodes: string[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { users } = await import("../drizzle/schema");
+
+  await db.update(users)
+    .set({
+      twoFactorBackupCodes: JSON.stringify(backupCodes),
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+}
+
+export async function create2FASession(
+  userId: number,
+  sessionToken: string,
+  ipAddress: string,
+  userAgent: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { twoFactorSessions } = await import("../drizzle/schema");
+
+  const expiresAt = new Date();
+  expiresAt.setMinutes(expiresAt.getMinutes() + 10); // 10 minute expiry
+
+  await db.insert(twoFactorSessions).values({
+    userId,
+    sessionToken,
+    verified: false,
+    expiresAt,
+    ipAddress,
+    userAgent,
+    createdAt: new Date(),
+  });
+}
+
+export async function verify2FASession(sessionToken: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { twoFactorSessions } = await import("../drizzle/schema");
+
+  await db.update(twoFactorSessions)
+    .set({ verified: true })
+    .where(eq(twoFactorSessions.sessionToken, sessionToken));
+}
+
+export async function logLoginActivity(
+  userId: number,
+  ipAddress: string,
+  userAgent: string,
+  success: boolean,
+  failureReason?: string,
+  twoFactorUsed?: boolean
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { loginActivity } = await import("../drizzle/schema");
+
+  await db.insert(loginActivity).values({
+    userId,
+    ipAddress,
+    userAgent,
+    location: null, // Can be enhanced with IP geolocation
+    deviceType: null, // Can be parsed from userAgent
+    browser: null, // Can be parsed from userAgent
+    success,
+    failureReason: failureReason || null,
+    twoFactorUsed: twoFactorUsed || false,
+    createdAt: new Date(),
+  });
+}
+
+export async function getLoginActivity(userId: number, limit: number = 10) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { loginActivity } = await import("../drizzle/schema");
+  const { desc } = await import("drizzle-orm");
+
+  const activities = await db.select()
+    .from(loginActivity)
+    .where(eq(loginActivity.userId, userId))
+    .orderBy(desc(loginActivity.createdAt))
+    .limit(limit);
+
+  return activities;
+}
+
+// =====================
+// Auto-Pay Functions
+// =====================
+
+export async function createAutoPaySetting(data: {
+  userId: number;
+  loanApplicationId: number | null;
+  isEnabled: boolean;
+  paymentMethod: string;
+  bankAccountId: string | null;
+  cardLast4: string | null;
+  paymentDay: number;
+  amount: number;
+  nextPaymentDate: Date | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { autoPaySettings } = await import("../drizzle/schema");
+
+  const result = await db.insert(autoPaySettings).values({
+    ...data,
+    status: "active",
+    failedAttempts: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }).returning();
+
+  return result[0];
+}
+
+export async function getAutoPaySettings(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { autoPaySettings } = await import("../drizzle/schema");
+
+  const settings = await db.select()
+    .from(autoPaySettings)
+    .where(eq(autoPaySettings.userId, userId));
+
+  return settings;
+}
+
+export async function updateAutoPaySetting(
+  id: number,
+  data: Partial<{
+    isEnabled: boolean;
+    paymentMethod: string;
+    paymentDay: number;
+    amount: number;
+    nextPaymentDate: Date;
+    status: string;
+  }>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { autoPaySettings } = await import("../drizzle/schema");
+
+  await db.update(autoPaySettings)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(eq(autoPaySettings.id, id));
+}
+
+export async function deleteAutoPaySetting(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { autoPaySettings } = await import("../drizzle/schema");
+
+  await db.delete(autoPaySettings)
+    .where(eq(autoPaySettings.id, id));
+}
+
+export async function recordAutoPayFailure(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { autoPaySettings } = await import("../drizzle/schema");
+  const { sql } = await import("drizzle-orm");
+
+  await db.update(autoPaySettings)
+    .set({
+      failedAttempts: sql`${autoPaySettings.failedAttempts} + 1`,
+      status: "failed",
+      updatedAt: new Date(),
+    })
+    .where(eq(autoPaySettings.id, id));
 }

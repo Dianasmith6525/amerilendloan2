@@ -10,12 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { APP_LOGO, getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Settings, DollarSign, CheckCircle, XCircle, Send, LogOut, Users, FileText, BarChart3, Package, TrendingUp, Clock, AlertCircle, Eye } from "lucide-react";
+import { Loader2, Settings, DollarSign, CheckCircle, XCircle, Send, LogOut, Users, FileText, BarChart3, Package, TrendingUp, Clock, AlertCircle, Eye, MessageSquare, Download } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import VerificationDocumentsAdmin from "@/components/VerificationDocumentsAdmin";
 import CryptoWalletSettings from "@/components/CryptoWalletSettings";
+import AdminAnalyticsDashboard from "@/components/AdminAnalyticsDashboard";
 
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
@@ -108,11 +109,42 @@ export default function AdminDashboard() {
   const [percentageRate, setPercentageRate] = useState("2.00");
   const [fixedFeeAmount, setFixedFeeAmount] = useState("2.00");
 
+  // Search and filter states
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedApps, setSelectedApps] = useState<number[]>([]);
+  
+  // Support ticket states
+  const [selectedTicket, setSelectedTicket] = useState<number | null>(null);
+  const [ticketStatusFilter, setTicketStatusFilter] = useState<string | undefined>(undefined);
+  const [ticketReplyMessage, setTicketReplyMessage] = useState("");
+
   // Query data
   const { data: applications, isLoading } = trpc.loans.adminList.useQuery();
   const { data: disbursements, isLoading: disbursementsLoading } = trpc.disbursements.adminList.useQuery();
   const { data: stats, isLoading: statsLoading } = trpc.loans.adminStatistics.useQuery();
   const { data: feeConfig } = trpc.feeConfig.getActive.useQuery();
+  
+  // Support tickets data
+  const { data: ticketsData, refetch: refetchTickets, isLoading: ticketsLoading } = trpc.supportTickets.adminGetAll.useQuery({
+    status: ticketStatusFilter,
+  });
+  const tickets = ticketsData?.data || [];
+  
+  const { data: ticketMessagesData, refetch: refetchTicketMessages } = trpc.supportTickets.getMessages.useQuery(
+    { ticketId: selectedTicket || 0 },
+    { enabled: !!selectedTicket }
+  );
+  const ticketMessages = ticketMessagesData?.data || [];
+
+  // Load fee configuration when it becomes available
+  useEffect(() => {
+    if (feeConfig) {
+      setFeeMode(feeConfig.calculationMode);
+      setPercentageRate((feeConfig.percentageRate / 100).toFixed(2));
+      setFixedFeeAmount((feeConfig.fixedFeeAmount / 100).toFixed(2));
+    }
+  }, [feeConfig]);
 
   // Mutations
   const approveMutation = trpc.loans.adminApprove.useMutation({
@@ -190,6 +222,37 @@ export default function AdminDashboard() {
     },
   });
 
+  const replyToTicketMutation = trpc.supportTickets.addMessage.useMutation({
+    onSuccess: () => {
+      toast.success("Reply sent successfully");
+      setTicketReplyMessage("");
+      refetchTickets();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to send reply");
+    },
+  });
+
+  const updateTicketStatusMutation = trpc.supportTickets.adminUpdateStatus.useMutation({
+    onSuccess: () => {
+      toast.success("Ticket status updated");
+      refetchTickets();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update ticket status");
+    },
+  });
+
+  const assignTicketMutation = trpc.supportTickets.adminAssign.useMutation({
+    onSuccess: () => {
+      toast.success("Ticket assigned successfully");
+      refetchTickets();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to assign ticket");
+    },
+  });
+
   // Handlers
   const handleApprove = () => {
     if (!approvalDialog.applicationId) return;
@@ -246,8 +309,8 @@ export default function AdminDashboard() {
   const handleUpdateFeeConfig = () => {
     if (feeMode === "percentage") {
       const rate = parseFloat(percentageRate);
-      if (isNaN(rate) || rate < 1.5 || rate > 2.5) {
-        toast.error("Percentage rate must be between 1.5% and 2.5%");
+      if (isNaN(rate) || rate < 1.5 || rate > 10) {
+        toast.error("Percentage rate must be between 1.5% and 10%");
         return;
       }
       updateFeeConfigMutation.mutate({
@@ -256,8 +319,8 @@ export default function AdminDashboard() {
       });
     } else {
       const amount = parseFloat(fixedFeeAmount);
-      if (isNaN(amount) || amount < 1.5 || amount > 2.5) {
-        toast.error("Fixed fee must be between $1.50 and $2.50");
+      if (isNaN(amount) || amount < 1.5 || amount > 10) {
+        toast.error("Fixed fee must be between $1.50 and $10.00");
         return;
       }
       updateFeeConfigMutation.mutate({
@@ -590,16 +653,178 @@ export default function AdminDashboard() {
 
         {/* Tabs */}
         <Tabs defaultValue="applications" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="applications">Loan Applications</TabsTrigger>
-            <TabsTrigger value="tracking">Check Tracking</TabsTrigger>
-            <TabsTrigger value="verification">Verification Documents</TabsTrigger>
-            <TabsTrigger value="settings">Fee Configuration</TabsTrigger>
-            <TabsTrigger value="crypto">Crypto Wallets</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-8">
+            <TabsTrigger value="applications">Applications</TabsTrigger>
+            <TabsTrigger value="tracking">Tracking</TabsTrigger>
+            <TabsTrigger value="verification">Verification</TabsTrigger>
+            <TabsTrigger value="support">Support</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="audit">Audit Log</TabsTrigger>
+            <TabsTrigger value="settings">Fees</TabsTrigger>
+            <TabsTrigger value="crypto">Crypto</TabsTrigger>
           </TabsList>
 
           {/* Applications Tab */}
           <TabsContent value="applications" className="space-y-6">
+            {/* Search and Filter Bar */}
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="flex-1">
+                    <Input
+                      placeholder="Search by name, email, or application ID..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-full md:w-48">
+                      <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="under_review">Under Review</SelectItem>
+                      <SelectItem value="approved">Approved</SelectItem>
+                      <SelectItem value="fee_pending">Fee Pending</SelectItem>
+                      <SelectItem value="fee_paid">Fee Paid</SelectItem>
+                      <SelectItem value="disbursed">Disbursed</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearchTerm("");
+                      setStatusFilter("all");
+                    }}
+                  >
+                    Clear Filters
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (!applications) return;
+                      const filteredApps = applications.filter((app: any) => {
+                        const matchesSearch = searchTerm === "" || 
+                          app.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          app.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          app.id?.toString().includes(searchTerm);
+                        const matchesStatus = statusFilter === "all" || app.status === statusFilter;
+                        return matchesSearch && matchesStatus;
+                      });
+                      const csv = [
+                        ['ID', 'Name', 'Email', 'Status', 'Loan Type', 'Amount', 'Approved Amount', 'Interest Rate', 'Term', 'Applied Date'].join(','),
+                        ...filteredApps.map((app: any) => [
+                          app.id,
+                          `"${app.fullName}"`,
+                          app.email,
+                          app.status,
+                          app.loanType,
+                          app.requestedAmount / 100,
+                          (app.approvedAmount || 0) / 100,
+                          app.interestRate || '',
+                          app.loanTerm || '',
+                          new Date(app.createdAt).toLocaleDateString()
+                        ].join(','))
+                      ].join('\n');
+                      const blob = new Blob([csv], { type: 'text/csv' });
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `applications-${new Date().toISOString().split('T')[0]}.csv`;
+                      a.click();
+                      window.URL.revokeObjectURL(url);
+                      toast.success('Applications exported to CSV');
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export CSV
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Bulk Actions Toolbar */}
+            {selectedApps.length > 0 && (
+              <Card className="border-blue-300 bg-blue-50">
+                <CardContent className="pt-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="w-5 h-5 text-blue-600" />
+                      <span className="font-medium text-blue-900">
+                        {selectedApps.length} application{selectedApps.length > 1 ? 's' : ''} selected
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedApps([])}
+                      >
+                        Clear Selection
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700"
+                        onClick={async () => {
+                          if (!confirm(`Approve ${selectedApps.length} application(s)? This will require setting approved amounts individually.`)) return;
+                          
+                          let successCount = 0;
+                          for (const appId of selectedApps) {
+                            try {
+                              // Find the application to get requested amount
+                              const app = applications?.find((a: any) => a.id === appId);
+                              if (app) {
+                                await approveMutation.mutateAsync({ 
+                                  id: appId, 
+                                  approvedAmount: app.requestedAmount // Approve for requested amount
+                                });
+                                successCount++;
+                              }
+                            } catch (error) {
+                              console.error(`Failed to approve ${appId}:`, error);
+                            }
+                          }
+                          setSelectedApps([]);
+                          toast.success(`${successCount} application(s) approved`);
+                        }}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        Bulk Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={async () => {
+                          if (!confirm(`Reject ${selectedApps.length} application(s)?`)) return;
+                          
+                          let successCount = 0;
+                          for (const appId of selectedApps) {
+                            try {
+                              await rejectMutation.mutateAsync({ 
+                                id: appId, 
+                                rejectionReason: 'Bulk rejection by admin' 
+                              });
+                              successCount++;
+                            } catch (error) {
+                              console.error(`Failed to reject ${appId}:`, error);
+                            }
+                          }
+                          setSelectedApps([]);
+                          toast.success(`${successCount} application(s) rejected`);
+                        }}
+                      >
+                        <XCircle className="w-4 h-4 mr-1" />
+                        Bulk Reject
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <div className="space-y-4">
               {isLoading ? (
                 <Card>
@@ -615,15 +840,53 @@ export default function AdminDashboard() {
                   </CardContent>
                 </Card>
               ) : (
-                applications.map((app) => (
+                (() => {
+                  // Filter applications
+                  const filteredApps = applications.filter((app: any) => {
+                    const matchesSearch = searchTerm === "" || 
+                      app.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      app.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      app.id?.toString().includes(searchTerm);
+                    const matchesStatus = statusFilter === "all" || app.status === statusFilter;
+                    return matchesSearch && matchesStatus;
+                  });
+
+                  if (filteredApps.length === 0) {
+                    return (
+                      <Card>
+                        <CardContent className="py-12 text-center">
+                          <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                          <p className="text-gray-600 font-medium">No applications match your filters</p>
+                          <p className="text-sm text-gray-500 mt-2">Try adjusting your search or filters</p>
+                        </CardContent>
+                      </Card>
+                    );
+                  }
+
+                  return filteredApps.map((app) => (
                   <Card key={app.id} className="hover:shadow-lg transition">
                     <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1 flex-1">
-                          <CardTitle className="text-lg">{app.fullName}</CardTitle>
-                          <CardDescription>
-                            ID: {app.id} • Applied {new Date(app.createdAt).toLocaleDateString()}
-                          </CardDescription>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedApps.includes(app.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedApps([...selectedApps, app.id]);
+                              } else {
+                                setSelectedApps(selectedApps.filter(id => id !== app.id));
+                              }
+                            }}
+                            className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                            aria-label={`Select application ${app.id}`}
+                          />
+                          <div className="space-y-1 flex-1">
+                            <CardTitle className="text-lg">{app.fullName}</CardTitle>
+                            <CardDescription>
+                              ID: {app.id} • Applied {new Date(app.createdAt).toLocaleDateString()}
+                            </CardDescription>
+                          </div>
                         </div>
                         <Badge className={statusColors[app.status] || "bg-gray-100"}>
                           {app.status}
@@ -770,7 +1033,8 @@ export default function AdminDashboard() {
                       </div>
                     </CardContent>
                   </Card>
-                ))
+                  ));
+                })()
               )}
             </div>
           </TabsContent>
@@ -925,7 +1189,7 @@ export default function AdminDashboard() {
 
                   {feeMode === "percentage" ? (
                     <div className="space-y-2">
-                      <Label htmlFor="percentageRate" className="text-base font-semibold">Percentage Rate (1.5% - 2.5%)</Label>
+                      <Label htmlFor="percentageRate" className="text-base font-semibold">Percentage Rate (1.5% - 10%)</Label>
                       <div className="flex items-center gap-2">
                         <Input
                           id="percentageRate"
@@ -982,6 +1246,300 @@ export default function AdminDashboard() {
                       </>
                     )}
                   </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Support Tickets Tab */}
+          <TabsContent value="support">
+            <Card>
+              <CardHeader>
+                <CardTitle>Support Tickets</CardTitle>
+                <CardDescription>Manage user support requests and messages</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-3 gap-6">
+                  {/* Ticket List */}
+                  <div className="md:col-span-1 space-y-4">
+                    <div className="flex gap-2">
+                      <select
+                        className="flex-1 px-3 py-2 border rounded-md text-sm"
+                        value={ticketStatusFilter}
+                        onChange={(e) => setTicketStatusFilter(e.target.value as any)}
+                        aria-label="Filter tickets by status"
+                      >
+                        <option value="">All Status</option>
+                        <option value="open">Open</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="waiting_customer">Waiting Customer</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                      {tickets && tickets.length > 0 ? (
+                        tickets.map((ticket: any) => (
+                          <div
+                            key={ticket.id}
+                            className={`p-4 border rounded-lg cursor-pointer hover:bg-gray-50 ${
+                              selectedTicket === ticket.id ? "border-blue-500 bg-blue-50" : ""
+                            }`}
+                            onClick={() => setSelectedTicket(ticket.id)}
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <h4 className="font-semibold text-sm">{ticket.subject}</h4>
+                              <span
+                                className={`px-2 py-1 text-xs rounded-full ${
+                                  ticket.status === "open"
+                                    ? "bg-blue-100 text-blue-800"
+                                    : ticket.status === "in_progress"
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : ticket.status === "waiting_customer"
+                                    ? "bg-purple-100 text-purple-800"
+                                    : ticket.status === "resolved"
+                                    ? "bg-green-100 text-green-800"
+                                    : "bg-gray-100 text-gray-800"
+                                }`}
+                              >
+                                {ticket.status.replace("_", " ")}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-600 mb-2">{ticket.category.replace("_", " ")}</p>
+                            <div className="flex items-center justify-between text-xs text-gray-500">
+                              <span>{ticket.userName}</span>
+                              <span>{new Date(ticket.createdAt).toLocaleDateString()}</span>
+                            </div>
+                            {ticket.priority && ticket.priority !== "normal" && (
+                              <span
+                                className={`inline-block mt-2 px-2 py-1 text-xs rounded ${
+                                  ticket.priority === "urgent"
+                                    ? "bg-red-100 text-red-800"
+                                    : ticket.priority === "high"
+                                    ? "bg-orange-100 text-orange-800"
+                                    : "bg-gray-100 text-gray-800"
+                                }`}
+                              >
+                                {ticket.priority}
+                              </span>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-center py-8 text-gray-500">No tickets found</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Ticket Detail */}
+                  <div className="md:col-span-2">
+                    {selectedTicket ? (
+                      <div className="border rounded-lg p-6 space-y-4">
+                        {(() => {
+                          const ticket = tickets?.find((t: any) => t.id === selectedTicket);
+                          if (!ticket) return <p>Ticket not found</p>;
+
+                          return (
+                            <>
+                              {/* Ticket Header */}
+                              <div className="border-b pb-4">
+                                <h3 className="text-xl font-semibold mb-2">{ticket.subject}</h3>
+                                <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                                  <span>From: {ticket.userName} ({ticket.userEmail})</span>
+                                  {ticket.category && <span>Category: {ticket.category?.replace("_", " ")}</span>}
+                                  <span>Created: {new Date(ticket.createdAt).toLocaleString()}</span>
+                                </div>
+                              </div>
+
+                              {/* Status & Assignment Controls */}
+                              <div className="grid md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+                                <div>
+                                  <label className="block text-sm font-medium mb-2">Status</label>
+                                  <select
+                                    className="w-full px-3 py-2 border rounded-md"
+                                    value={ticket.status}
+                                    onChange={(e) => {
+                                      updateTicketStatusMutation.mutate({
+                                        id: ticket.id,
+                                        status: e.target.value as any,
+                                      });
+                                    }}
+                                    aria-label="Update ticket status"
+                                  >
+                                    <option value="open">Open</option>
+                                    <option value="in_progress">In Progress</option>
+                                    <option value="waiting_customer">Waiting Customer</option>
+                                    <option value="resolved">Resolved</option>
+                                    <option value="closed">Closed</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-2">Priority</label>
+                                  <select
+                                    className="w-full px-3 py-2 border rounded-md"
+                                    value={ticket.priority || "normal"}
+                                    disabled
+                                    aria-label="Ticket priority"
+                                  >
+                                    <option value="low">Low</option>
+                                    <option value="normal">Normal</option>
+                                    <option value="high">High</option>
+                                    <option value="urgent">Urgent</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* Conversation */}
+                              <div className="space-y-4 max-h-[400px] overflow-y-auto border rounded-lg p-4 bg-gray-50">
+                                {/* Original message */}
+                                <div className="bg-white p-4 rounded-lg border">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="font-semibold text-sm">{ticket.userName}</span>
+                                    <span className="text-xs text-gray-500">
+                                      {new Date(ticket.createdAt).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-gray-700">{ticket.description}</p>
+                                </div>
+
+                                {/* Messages */}
+                                {ticketMessages?.map((msg: any) => (
+                                  <div
+                                    key={msg.id}
+                                    className={`p-4 rounded-lg border ${
+                                      msg.isFromAdmin ? "bg-blue-50 border-blue-200" : "bg-white"
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="font-semibold text-sm">
+                                        {msg.isFromAdmin ? "Admin" : msg.userName || "User"}
+                                      </span>
+                                      <span className="text-xs text-gray-500">
+                                        {new Date(msg.createdAt).toLocaleString()}
+                                      </span>
+                                    </div>
+                                    <p className="text-sm text-gray-700">{msg.message}</p>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Reply Input */}
+                              {ticket.status !== "closed" && (
+                                <div className="space-y-2">
+                                  <label className="block text-sm font-medium">Reply to Ticket</label>
+                                  <textarea
+                                    className="w-full px-3 py-2 border rounded-md min-h-[100px]"
+                                    placeholder="Type your response..."
+                                    value={ticketReplyMessage}
+                                    onChange={(e) => setTicketReplyMessage(e.target.value)}
+                                  />
+                                  <div className="flex gap-2">
+                                    <Button
+                                      onClick={() => {
+                                        if (!ticketReplyMessage.trim()) {
+                                          toast.error("Please enter a message");
+                                          return;
+                                        }
+                                        replyToTicketMutation.mutate({
+                                          ticketId: ticket.id,
+                                          message: ticketReplyMessage,
+                                        });
+                                      }}
+                                      disabled={replyToTicketMutation.isPending}
+                                    >
+                                      {replyToTicketMutation.isPending ? (
+                                        <>
+                                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                          Sending...
+                                        </>
+                                      ) : (
+                                        "Send Reply"
+                                      )}
+                                    </Button>
+                                    {ticket.status === "waiting_customer" && (
+                                      <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                          updateTicketStatusMutation.mutate({
+                                            id: ticket.id,
+                                            status: "in_progress",
+                                          });
+                                        }}
+                                      >
+                                        Mark In Progress
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Resolved status */}
+                              {ticket.status === "resolved" && ticket.resolvedAt && (
+                                <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+                                  <h4 className="font-semibold text-green-900 mb-2">Ticket Resolved</h4>
+                                  <p className="text-xs text-green-700">
+                                    Resolved on {new Date(ticket.resolvedAt).toLocaleString()}
+                                  </p>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <div className="border rounded-lg p-12 text-center text-gray-500">
+                        <MessageSquare className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                        <p>Select a ticket to view details</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Analytics Tab */}
+          <TabsContent value="analytics">
+            {/* Advanced Analytics Dashboard - NEW FEATURE #5 */}
+            <AdminAnalyticsDashboard />
+          </TabsContent>
+
+          {/* Audit Log Tab */}
+          <TabsContent value="audit">
+            <Card>
+              <CardHeader>
+                <CardTitle>Audit Log</CardTitle>
+                <CardDescription>Track all administrative actions and system events</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {applications && applications.slice(0, 20).map((app: any) => (
+                    <div key={app.id} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                        <FileText className="w-4 h-4 text-blue-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">
+                          Application {app.status === "approved" ? "Approved" : app.status === "rejected" ? "Rejected" : "Submitted"}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          Application ID: {app.id} • {app.fullName}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(app.updatedAt).toLocaleString()}
+                        </p>
+                      </div>
+                      <Badge className={statusColors[app.status]}>{app.status}</Badge>
+                    </div>
+                  ))}
+                  {(!applications || applications.length === 0) && (
+                    <div className="text-center py-12">
+                      <Clock className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-600 font-medium">No audit entries yet</p>
+                      <p className="text-sm text-gray-500 mt-2">Activity will be logged here</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

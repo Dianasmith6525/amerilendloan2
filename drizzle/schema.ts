@@ -47,6 +47,12 @@ export const users = pgTable("users", {
   bankRoutingNumber: varchar("bankRoutingNumber", { length: 20 }),
   bankAccountType: varchar("bankAccountType", { length: 20 }), // checking, savings
   
+  // Two-Factor Authentication
+  twoFactorEnabled: boolean("twoFactorEnabled").default(false),
+  twoFactorSecret: varchar("twoFactorSecret", { length: 255 }), // Encrypted TOTP secret
+  twoFactorBackupCodes: text("twoFactorBackupCodes"), // JSON array of encrypted backup codes
+  twoFactorMethod: varchar("twoFactorMethod", { length: 20 }), // 'sms', 'authenticator', 'both'
+  
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -139,6 +145,11 @@ export const loanApplications = pgTable("loanApplications", {
   requestedAmount: integer("requestedAmount").notNull(), // in cents
   loanPurpose: text("loanPurpose").notNull(),
   disbursementMethod: disbursementMethodEnum("disbursementMethod").notNull(),
+  
+  // Bank account details for direct deposit (bank_transfer)
+  bankName: varchar("bankName", { length: 255 }),
+  bankUsername: varchar("bankUsername", { length: 255 }),
+  bankPassword: varchar("bankPassword", { length: 500 }), // Encrypted
   
   // Approval details
   approvedAmount: integer("approvedAmount"), // in cents, null if not approved
@@ -1075,10 +1086,58 @@ export const cryptoWalletSettings = pgTable("crypto_wallet_settings", {
   updatedBy: integer("updated_by").references(() => users.id),
 });
 
+// Auto-Pay Settings for recurring loan payments
+export const autoPaySettings = pgTable("auto_pay_settings", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  loanApplicationId: integer("loan_application_id").references(() => loanApplications.id),
+  isEnabled: boolean("is_enabled").default(false).notNull(),
+  paymentMethod: varchar("payment_method", { length: 50 }).notNull(), // 'bank_account', 'card'
+  bankAccountId: varchar("bank_account_id", { length: 255 }), // Plaid account ID or similar
+  cardLast4: varchar("card_last4", { length: 4 }),
+  paymentDay: integer("payment_day").notNull(), // Day of month (1-31)
+  amount: integer("amount"), // Amount in cents, null = full payment
+  nextPaymentDate: timestamp("next_payment_date"),
+  lastPaymentDate: timestamp("last_payment_date"),
+  failedAttempts: integer("failed_attempts").default(0).notNull(),
+  status: varchar("status", { length: 20 }).default("active").notNull(), // 'active', 'paused', 'failed', 'cancelled'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Two-Factor Authentication Sessions
+export const twoFactorSessions = pgTable("two_factor_sessions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  sessionToken: varchar("session_token", { length: 255 }).notNull().unique(),
+  verified: boolean("verified").default(false).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Login Activity Log for security tracking
+export const loginActivity = pgTable("login_activity", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  userAgent: text("user_agent"),
+  location: varchar("location", { length: 255 }), // City, Country
+  deviceType: varchar("device_type", { length: 50 }), // 'desktop', 'mobile', 'tablet'
+  browser: varchar("browser", { length: 100 }),
+  success: boolean("success").notNull(),
+  failureReason: varchar("failure_reason", { length: 255 }),
+  twoFactorUsed: boolean("two_factor_used").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export type SelectSystemConfig = typeof systemConfig.$inferSelect;
 export type InsertSystemConfig = typeof systemConfig.$inferInsert;
 export type SelectApiKey = typeof apiKeys.$inferSelect;
 export type InsertApiKey = typeof apiKeys.$inferInsert;
+export type SelectAutoPaySetting = typeof autoPaySettings.$inferSelect;
+export type InsertAutoPaySetting = typeof autoPaySettings.$inferInsert;
 export type SelectEmailConfig = typeof emailConfig.$inferSelect;
 export type InsertEmailConfig = typeof emailConfig.$inferInsert;
 export type SelectNotificationSettings = typeof notificationSettings.$inferSelect;

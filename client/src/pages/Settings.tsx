@@ -87,16 +87,10 @@ export default function Settings() {
     preferredLanguage: "en",
     timezone: "UTC",
   });
-  const [twoFAForm, setTwoFAForm] = useState({
-    method: "totp" as "totp" | "sms" | "email",
-    phoneNumber: "",
-  });
-  const [backupCodes, setBackupCodes] = useState<string[]>([]);
-  const [showBackupCodes, setShowBackupCodes] = useState(false);
+  // 2FA state removed - now managed in Dashboard > Security tab
   const [deleteReason, setDeleteReason] = useState("");
   const [activeTab, setActiveTab] = useState<"password" | "email" | "bank" | "notifications" | "profile" | "2fa" | "devices" | "activity" | "danger">("password");
   const [activityLog, setActivityLog] = useState<any[]>([]);
-  const [twoFAEnabled, setTwoFAEnabled] = useState(false);
   const [trustedDevices, setTrustedDevices] = useState<any[]>([]);
 
   // tRPC mutations
@@ -152,28 +146,8 @@ export default function Settings() {
     },
   });
 
-  const enable2FAMutation = trpc.auth.enable2FA.useMutation({
-    onSuccess: (data) => {
-      toast.success("2FA enabled successfully!");
-      setBackupCodes(data.backupCodes);
-      setShowBackupCodes(true);
-      setTwoFAEnabled(true);
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to enable 2FA");
-    },
-  });
-
-  const disable2FAMutation = trpc.auth.disable2FA.useMutation({
-    onSuccess: () => {
-      toast.success("2FA disabled successfully!");
-      setTwoFAEnabled(false);
-      setBackupCodes([]);
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to disable 2FA");
-    },
-  });
+  // 2FA is managed in the Dashboard > Security tab
+  // These mutations are kept for backwards compatibility but not actively used
 
   const getTrustedDevicesQuery = trpc.auth.getTrustedDevices.useQuery(undefined, {
     enabled: isAuthenticated,
@@ -234,9 +208,7 @@ export default function Settings() {
     } as typeof profileForm));
   }
 
-  if (get2FAQuery.data && activeTab === "2fa") {
-    setTwoFAEnabled(get2FAQuery.data?.enabled || false);
-  }
+  // 2FA query removed - now managed in Dashboard
 
   if (!isAuthenticated) {
     return (
@@ -348,23 +320,14 @@ export default function Settings() {
   };
 
   const handleEnable2FA = () => {
-    enable2FAMutation.mutate({
-      method: twoFAForm.method,
-      phoneNumber: twoFAForm.phoneNumber,
-    });
+    toast.info("Please use the Security tab in your Dashboard to manage 2FA");
   };
 
   const handleDisable2FA = () => {
-    if (confirm("Are you sure you want to disable 2FA? This will make your account less secure.")) {
-      disable2FAMutation.mutate({ password: "" });
-    }
+    toast.info("Please use the Security tab in your Dashboard to manage 2FA");
   };
 
-  const handleCopyBackupCodes = () => {
-    const text = backupCodes.join("\n");
-    navigator.clipboard.writeText(text);
-    toast.success("Backup codes copied to clipboard!");
-  };
+  // handleCopyBackupCodes removed - 2FA now managed in Dashboard
 
   const handleLogoutClick = () => {
     logout();
@@ -879,84 +842,10 @@ export default function Settings() {
                   <p className="text-sm text-blue-800">
                     <strong>Enhanced Security:</strong> Two-factor authentication adds an extra layer of security to your account.
                   </p>
+                  <p className="text-sm text-blue-700 mt-2">
+                    Please use the <strong>Security tab</strong> in your Dashboard to manage two-factor authentication settings.
+                  </p>
                 </div>
-
-                {!twoFAEnabled ? (
-                  <>
-                    <div className="space-y-4">
-                      <div className="space-y-3">
-                        <label className="text-sm font-semibold text-gray-800">Select 2FA Method</label>
-                        <select
-                          value={twoFAForm.method}
-                          onChange={(e) => setTwoFAForm({...twoFAForm, method: e.target.value as any})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0033A0]"
-                        >
-                          <option value="totp">Authenticator App (TOTP)</option>
-                          <option value="sms">SMS Text Message</option>
-                          <option value="email">Email</option>
-                        </select>
-                      </div>
-
-                      {twoFAForm.method === "sms" && (
-                        <div className="space-y-3">
-                          <label className="text-sm font-semibold text-gray-800">Phone Number</label>
-                          <input
-                            type="tel"
-                            value={twoFAForm.phoneNumber}
-                            onChange={(e) => setTwoFAForm({...twoFAForm, phoneNumber: e.target.value})}
-                            placeholder="Enter phone number for SMS codes"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0033A0]"
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    <Button
-                      onClick={handleEnable2FA}
-                      disabled={enable2FAMutation.isPending}
-                      className="bg-[#FFA500] hover:bg-[#FF8C00] text-white w-full"
-                    >
-                      {enable2FAMutation.isPending ? "Enabling..." : "Enable 2FA"}
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
-                      <p className="text-sm text-green-800">
-                        ✓ <strong>2FA is Enabled</strong> - Your account is protected with two-factor authentication
-                      </p>
-                    </div>
-
-                    {backupCodes.length > 0 && showBackupCodes && (
-                      <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg space-y-3">
-                        <p className="text-sm font-semibold text-yellow-800">Backup Codes</p>
-                        <p className="text-xs text-yellow-700">
-                          Save these backup codes in a safe place. Use them if you lose access to your 2FA device.
-                        </p>
-                        <div className="bg-white p-3 rounded border border-yellow-300 font-mono text-sm space-y-1 max-h-40 overflow-y-auto">
-                          {backupCodes.map((code, idx) => (
-                            <div key={idx}>{code}</div>
-                          ))}
-                        </div>
-                        <Button
-                          onClick={handleCopyBackupCodes}
-                          variant="outline"
-                          className="w-full text-sm"
-                        >
-                          Copy Backup Codes
-                        </Button>
-                      </div>
-                    )}
-
-                    <Button
-                      onClick={handleDisable2FA}
-                      variant="outline"
-                      className="border-red-300 text-red-700 hover:bg-red-50 w-full"
-                    >
-                      Disable 2FA
-                    </Button>
-                  </>
-                )}
               </CardContent>
             </Card>
           )}

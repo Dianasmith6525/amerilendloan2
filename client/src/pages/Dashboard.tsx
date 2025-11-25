@@ -1,7 +1,9 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -32,6 +34,14 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import VerificationUpload from "@/components/VerificationUpload";
+import DocumentProgressTracker from "@/components/DocumentProgressTracker";
+import LoanApplicationProgress from "@/components/LoanApplicationProgress";
+import NotificationCenter from "@/components/NotificationCenter";
+import DocumentDownload from "@/components/DocumentDownload";
+import QuickApply from "@/components/QuickApply";
+import TwoFactorAuth from "@/components/TwoFactorAuth";
+import PaymentHistoryAnalytics from "@/components/PaymentHistoryAnalytics";
+import AutoPaySettings from "@/components/AutoPaySettings";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
@@ -78,25 +88,33 @@ export default function Dashboard() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [newMessage, setNewMessage] = useState("");
   const [showMessages, setShowMessages] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<number | null>(null);
+  const [showNewTicketForm, setShowNewTicketForm] = useState(false);
+  const [newTicketSubject, setNewTicketSubject] = useState("");
+  const [newTicketMessage, setNewTicketMessage] = useState("");
+  const [newTicketCategory, setNewTicketCategory] = useState("general_inquiry");
   
   // Fetch real support tickets for messages
-  const { data: supportTickets = [], refetch: refetchTickets } = trpc.userFeatures.support.listTickets.useQuery(undefined, {
+  const { data: supportTicketsData, refetch: refetchTickets, isLoading: ticketsLoading } = trpc.supportTickets.getUserTickets.useQuery(undefined, {
     enabled: isAuthenticated,
   });
   
-  // Get messages from the most recent ticket, or show empty state
-  const latestTicket = supportTickets.length > 0 ? supportTickets[0] : null;
-  const { data: ticketMessages = [] } = trpc.userFeatures.support.getMessages.useQuery(
-    { ticketId: latestTicket?.id || 0 },
-    { enabled: !!latestTicket }
+  const supportTickets = supportTicketsData?.data || [];
+  
+  // Get messages for selected ticket
+  const { data: ticketMessagesData, refetch: refetchMessages } = trpc.supportTickets.getMessages.useQuery(
+    { ticketId: selectedTicket || 0 },
+    { enabled: !!selectedTicket }
   );
+  
+  const ticketMessages = ticketMessagesData?.data || [];
   
   const messages = ticketMessages.map((msg: any) => ({
     id: msg.id,
-    sender: msg.isFromUser ? (user?.name || "You") : "Support Team",
+    sender: msg.isFromAdmin ? "Support Team" : (msg.userName || "You"),
     message: msg.message,
     timestamp: new Date(msg.createdAt),
-    isAdmin: !msg.isFromUser,
+    isAdmin: msg.isFromAdmin,
   }));
   // Fetch real payment history
   const { data: paymentsData = [], isLoading: paymentsLoading } = trpc.payments.getHistory.useQuery(undefined, {
@@ -120,39 +138,45 @@ export default function Dashboard() {
     window.location.href = "/";
   };
 
-  const createTicketMutation = trpc.userFeatures.support.createTicket.useMutation({
+  const createTicketMutation = trpc.supportTickets.create.useMutation({
     onSuccess: () => {
       refetchTickets();
       toast.success("Support ticket created!");
-      setNewMessage("");
+      setNewTicketSubject("");
+      setNewTicketMessage("");
+      setShowNewTicketForm(false);
     },
   });
   
-  const addMessageMutation = trpc.userFeatures.support.addMessage.useMutation({
+  const addMessageMutation = trpc.supportTickets.addMessage.useMutation({
     onSuccess: () => {
-      refetchTickets();
-      toast.success("Message sent to support team!");
+      refetchMessages();
+      toast.success("Message sent!");
       setNewMessage("");
     },
   });
   
   const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !selectedTicket) return;
     
-    if (latestTicket) {
-      // Add message to existing ticket
-      addMessageMutation.mutate({
-        ticketId: latestTicket.id,
-        message: newMessage,
-      });
-    } else {
-      // Create new ticket
-      createTicketMutation.mutate({
-        subject: "General Inquiry",
-        description: newMessage,
-        category: "other",
-      });
+    addMessageMutation.mutate({
+      ticketId: selectedTicket,
+      message: newMessage,
+    });
+  };
+
+  const handleCreateTicket = () => {
+    if (!newTicketSubject.trim() || !newTicketMessage.trim()) {
+      toast.error("Please fill in all fields");
+      return;
     }
+    
+    createTicketMutation.mutate({
+      subject: newTicketSubject,
+      description: newTicketMessage,
+      category: newTicketCategory,
+      priority: "normal",
+    });
   };
 
   // Calculate dashboard statistics
@@ -491,12 +515,17 @@ export default function Dashboard() {
             </Card>
           </div>
           <Tabs defaultValue="applications" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="applications">My Applications</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4 md:grid-cols-9 lg:grid-cols-10">
+            <TabsTrigger value="applications">Applications</TabsTrigger>
+            <TabsTrigger value="quick-apply">Quick Apply</TabsTrigger>
             <TabsTrigger value="verification">Verification</TabsTrigger>
             <TabsTrigger value="messages">Messages</TabsTrigger>
-            <TabsTrigger value="payments">Payment History</TabsTrigger>
+            <TabsTrigger value="payments">Payments</TabsTrigger>
+            <TabsTrigger value="auto-pay">Auto-Pay</TabsTrigger>
             <TabsTrigger value="timeline">Activity</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="documents">Documents</TabsTrigger>
+            <TabsTrigger value="security">Security</TabsTrigger>
           </TabsList>            <TabsContent value="applications" id="applications">
               <Card>
                 <CardHeader>
@@ -869,8 +898,27 @@ export default function Dashboard() {
               </Card>
             </TabsContent>
 
+            {/* Quick Apply Tab - NEW FEATURE */}
+            <TabsContent value="quick-apply">
+              <div className="space-y-6">
+                <QuickApply 
+                  existingUserData={{
+                    name: user?.name || "",
+                    email: user?.email || "",
+                    phone: "", // Would come from user profile
+                  }}
+                />
+              </div>
+            </TabsContent>
+
             <TabsContent value="verification">
-              <VerificationUpload />
+              <div className="space-y-6">
+                {/* Document Progress Tracker - NEW FEATURE */}
+                <DocumentProgressTracker />
+                
+                {/* Original Verification Upload */}
+                <VerificationUpload />
+              </div>
             </TabsContent>
 
             <TabsContent value="activity">
@@ -906,6 +954,82 @@ export default function Dashboard() {
                   </div>
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* Notifications Tab - ENHANCED */}
+            <TabsContent value="notifications">
+              <NotificationCenter />
+            </TabsContent>
+
+            {/* Documents Tab - ENHANCED */}
+            <TabsContent value="documents">
+              <div className="space-y-6">
+                {/* Document Download Component for each loan - NEW FEATURE */}
+                {loans && loans.length > 0 && loans.map((loan) => (
+                  loan.status === "approved" || loan.status === "fee_paid" || loan.status === "disbursed" || loan.status === "fee_pending" ? (
+                    <div key={`download-${loan.id}`}>
+                      <DocumentDownload 
+                        loanId={loan.id}
+                        trackingNumber={loan.trackingNumber}
+                        status={loan.status}
+                        approvedAmount={loan.approvedAmount ?? undefined}
+                        processingFeeAmount={loan.processingFeeAmount ?? undefined}
+                      />
+                      
+                      {/* Loan Application Progress - NEW FEATURE */}
+                      <div className="mt-6">
+                        <LoanApplicationProgress 
+                          status={loan.status}
+                          processingFeeAmount={loan.processingFeeAmount ?? undefined}
+                          approvedAmount={loan.approvedAmount ?? undefined}
+                        />
+                      </div>
+                    </div>
+                  ) : null
+                ))}
+                
+                {/* Legal Documents Section */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-xl text-[#0033A0]">Legal Documents</CardTitle>
+                    <CardDescription>View our legal and policy documents</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-3">
+                      <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+                        <div className="flex items-center gap-3">
+                          <FileText className="w-5 h-5 text-gray-600" />
+                          <div>
+                            <p className="font-medium text-gray-900">Privacy Policy</p>
+                            <p className="text-sm text-gray-600">Our privacy practices and data protection</p>
+                          </div>
+                        </div>
+                        <a href="/public/legal/privacy-policy" target="_blank" rel="noopener noreferrer">
+                          <Button variant="outline" size="sm">
+                            <Download className="w-4 h-4 mr-1" />
+                            View
+                          </Button>
+                        </a>
+                      </div>
+                      <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+                        <div className="flex items-center gap-3">
+                          <FileText className="w-5 h-5 text-gray-600" />
+                          <div>
+                            <p className="font-medium text-gray-900">Terms of Service</p>
+                            <p className="text-sm text-gray-600">Terms and conditions of using our service</p>
+                          </div>
+                        </div>
+                        <a href="/public/legal/terms-of-service" target="_blank" rel="noopener noreferrer">
+                          <Button variant="outline" size="sm">
+                            <Download className="w-4 h-4 mr-1" />
+                            View
+                          </Button>
+                        </a>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
 
             <TabsContent value="messages">
@@ -968,94 +1092,245 @@ export default function Dashboard() {
             </TabsContent>
 
             <TabsContent value="payments">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-2xl text-[#0033A0]">Payment History</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-50 border-b">
-                        <tr>
-                          <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Date</th>
-                          <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Type</th>
-                          <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Amount</th>
-                          <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
-                          <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Tracking #</th>
-                          <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {paymentsLoading ? (
-                          <tr>
-                            <td colSpan={6} className="text-center py-12">
-                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0033A0] mx-auto mb-3"></div>
-                              <p className="text-gray-600">Loading payment history...</p>
-                            </td>
-                          </tr>
-                        ) : payments && payments.length > 0 ? (
-                          payments.map((payment: any) => (
-                            <tr key={payment.id} className="hover:bg-gray-50">
-                              <td className="py-3 px-4 text-sm text-gray-800">
-                                {formatDate(payment.date)}
-                              </td>
-                              <td className="py-3 px-4 text-sm text-gray-800">
-                                {payment.paymentMethod}
-                              </td>
-                              <td className="py-3 px-4 text-sm font-semibold text-gray-800">
-                                {formatCurrency(payment.amount)}
-                              </td>
-                              <td className="py-3 px-4">
-                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                  payment.status === "completed" || payment.status === "succeeded"
-                                    ? "bg-green-100 text-green-800"
-                                    : payment.status === "pending"
-                                    ? "bg-yellow-100 text-yellow-800"
-                                    : "bg-red-100 text-red-800"
-                                }`}>
-                                  {payment.status === "completed" || payment.status === "succeeded" ? (
-                                    <><CheckCircle2 className="w-3 h-3 mr-1" />Paid</>
-                                  ) : payment.status === "pending" ? (
-                                    <><Clock className="w-3 h-3 mr-1" />Pending</>
-                                  ) : (
-                                    <><XCircle className="w-3 h-3 mr-1" />Failed</>
-                                  )}
-                                </span>
-                              </td>
-                              <td className="py-3 px-4 text-sm font-mono text-[#0033A0]">
-                                {payment.trackingNumber}
-                              </td>
-                              <td className="py-3 px-4 text-right">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-xs"
-                                >
-                                  <Download className="w-3 h-3 mr-1" />
-                                  Receipt
-                                </Button>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={6} className="text-center py-12">
-                              <Receipt className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                              <p className="text-gray-600">No payment history yet</p>
-                              <p className="text-sm text-gray-500 mt-1">
-                                Payments will appear here once you pay processing fees
-                              </p>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* Payment History & Analytics - NEW FEATURE #3 */}
+              <PaymentHistoryAnalytics />
+            </TabsContent>
+
+            {/* Auto-Pay Settings Tab - NEW FEATURE #4 */}
+            <TabsContent value="auto-pay">
+              <AutoPaySettings loans={loans} />
+            </TabsContent>
+
+            {/* Security & 2FA Tab - NEW FEATURE #2 */}
+            <TabsContent value="security">
+              <TwoFactorAuth />
             </TabsContent>
 
           </Tabs>
+
+          {/* Payment Schedule Section */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-2xl text-[#0033A0]">Payment Schedule</CardTitle>
+              <CardDescription>View your upcoming loan repayment schedule</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loans && loans.filter(l => l.status === "disbursed").length > 0 ? (
+                loans.filter(l => l.status === "disbursed").map(loan => {
+                  const interestRate = 5.5; // Default interest rate
+                  const loanTerm = 5; // Default loan term in years
+                  const monthlyRate = (interestRate / 100) / 12;
+                  const numPayments = loanTerm * 12;
+                  const loanAmount = (loan.approvedAmount || 0) / 100;
+                  const monthlyPayment = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / (Math.pow(1 + monthlyRate, numPayments) - 1);
+                  
+                  let balance = loanAmount;
+                  const schedule = [];
+                  
+                  for (let i = 1; i <= Math.min(numPayments, 12); i++) {
+                    const interestPayment = balance * monthlyRate;
+                    const principalPayment = monthlyPayment - interestPayment;
+                    balance -= principalPayment;
+                    
+                    schedule.push({
+                      month: i,
+                      payment: monthlyPayment,
+                      principal: principalPayment,
+                      interest: interestPayment,
+                      balance: Math.max(0, balance)
+                    });
+                  }
+                  
+                  return (
+                    <div key={loan.id} className="space-y-4">
+                      <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+                        <div>
+                          <p className="font-semibold text-gray-900">Loan ID: {loan.id}</p>
+                          <p className="text-sm text-gray-600">
+                            ${loanAmount.toLocaleString()} at {interestRate}% for {loanTerm} years
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-600">Monthly Payment</p>
+                          <p className="text-2xl font-bold text-[#0033A0]">
+                            ${monthlyPayment.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50 border-b">
+                            <tr>
+                              <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Month</th>
+                              <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Payment</th>
+                              <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Principal</th>
+                              <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Interest</th>
+                              <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Balance</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {schedule.map((row) => (
+                              <tr key={row.month} className="hover:bg-gray-50">
+                                <td className="py-3 px-4 text-sm text-gray-800">Payment {row.month}</td>
+                                <td className="py-3 px-4 text-sm text-gray-800 text-right font-medium">
+                                  ${row.payment.toFixed(2)}
+                                </td>
+                                <td className="py-3 px-4 text-sm text-green-600 text-right">
+                                  ${row.principal.toFixed(2)}
+                                </td>
+                                <td className="py-3 px-4 text-sm text-amber-600 text-right">
+                                  ${row.interest.toFixed(2)}
+                                </td>
+                                <td className="py-3 px-4 text-sm text-gray-800 text-right font-semibold">
+                                  ${row.balance.toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      {numPayments > 12 && (
+                        <p className="text-sm text-gray-500 text-center">
+                          Showing first 12 payments of {numPayments} total
+                        </p>
+                      )}
+                      
+                      <Button 
+                        variant="outline" 
+                        className="w-full"
+                        onClick={() => {
+                          // Generate full schedule
+                          const fullSchedule = [];
+                          let bal = loanAmount;
+                          for (let i = 1; i <= numPayments; i++) {
+                            const interestPmt = bal * monthlyRate;
+                            const principalPmt = monthlyPayment - interestPmt;
+                            bal -= principalPmt;
+                            fullSchedule.push({
+                              month: i,
+                              payment: monthlyPayment,
+                              principal: principalPmt,
+                              interest: interestPmt,
+                              balance: Math.max(0, bal)
+                            });
+                          }
+                          
+                          // Create CSV
+                          const csv = [
+                            ['Month', 'Payment', 'Principal', 'Interest', 'Balance'].join(','),
+                            ...fullSchedule.map(row => [
+                              row.month,
+                              row.payment.toFixed(2),
+                              row.principal.toFixed(2),
+                              row.interest.toFixed(2),
+                              row.balance.toFixed(2)
+                            ].join(','))
+                          ].join('\n');
+                          
+                          const blob = new Blob([csv], { type: 'text/csv' });
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `payment-schedule-loan-${loan.id}.csv`;
+                          a.click();
+                          window.URL.revokeObjectURL(url);
+                          toast.success('Payment schedule downloaded');
+                        }}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Download Full Schedule
+                      </Button>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-12">
+                  <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-600">No disbursed loans yet</p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Payment schedule will appear after your loan is disbursed
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Auto-Pay Settings */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-2xl text-[#0033A0]">Auto-Pay Settings</CardTitle>
+              <CardDescription>Set up automatic monthly payments</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loans && loans.filter(l => l.status === "disbursed").length > 0 ? (
+                <div className="space-y-6">
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-amber-900">Auto-Pay Coming Soon</p>
+                        <p className="text-xs text-amber-700 mt-1">
+                          Automatic payment functionality will be available in the next update. 
+                          You'll be able to link your bank account and set up recurring payments.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Payment Method</Label>
+                        <Select disabled>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select payment method" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="bank">Bank Account</SelectItem>
+                            <SelectItem value="card">Debit Card</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label>Payment Date</Label>
+                        <Select disabled>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select payment date" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">1st of month</SelectItem>
+                            <SelectItem value="15">15th of month</SelectItem>
+                            <SelectItem value="30">Last day of month</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between p-4 border rounded-lg">
+                      <div>
+                        <p className="font-medium text-gray-900">Enable Auto-Pay</p>
+                        <p className="text-sm text-gray-500">Automatically pay your monthly loan payment</p>
+                      </div>
+                      <Button disabled variant="outline">
+                        Enable
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <CreditCard className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-600">No active loans</p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Auto-pay will be available once you have an active loan
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Help Section */}
           <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">

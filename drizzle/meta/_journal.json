@@ -43,6 +43,13 @@
       "when": 1764048129302,
       "tag": "0005_known_outlaw_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1764074954140,
+      "tag": "0006_concerned_jack_murdock",
+      "breakpoints": true
     }
   ]
 }

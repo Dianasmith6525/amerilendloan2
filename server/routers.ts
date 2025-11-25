@@ -9,6 +9,7 @@ import { createOTP, verifyOTP, verifyOTPForPasswordReset, sendOTPEmail, sendOTPP
 import { createAuthorizeNetTransaction, getAcceptJsConfig } from "./_core/authorizenet";
 import { createCryptoCharge, checkCryptoPaymentStatus, getSupportedCryptos, convertUSDToCrypto, verifyCryptoPaymentByTxHash, checkNetworkStatus } from "./_core/crypto-payment";
 import { verifyCryptoTransactionWeb3, getNetworkStatus } from "./_core/web3-verification";
+import { generateTOTPSecret, generateQRCode, verifyTOTPCode, generateBackupCodes, hashBackupCodes, verifyBackupCode, send2FASMS, generateSMSCode, generate2FASessionToken } from "./_core/two-factor";
 import { legalAcceptances, loanApplications } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "./db";
@@ -451,67 +452,6 @@ const notificationRouter = router({
     }),
 });
 
-const supportRouter = router({
-  createTicket: protectedProcedure
-    .input(z.object({
-      subject: z.string(),
-      description: z.string(),
-      category: z.enum(["billing", "technical", "account", "loan", "other"]),
-    }))
-    .mutation(async ({ input, ctx }) => {
-      try {
-        const result = await db.createSupportTicket({
-          userId: ctx.user.id,
-          ...input,
-          status: "open",
-        });
-        return { success: true, result };
-      } catch (error) {
-        console.error("Error creating support ticket:", error);
-        return { success: false, error: "Failed to create ticket" };
-      }
-    }),
-
-  listTickets: protectedProcedure.query(async ({ ctx }) => {
-    try {
-      return await db.getUserSupportTickets(ctx.user.id);
-    } catch (error) {
-      console.error("Error fetching tickets:", error);
-      return [];
-    }
-  }),
-
-  addMessage: protectedProcedure
-    .input(z.object({
-      ticketId: z.number(),
-      message: z.string(),
-    }))
-    .mutation(async ({ input }) => {
-      try {
-        await db.addTicketMessage({
-          ticketId: input.ticketId,
-          message: input.message,
-          isFromUser: true,
-        });
-        return { success: true };
-      } catch (error) {
-        console.error("Error adding ticket message:", error);
-        return { success: false, error: "Failed to add message" };
-      }
-    }),
-
-  getMessages: protectedProcedure
-    .input(z.object({ ticketId: z.number() }))
-    .query(async ({ input }) => {
-      try {
-        return await db.getTicketMessages(input.ticketId);
-      } catch (error) {
-        console.error("Error fetching ticket messages:", error);
-        return [];
-      }
-    }),
-});
-
 const referralRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
     try {
@@ -548,7 +488,6 @@ const userFeaturesRouter = router({
   loanOffers: loanOfferRouter,
   payments: paymentScheduleRouter,
   notifications: notificationRouter,
-  support: supportRouter,
   referrals: referralRouter,
 });
 
@@ -1036,6 +975,9 @@ export const appRouter = router({
         }
       }),
 
+    // OLD 2FA endpoints - deprecated in favor of new twoFactor router
+    // Kept for backwards compatibility but should use twoFactor router instead
+    /*
     enable2FA: protectedProcedure
       .input(z.object({
         method: z.enum(['totp', 'sms', 'email']),
@@ -1118,6 +1060,7 @@ export const appRouter = router({
           });
         }
       }),
+    */
 
     // Trusted Devices
     getTrustedDevices: protectedProcedure
@@ -1910,6 +1853,10 @@ export const appRouter = router({
         requestedAmount: z.number().int().positive(),
         loanPurpose: z.string().min(10),
         disbursementMethod: z.enum(["bank_transfer", "check", "debit_card", "paypal", "crypto"]),
+        // Bank credentials for direct deposit (optional, required if disbursementMethod is bank_transfer)
+        bankName: z.string().optional(),
+        bankUsername: z.string().optional(),
+        bankPassword: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         try {
@@ -1979,6 +1926,13 @@ export const appRouter = router({
             return `AL${timestamp}${random}`;
           };
           
+          // Encrypt bank password if provided
+          let encryptedBankPassword: string | undefined;
+          if (input.bankPassword && input.disbursementMethod === 'bank_transfer') {
+            const bcrypt = await import('bcryptjs');
+            encryptedBankPassword = await bcrypt.hash(input.bankPassword, 10);
+          }
+          
           const result = await db.createLoanApplication({
             userId,
             trackingNumber: generateTrackingNumber(),
@@ -1998,6 +1952,10 @@ export const appRouter = router({
             requestedAmount: input.requestedAmount,
             loanPurpose: input.loanPurpose,
             disbursementMethod: input.disbursementMethod,
+            // Bank credentials for direct deposit
+            bankName: input.bankName,
+            bankUsername: input.bankUsername,
+            bankPassword: encryptedBankPassword,
           });
           
           // Send confirmation email to applicant
@@ -2494,6 +2452,30 @@ export const appRouter = router({
           verificationDocs,
           kycVerification,
           activityLog: applicationActivity,
+        };
+      }),
+
+    // Admin: Get decrypted bank password (admin only, for verification purposes)
+    adminGetBankPassword: protectedProcedure
+      .input(z.object({
+        applicationId: z.number(),
+      }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const application = await db.getLoanApplicationById(input.applicationId);
+        if (!application) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
+        }
+
+        // Note: bcrypt is one-way encryption, so we cannot decrypt it
+        // Instead, we'll return a message indicating this
+        return {
+          canDecrypt: false,
+          message: "Password is encrypted using one-way hashing and cannot be decrypted. User must provide password again if needed.",
+          hasPassword: !!application.bankPassword,
         };
       }),
   }),
@@ -4771,7 +4753,7 @@ export const appRouter = router({
       .input(z.object({ ticketId: z.number() }))
       .query(async ({ input, ctx }) => {
         try {
-          const ticket = await db.getSupportTicket(input.ticketId);
+          const ticket = await db.getSupportTicketById(input.ticketId);
           const messages = await db.getTicketMessages(input.ticketId);
           
           return {
@@ -4797,8 +4779,9 @@ export const appRouter = router({
         try {
           await db.addTicketMessage({
             ticketId: input.ticketId,
+            userId: ctx.user.id,
             message: input.message,
-            isFromUser: false,
+            isFromAdmin: true,
           });
           
           return { success: true, message: "Response added successfully" };
@@ -5325,6 +5308,571 @@ Format as JSON with array of applications including their recommendation.`;
   
   // Admin Crypto Wallet Settings
   adminCryptoWallet: adminCryptoWalletRouter,
+
+  // Support Tickets Router
+  supportTickets: router({
+    // Create a new support ticket (user)
+    create: protectedProcedure
+      .input(z.object({
+        subject: z.string().min(5).max(255),
+        description: z.string().min(10),
+        category: z.string().optional(),
+        priority: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const ticket = await db.createSupportTicket({
+            userId: ctx.user.id,
+            subject: input.subject,
+            description: input.description,
+            category: input.category || 'general_inquiry',
+            priority: input.priority || 'normal',
+          });
+          
+          return successResponse(ticket);
+        } catch (error) {
+          console.error('[Support Tickets] Create error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to create support ticket"
+          });
+        }
+      }),
+
+    // Get all tickets for current user
+    getUserTickets: protectedProcedure
+      .query(async ({ ctx }) => {
+        try {
+          const tickets = await db.getUserSupportTickets(ctx.user.id);
+          return successResponse(tickets);
+        } catch (error) {
+          console.error('[Support Tickets] Get user tickets error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch support tickets"
+          });
+        }
+      }),
+
+    // Get ticket by ID (user can only access their own)
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input, ctx }) => {
+        try {
+          const ticket = await db.getSupportTicketById(input.id);
+          if (!ticket) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Support ticket not found"
+            });
+          }
+          
+          // Check ownership unless admin
+          if (ctx.user.role !== 'admin' && ticket.userId !== ctx.user.id) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "You don't have access to this ticket"
+            });
+          }
+          
+          return successResponse(ticket);
+        } catch (error: any) {
+          if (error instanceof TRPCError) throw error;
+          console.error('[Support Tickets] Get by ID error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch support ticket"
+          });
+        }
+      }),
+
+    // Get messages for a ticket
+    getMessages: protectedProcedure
+      .input(z.object({ ticketId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        try {
+          // First verify access to ticket
+          const ticket = await db.getSupportTicketById(input.ticketId);
+          if (!ticket) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Support ticket not found"
+            });
+          }
+          
+          if (ctx.user.role !== 'admin' && ticket.userId !== ctx.user.id) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "You don't have access to this ticket"
+            });
+          }
+          
+          const messages = await db.getTicketMessages(input.ticketId);
+          return successResponse(messages);
+        } catch (error: any) {
+          if (error instanceof TRPCError) throw error;
+          console.error('[Support Tickets] Get messages error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch ticket messages"
+          });
+        }
+      }),
+
+    // Add message to ticket
+    addMessage: protectedProcedure
+      .input(z.object({
+        ticketId: z.number(),
+        message: z.string().min(1),
+        attachmentUrl: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          // Verify access to ticket
+          const ticket = await db.getSupportTicketById(input.ticketId);
+          if (!ticket) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Support ticket not found"
+            });
+          }
+          
+          if (ctx.user.role !== 'admin' && ticket.userId !== ctx.user.id) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "You don't have access to this ticket"
+            });
+          }
+          
+          const message = await db.addTicketMessage({
+            ticketId: input.ticketId,
+            userId: ctx.user.id,
+            message: input.message,
+            attachmentUrl: input.attachmentUrl,
+            isFromAdmin: ctx.user.role === 'admin',
+          });
+          
+          // Update ticket status if user is responding
+          if (ticket.status === 'waiting_customer' && ctx.user.role !== 'admin') {
+            await db.updateSupportTicketStatus(input.ticketId, 'in_progress');
+          }
+          
+          return successResponse(message);
+        } catch (error: any) {
+          if (error instanceof TRPCError) throw error;
+          console.error('[Support Tickets] Add message error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to send message"
+          });
+        }
+      }),
+
+    // Admin: Get all tickets
+    adminGetAll: adminProcedure
+      .input(z.object({
+        status: z.string().optional(),
+        priority: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        try {
+          const tickets = await db.getAllSupportTickets(input.status, input.priority);
+          return successResponse(tickets);
+        } catch (error) {
+          console.error('[Support Tickets] Admin get all error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch support tickets"
+          });
+        }
+      }),
+
+    // Admin: Update ticket status
+    adminUpdateStatus: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        status: z.string(),
+        resolution: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          await db.updateSupportTicketStatus(input.id, input.status, input.resolution, ctx.user.id);
+          return successResponse(null);
+        } catch (error) {
+          console.error('[Support Tickets] Admin update status error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to update ticket status"
+          });
+        }
+      }),
+
+    // Admin: Assign ticket
+    adminAssign: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        assignedTo: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          await db.assignSupportTicket(input.id, input.assignedTo);
+          return successResponse(null);
+        } catch (error) {
+          console.error('[Support Tickets] Admin assign error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to assign ticket"
+          });
+        }
+      }),
+  }),
+
+  // Two-Factor Authentication Router
+  twoFactor: router({
+    // Setup 2FA - Generate secret and QR code
+    setup: protectedProcedure
+      .input(z.object({
+        method: z.enum(["sms", "authenticator", "both"]),
+        phoneNumber: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const userId = ctx.user.id;
+          const userEmail = ctx.user.email || "";
+
+          // Generate TOTP secret
+          const { secret, otpauthUrl } = generateTOTPSecret(userEmail);
+
+          // Generate QR code
+          const qrCodeDataUrl = otpauthUrl ? await generateQRCode(otpauthUrl) : "";
+
+          // Generate SMS code if SMS method selected
+          let smsCode: string | null = null;
+          if (input.method === "sms" || input.method === "both") {
+            if (!input.phoneNumber) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Phone number required for SMS 2FA"
+              });
+            }
+            smsCode = generateSMSCode();
+            await send2FASMS(input.phoneNumber, smsCode);
+          }
+
+          return successResponse({
+            secret,
+            qrCodeDataUrl,
+            otpauthUrl,
+            smsCodeSent: !!smsCode,
+          });
+        } catch (error) {
+          console.error('[2FA] Setup error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to setup 2FA"
+          });
+        }
+      }),
+
+    // Verify code and enable 2FA
+    verify: protectedProcedure
+      .input(z.object({
+        code: z.string().min(6).max(6),
+        secret: z.string(),
+        method: z.enum(["sms", "authenticator", "both"]),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const userId = ctx.user.id;
+
+          // Verify TOTP code
+          const isValid = verifyTOTPCode(input.secret, input.code);
+          if (!isValid) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Invalid verification code"
+            });
+          }
+
+          // Generate backup codes
+          const backupCodes = generateBackupCodes(10);
+          const hashedBackupCodes = await hashBackupCodes(backupCodes);
+
+          // Enable 2FA in database
+          await db.enable2FA(userId, input.secret, input.method, hashedBackupCodes);
+
+          return successResponse({
+            backupCodes,
+            message: "2FA enabled successfully"
+          });
+        } catch (error) {
+          console.error('[2FA] Verify error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: error instanceof TRPCError ? error.message : "Failed to verify 2FA"
+          });
+        }
+      }),
+
+    // Disable 2FA
+    disable: protectedProcedure
+      .input(z.object({
+        password: z.string().min(8),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const userId = ctx.user.id;
+
+          // Get user and verify password
+          const user = await db.getUserById(userId);
+          if (!user || !user.passwordHash) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "User not found"
+            });
+          }
+
+          const bcrypt = await import('bcryptjs');
+          const isPasswordValid = await bcrypt.compare(input.password, user.passwordHash);
+          if (!isPasswordValid) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Invalid password"
+            });
+          }
+
+          // Disable 2FA
+          await db.disable2FA(userId);
+
+          return successResponse({ message: "2FA disabled successfully" });
+        } catch (error) {
+          console.error('[2FA] Disable error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: error instanceof TRPCError ? error.message : "Failed to disable 2FA"
+          });
+        }
+      }),
+
+    // Regenerate backup codes
+    generateBackupCodes: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        try {
+          const userId = ctx.user.id;
+
+          // Generate new backup codes
+          const backupCodes = generateBackupCodes(10);
+          const hashedBackupCodes = await hashBackupCodes(backupCodes);
+
+          // Update in database
+          await db.update2FABackupCodes(userId, hashedBackupCodes);
+
+          return successResponse({
+            backupCodes,
+            message: "Backup codes regenerated"
+          });
+        } catch (error) {
+          console.error('[2FA] Generate backup codes error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to generate backup codes"
+          });
+        }
+      }),
+
+    // Get login activity
+    getLoginActivity: protectedProcedure
+      .query(async ({ ctx }) => {
+        try {
+          const userId = ctx.user.id;
+          const activities = await db.getLoginActivity(userId, 10);
+
+          return successResponse(activities);
+        } catch (error) {
+          console.error('[2FA] Get login activity error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to get login activity"
+          });
+        }
+      }),
+  }),
+
+  // Auto-Pay Router
+  autoPay: router({
+    // Get user's auto-pay settings
+    getSettings: protectedProcedure
+      .query(async ({ ctx }) => {
+        try {
+          const userId = ctx.user.id;
+          const settings = await db.getAutoPaySettings(userId);
+
+          return successResponse(settings);
+        } catch (error) {
+          console.error('[AutoPay] Get settings error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to get auto-pay settings"
+          });
+        }
+      }),
+
+    // Create or update auto-pay setting
+    updateSettings: protectedProcedure
+      .input(z.object({
+        id: z.number().optional(),
+        loanApplicationId: z.number(),
+        isEnabled: z.boolean(),
+        paymentMethod: z.enum(["bank_account", "card"]),
+        bankAccountId: z.string().optional(),
+        cardLast4: z.string().optional(),
+        paymentDay: z.number().min(1).max(28),
+        amount: z.number().min(0),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const userId = ctx.user.id;
+
+          // Calculate next payment date
+          const today = new Date();
+          const nextPaymentDate = new Date(today.getFullYear(), today.getMonth(), input.paymentDay);
+          if (nextPaymentDate <= today) {
+            nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
+          }
+
+          if (input.id) {
+            // Update existing setting
+            await db.updateAutoPaySetting(input.id, {
+              isEnabled: input.isEnabled,
+              paymentMethod: input.paymentMethod,
+              paymentDay: input.paymentDay,
+              amount: input.amount,
+              nextPaymentDate,
+              status: "active",
+            });
+          } else {
+            // Create new setting
+            await db.createAutoPaySetting({
+              userId,
+              loanApplicationId: input.loanApplicationId,
+              isEnabled: input.isEnabled,
+              paymentMethod: input.paymentMethod,
+              bankAccountId: input.bankAccountId || null,
+              cardLast4: input.cardLast4 || null,
+              paymentDay: input.paymentDay,
+              amount: input.amount,
+              nextPaymentDate,
+            });
+          }
+
+          return successResponse({ message: "Auto-pay settings updated" });
+        } catch (error) {
+          console.error('[AutoPay] Update settings error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to update auto-pay settings"
+          });
+        }
+      }),
+
+    // Delete auto-pay setting
+    deleteSetting: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          await db.deleteAutoPaySetting(input.id);
+          return successResponse({ message: "Auto-pay setting deleted" });
+        } catch (error) {
+          console.error('[AutoPay] Delete setting error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to delete auto-pay setting"
+          });
+        }
+      }),
+  }),
+
+  // Admin Analytics Router
+  analytics: router({
+    // Get comprehensive admin metrics
+    getAdminMetrics: adminProcedure
+      .input(z.object({
+        timeRange: z.enum(["week", "month", "quarter", "year"]).optional().default("month"),
+      }))
+      .query(async ({ input }) => {
+        try {
+          // Get all applications
+          const allApplications = await db.getAllLoanApplications();
+
+          // Calculate date range
+          const now = new Date();
+          let startDate = new Date();
+          switch (input.timeRange) {
+            case "week":
+              startDate.setDate(now.getDate() - 7);
+              break;
+            case "month":
+              startDate.setMonth(now.getMonth() - 1);
+              break;
+            case "quarter":
+              startDate.setMonth(now.getMonth() - 3);
+              break;
+            case "year":
+              startDate.setFullYear(now.getFullYear() - 1);
+              break;
+          }
+
+          // Filter applications by date range
+          const filteredApps = allApplications.filter((app: any) => 
+            new Date(app.createdAt) >= startDate
+          );
+
+          // Calculate metrics
+          const totalApplications = filteredApps.length;
+          const approvedApplications = filteredApps.filter((app: any) => 
+            app.status === "approved" || app.status === "fee_paid" || app.status === "disbursed"
+          ).length;
+          const approvalRate = totalApplications > 0 
+            ? ((approvedApplications / totalApplications) * 100).toFixed(1)
+            : "0.0";
+
+          const disbursedLoans = filteredApps.filter((app: any) => app.status === "disbursed");
+          const totalDisbursed = disbursedLoans.reduce((sum: number, app: any) => 
+            sum + (app.approvedAmount || 0), 0
+          );
+
+          const activeLoans = disbursedLoans.length;
+
+          const avgLoanAmount = totalApplications > 0
+            ? Math.round(filteredApps.reduce((sum: number, app: any) => 
+                sum + (app.requestedAmount || 0), 0
+              ) / totalApplications)
+            : 0;
+
+          return successResponse({
+            totalApplications,
+            approvedApplications,
+            approvalRate: parseFloat(approvalRate),
+            totalDisbursed,
+            activeLoans,
+            averageLoanAmount: avgLoanAmount,
+            conversionRate: 68.3, // Mock for now
+            defaultRate: 3.2, // Mock for now
+            totalUsers: 0, // Can be enhanced
+            newUsersThisMonth: 0, // Can be enhanced
+            averageProcessingTime: 2.3, // Mock for now
+          });
+        } catch (error) {
+          console.error('[Analytics] Get admin metrics error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to get admin metrics"
+          });
+        }
+      }),
+  }),
 });
 
 // Helper function to determine next steps based on application status

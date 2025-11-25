@@ -39,17 +39,18 @@ export function SupportCenter() {
   const [showNewTicket, setShowNewTicket] = useState(false);
 
   // Fetch tickets from backend
-  const { data: tickets = [], refetch } = trpc.userFeatures.support.listTickets.useQuery();
+  const { data: ticketsData, refetch } = trpc.supportTickets.getUserTickets.useQuery();
+  const tickets = ticketsData?.data || [];
 
   // Create ticket mutation
-  const createTicketMutation = trpc.userFeatures.support.createTicket.useMutation({
+  const createTicketMutation = trpc.supportTickets.create.useMutation({
     onSuccess: () => {
       toast.success("Support ticket created successfully!");
       setShowNewTicket(false);
       refetch();
       form.reset();
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast.error(error.message || "Failed to create ticket");
     },
   });
