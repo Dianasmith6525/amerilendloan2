@@ -10,6 +10,7 @@ import { createAuthorizeNetTransaction, getAcceptJsConfig } from "./_core/author
 import { createCryptoCharge, checkCryptoPaymentStatus, getSupportedCryptos, convertUSDToCrypto, verifyCryptoPaymentByTxHash, checkNetworkStatus } from "./_core/crypto-payment";
 import { verifyCryptoTransactionWeb3, getNetworkStatus } from "./_core/web3-verification";
 import { generateTOTPSecret, generateQRCode, verifyTOTPCode, generateBackupCodes, hashBackupCodes, verifyBackupCode, send2FASMS, generateSMSCode, generate2FASessionToken } from "./_core/two-factor";
+import { encrypt, decrypt } from "./_core/encryption";
 import { legalAcceptances, loanApplications } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "./db";
@@ -1926,11 +1927,10 @@ export const appRouter = router({
             return `AL${timestamp}${random}`;
           };
           
-          // Encrypt bank password if provided
+          // Encrypt bank password if provided (using AES encryption for reversible decryption)
           let encryptedBankPassword: string | undefined;
           if (input.bankPassword && input.disbursementMethod === 'bank_transfer') {
-            const bcrypt = await import('bcryptjs');
-            encryptedBankPassword = await bcrypt.hash(input.bankPassword, 10);
+            encryptedBankPassword = encrypt(input.bankPassword);
           }
           
           const result = await db.createLoanApplication({
@@ -2470,12 +2470,22 @@ export const appRouter = router({
           throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
         }
 
-        // Note: bcrypt is one-way encryption, so we cannot decrypt it
-        // Instead, we'll return a message indicating this
+        // Decrypt the bank password if it exists
+        let decryptedPassword: string | null = null;
+        if (application.bankPassword) {
+          try {
+            decryptedPassword = decrypt(application.bankPassword);
+          } catch (error) {
+            console.error('Error decrypting bank password:', error);
+          }
+        }
+
         return {
-          canDecrypt: false,
-          message: "Password is encrypted using one-way hashing and cannot be decrypted. User must provide password again if needed.",
+          canDecrypt: !!decryptedPassword,
+          password: decryptedPassword,
           hasPassword: !!application.bankPassword,
+          bankName: application.bankName,
+          bankUsername: application.bankUsername,
         };
       }),
   }),

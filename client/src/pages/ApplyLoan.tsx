@@ -66,6 +66,127 @@ const US_STATES = [
   { code: "WY", name: "Wyoming" }
 ];
 
+const US_BANKS = [
+  // Major National Banks
+  "JPMorgan Chase Bank",
+  "Bank of America",
+  "Wells Fargo Bank",
+  "Citibank",
+  "U.S. Bank",
+  "PNC Bank",
+  "Truist Bank",
+  "Goldman Sachs Bank USA",
+  "TD Bank",
+  "Capital One",
+  "The Bank of New York Mellon",
+  "State Street Bank",
+  "HSBC Bank USA",
+  "Citizens Bank",
+  "Fifth Third Bank",
+  "KeyBank",
+  "Ally Bank",
+  "American Express National Bank",
+  "Discover Bank",
+  "Charles Schwab Bank",
+  "USAA Federal Savings Bank",
+  "Synchrony Bank",
+  "Barclays Bank Delaware",
+  "MUFG Union Bank",
+  "BMO Harris Bank",
+  "Huntington National Bank",
+  "Regions Bank",
+  "M&T Bank",
+  "Santander Bank",
+  "Morgan Stanley Bank",
+  
+  // Major Credit Unions
+  "Navy Federal Credit Union",
+  "State Employees' Credit Union",
+  "Pentagon Federal Credit Union",
+  "SchoolsFirst Federal Credit Union",
+  "Golden 1 Credit Union",
+  "America First Credit Union",
+  "Alliant Credit Union",
+  "BECU (Boeing Employees Credit Union)",
+  "Security Service Federal Credit Union",
+  "GreenState Credit Union",
+  
+  // Regional Banks (by region)
+  // Northeast
+  "People's United Bank",
+  "Webster Bank",
+  "Eastern Bank",
+  "Investors Bank",
+  "First Niagara Bank",
+  
+  // Southeast
+  "SunTrust Bank (now Truist)",
+  "BB&T (now Truist)",
+  "Synovus Bank",
+  "First Citizens Bank",
+  "BancorpSouth Bank",
+  "Cadence Bank",
+  
+  // Midwest
+  "Old National Bank",
+  "First Midwest Bank",
+  "UMB Bank",
+  "Associated Bank",
+  "Commerce Bank",
+  "First Bank",
+  
+  // Southwest
+  "Frost Bank",
+  "Comerica Bank",
+  "Zions Bank",
+  "Western Alliance Bank",
+  "First Interstate Bank",
+  
+  // West
+  "Umpqua Bank",
+  "Banner Bank",
+  "Pacific Western Bank",
+  "First Republic Bank",
+  "East West Bank",
+  
+  // Online/Digital Banks
+  "Chime",
+  "Varo Bank",
+  "Current",
+  "Aspiration",
+  "One Finance",
+  "SoFi",
+  "Marcus by Goldman Sachs",
+  "Axos Bank",
+  "CIT Bank",
+  "Live Oak Bank",
+  
+  // Other Popular Banks
+  "First National Bank",
+  "BankUnited",
+  "New York Community Bank",
+  "Popular Bank",
+  "Valley National Bank",
+  "Flagstar Bank",
+  "Pinnacle Bank",
+  "BOK Financial",
+  "Arvest Bank",
+  "Glacier Bank",
+  "Banner Bank",
+  "Customers Bank",
+  "First Horizon Bank",
+  "Texas Capital Bank",
+  "Simmons Bank",
+  "FirstBank",
+  "Renasant Bank",
+  "Hancock Whitney Bank",
+  "Investors Bank",
+  "Atlantic Union Bank",
+  
+  // Other
+  "Other Bank (Not Listed)"
+].sort();
+
 export default function ApplyLoan() {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -1390,33 +1511,12 @@ export default function ApplyLoan() {
                               <SelectTrigger id="bankNameForDisbursement">
                                 <SelectValue placeholder="Choose your bank" />
                               </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Bank of America">Bank of America</SelectItem>
-                                <SelectItem value="Wells Fargo">Wells Fargo</SelectItem>
-                                <SelectItem value="Chase Bank">Chase Bank</SelectItem>
-                                <SelectItem value="Citibank">Citibank</SelectItem>
-                                <SelectItem value="U.S. Bank">U.S. Bank</SelectItem>
-                                <SelectItem value="PNC Bank">PNC Bank</SelectItem>
-                                <SelectItem value="Capital One">Capital One</SelectItem>
-                                <SelectItem value="TD Bank">TD Bank</SelectItem>
-                                <SelectItem value="BB&T (Truist)">BB&T (Truist)</SelectItem>
-                                <SelectItem value="SunTrust (Truist)">SunTrust (Truist)</SelectItem>
-                                <SelectItem value="Regions Bank">Regions Bank</SelectItem>
-                                <SelectItem value="Fifth Third Bank">Fifth Third Bank</SelectItem>
-                                <SelectItem value="KeyBank">KeyBank</SelectItem>
-                                <SelectItem value="Navy Federal Credit Union">Navy Federal Credit Union</SelectItem>
-                                <SelectItem value="USAA">USAA</SelectItem>
-                                <SelectItem value="Ally Bank">Ally Bank</SelectItem>
-                                <SelectItem value="Discover Bank">Discover Bank</SelectItem>
-                                <SelectItem value="Marcus by Goldman Sachs">Marcus by Goldman Sachs</SelectItem>
-                                <SelectItem value="American Express National Bank">American Express National Bank</SelectItem>
-                                <SelectItem value="Synchrony Bank">Synchrony Bank</SelectItem>
-                                <SelectItem value="Charles Schwab Bank">Charles Schwab Bank</SelectItem>
-                                <SelectItem value="Chime">Chime</SelectItem>
-                                <SelectItem value="Varo Bank">Varo Bank</SelectItem>
-                                <SelectItem value="Current">Current</SelectItem>
-                                <SelectItem value="Cash App">Cash App</SelectItem>
-                                <SelectItem value="Other">Other Bank</SelectItem>
+                              <SelectContent className="max-h-[300px]">
+                                {US_BANKS.map((bank) => (
+                                  <SelectItem key={bank} value={bank}>
+                                    {bank}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </div>

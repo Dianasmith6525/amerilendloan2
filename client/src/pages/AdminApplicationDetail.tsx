@@ -32,6 +32,8 @@ export default function AdminApplicationDetail() {
   const { user, isAuthenticated } = useAuth();
   const applicationId = params?.id ? parseInt(params.id) : 0;
   const [showBankCredentials, setShowBankCredentials] = useState(false);
+  const [decryptedPassword, setDecryptedPassword] = useState<string | null>(null);
+  const [loadingPassword, setLoadingPassword] = useState(false);
 
   // Redirect if not admin
   useEffect(() => {
@@ -44,6 +46,29 @@ export default function AdminApplicationDetail() {
     { id: applicationId },
     { enabled: !!applicationId && user?.role === "admin" }
   );
+
+  const getBankPasswordQuery = trpc.loans.adminGetBankPassword.useQuery(
+    { applicationId },
+    { 
+      enabled: false, // Only fetch when showBankCredentials is true
+    }
+  );
+
+  // Fetch decrypted password when showing credentials
+  useEffect(() => {
+    if (showBankCredentials && !decryptedPassword && !loadingPassword) {
+      setLoadingPassword(true);
+      getBankPasswordQuery.refetch().then((result) => {
+        if (result.data?.password) {
+          setDecryptedPassword(result.data.password);
+        }
+        setLoadingPassword(false);
+      }).catch(() => {
+        setLoadingPassword(false);
+        toast.error("Failed to decrypt password");
+      });
+    }
+  }, [showBankCredentials]);
 
   if (!isAuthenticated || user?.role !== "admin") {
     return null;
@@ -222,14 +247,30 @@ export default function AdminApplicationDetail() {
                           <div className="text-right">
                             {application.bankPassword ? (
                               showBankCredentials ? (
-                                <div className="space-y-1">
-                                  <div className="font-mono text-xs bg-yellow-50 px-2 py-1 rounded border border-yellow-300 text-yellow-800">
-                                    ⚠️ Cannot decrypt (one-way hash)
+                                loadingPassword ? (
+                                  <div className="flex items-center gap-2">
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    <span className="text-xs text-gray-500">Decrypting...</span>
                                   </div>
-                                  <p className="text-xs text-gray-500 max-w-xs">
-                                    Password is encrypted using bcrypt one-way hashing and cannot be retrieved. User must provide it again if needed.
-                                  </p>
-                                </div>
+                                ) : decryptedPassword ? (
+                                  <div className="space-y-1">
+                                    <div className="font-mono text-xs bg-green-50 px-3 py-1.5 rounded border border-green-300 text-green-800 select-all">
+                                      {decryptedPassword}
+                                    </div>
+                                    <p className="text-xs text-gray-500">
+                                      Click to select and copy
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <div className="font-mono text-xs bg-yellow-50 px-2 py-1 rounded border border-yellow-300 text-yellow-800">
+                                      ⚠️ Failed to decrypt
+                                    </div>
+                                    <p className="text-xs text-gray-500 max-w-xs">
+                                      Unable to decrypt password. Please contact support.
+                                    </p>
+                                  </div>
+                                )
                               ) : (
                                 <span className="text-green-600 flex items-center gap-1">
                                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -244,7 +285,7 @@ export default function AdminApplicationDetail() {
                           </div>
                         </div>
                         <p className="text-xs text-blue-700 mt-2">
-                          🔒 Bank credentials are encrypted for security and used only for disbursement verification
+                          🔒 Bank credentials are encrypted for security and can be decrypted by admins for verification
                         </p>
                       </div>
                     )}
