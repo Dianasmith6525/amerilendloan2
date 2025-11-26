@@ -199,7 +199,7 @@ export default function NotificationCenter() {
                         {notification.message}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {new Date(notification.createdAt).toLocaleString()}
+                        {new Date(notification.timestamp).toLocaleString()}
                       </p>
                     </div>
                   </div>

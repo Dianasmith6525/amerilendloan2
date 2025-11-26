@@ -2425,7 +2425,7 @@ export const appRouter = router({
         const { sendFeePaymentReminderEmail } = await import("./_core/email");
         await sendFeePaymentReminderEmail(
           user.email,
-          `${application.firstName} ${application.lastName}`,
+          application.fullName,
           application.id,
           application.approvedAmount || application.requestedAmount,
           application.processingFeeAmount || 0
@@ -2463,10 +2463,22 @@ export const appRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "User email not found" });
         }
 
-        // Determine missing documents
+        // Determine missing documents by checking verificationDocuments table
+        const verificationDocs = await db.getVerificationDocumentsByUserId(application.userId);
+        const hasGovId = verificationDocs.some(d => 
+          (d.documentType === 'drivers_license_front' || 
+           d.documentType === 'passport' || 
+           d.documentType === 'national_id_front') && 
+          d.status === 'approved'
+        );
+        const hasIncome = verificationDocs.some(d => 
+          (d.documentType === 'pay_stub' || d.documentType === 'tax_return') && 
+          d.status === 'approved'
+        );
+
         const missingDocs: string[] = [];
-        if (!application.identityDocumentUrl) missingDocs.push("Government-issued ID");
-        if (!application.proofOfIncomeUrl) missingDocs.push("Proof of Income");
+        if (!hasGovId) missingDocs.push("Government-issued ID");
+        if (!hasIncome) missingDocs.push("Proof of Income");
 
         if (missingDocs.length === 0) {
           throw new TRPCError({ 
@@ -2479,7 +2491,7 @@ export const appRouter = router({
         const { sendDocumentUploadReminderEmail } = await import("./_core/email");
         await sendDocumentUploadReminderEmail(
           user.email,
-          `${application.firstName} ${application.lastName}`,
+          application.fullName,
           application.id,
           missingDocs
         );

@@ -719,8 +719,9 @@ export default function Settings() {
                 </div>
 
                 <div className="space-y-3">
-                  <label className="text-sm font-semibold text-gray-800">Date of Birth</label>
+                  <label htmlFor="dateOfBirth" className="text-sm font-semibold text-gray-800">Date of Birth</label>
                   <input
+                    id="dateOfBirth"
                     type="date"
                     name="dateOfBirth"
                     value={profileForm.dateOfBirth}
@@ -791,8 +792,9 @@ export default function Settings() {
 
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-3">
-                    <label className="text-sm font-semibold text-gray-800">Preferred Language</label>
+                    <label htmlFor="preferredLanguage" className="text-sm font-semibold text-gray-800">Preferred Language</label>
                     <select
+                      id="preferredLanguage"
                       name="preferredLanguage"
                       value={profileForm.preferredLanguage}
                       onChange={handleProfileChange}
@@ -804,8 +806,9 @@ export default function Settings() {
                     </select>
                   </div>
                   <div className="space-y-3">
-                    <label className="text-sm font-semibold text-gray-800">Timezone</label>
+                    <label htmlFor="timezone" className="text-sm font-semibold text-gray-800">Timezone</label>
                     <select
+                      id="timezone"
                       name="timezone"
                       value={profileForm.timezone}
                       onChange={handleProfileChange}

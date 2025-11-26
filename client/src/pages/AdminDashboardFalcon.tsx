@@ -14,7 +14,7 @@ import {
   ShieldCheck, Settings, Wallet, Search, LogOut,
   TrendingUp, Clock, AlertCircle, CheckCircle, XCircle,
   Banknote, CreditCard, Activity, Eye, MessageSquare,
-  Send, Download, Loader2, Upload, FileCheck, Zap
+  Send, Download, Loader2, Upload, FileCheck, Zap, Bell
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";

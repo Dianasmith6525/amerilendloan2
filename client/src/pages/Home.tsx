@@ -177,6 +177,7 @@ export default function Home() {
             <button
               className="md:hidden p-2"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle mobile menu"
             >
               <Menu className="w-6 h-6 text-gray-700" />
             </button>

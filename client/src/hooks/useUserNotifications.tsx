@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 
-interface Notification {
+export interface Notification {
   id: string;
   type: "loan_status" | "payment" | "message" | "document" | "alert";
   title: string;

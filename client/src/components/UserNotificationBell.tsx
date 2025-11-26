@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useLocation } from "wouter";
-import { useUserNotifications } from "@/hooks/useUserNotifications";
+import { useUserNotifications, type Notification } from "@/hooks/useUserNotifications";
 
 export default function UserNotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
@@ -117,6 +117,7 @@ export default function UserNotificationBell() {
             <button
               onClick={() => setIsOpen(false)}
               className="p-1 rounded hover:bg-gray-100"
+              aria-label="Close notifications"
             >
               <X className="w-4 h-4 text-gray-500" />
             </button>
@@ -131,7 +132,7 @@ export default function UserNotificationBell() {
               </div>
             ) : (
               <div className="divide-y divide-gray-100">
-                {notifications.map((notification) => (
+                {notifications.map((notification: Notification) => (
                   <button
                     key={notification.id}
                     onClick={() => handleNotificationClick(notification)}
