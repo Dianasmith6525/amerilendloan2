@@ -17,6 +17,7 @@ import { ensureJsonHeaders } from "./response-formatter";
 import { validatePayload, validateContentLength } from "./payload-validator";
 import { initializePaymentNotificationScheduler, shutdownPaymentNotificationScheduler } from "./paymentScheduler";
 import { startAutoPayScheduler } from "./auto-pay-scheduler";
+import { initializeReminderScheduler, shutdownReminderScheduler } from "./reminderScheduler";
 
 // Validate critical environment variables at startup
 function validateEnvironment() {
@@ -336,6 +337,8 @@ async function startServer() {
     try {
       initializePaymentNotificationScheduler();
       startAutoPayScheduler();
+      initializeReminderScheduler();
+      console.log("[Server] ✅ All schedulers initialized successfully");
     } catch (error) {
       console.warn("[Server] Failed to initialize schedulers:", error);
       // Don't exit - schedulers are optional
@@ -348,8 +351,10 @@ async function startServer() {
     // Shutdown schedulers
     try {
       shutdownPaymentNotificationScheduler();
+      shutdownReminderScheduler();
+      console.log("[Server] ✅ All schedulers shut down successfully");
     } catch (error) {
-      console.warn("[Server] Error shutting down payment scheduler:", error);
+      console.warn("[Server] Error shutting down schedulers:", error);
     }
   });
 }

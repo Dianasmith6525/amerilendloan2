@@ -7,10 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { APP_LOGO, getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Settings, DollarSign, CheckCircle, XCircle, Send, LogOut, Users, FileText, BarChart3, Package, TrendingUp, Clock, AlertCircle, Eye, MessageSquare, Download } from "lucide-react";
+import { Loader2, Settings, DollarSign, CheckCircle, XCircle, Send, LogOut, Users, FileText, BarChart3, Package, TrendingUp, Clock, AlertCircle, Eye, MessageSquare, Download, Home, ShieldCheck, Bell, Search, Menu, X, CreditCard, Activity, Wallet } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
@@ -113,6 +112,11 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedApps, setSelectedApps] = useState<number[]>([]);
+  
+  // Sidebar and navigation states
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [currentView, setCurrentView] = useState<"dashboard" | "applications" | "tracking" | "verification" | "support" | "audit" | "fees" | "crypto">("dashboard");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // Support ticket states
   const [selectedTicket, setSelectedTicket] = useState<number | null>(null);
@@ -331,203 +335,328 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50">
-      {/* Header */}
-      <header className="border-b bg-white/95 backdrop-blur-sm sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar */}
+      <aside className={`fixed left-0 top-0 h-full bg-gradient-to-b from-[#1e3a8a] to-[#1e40af] text-white transition-all duration-300 z-50 ${sidebarOpen ? 'w-64' : 'w-20'} ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        {/* Logo Section */}
+        <div className="p-4 border-b border-blue-600">
+          <div className="flex items-center justify-between">
             <Link href="/">
               <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition">
-                <img src={APP_LOGO || "/logo.jpg"} alt="AmeriLend" className="h-12 w-auto" />
-                <div>
-                  <h1 className="text-lg font-bold text-gray-900">AmeriLend</h1>
-                  <Badge className="bg-blue-600">Admin</Badge>
-                </div>
+                {sidebarOpen ? (
+                  <>
+                    <img src={APP_LOGO || "/logo.jpg"} alt="AmeriLend" className="h-10 w-auto" />
+                    <div>
+                      <h1 className="text-lg font-bold">AmeriLend</h1>
+                      <p className="text-xs text-blue-200">Admin Panel</p>
+                    </div>
+                  </>
+                ) : (
+                  <img src={APP_LOGO || "/logo.jpg"} alt="AmeriLend" className="h-10 w-auto mx-auto" />
+                )}
               </div>
             </Link>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100">
-                <span className="text-sm font-medium text-gray-700">{user?.name || "Admin"}</span>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="p-4 space-y-2">
+          <button
+            onClick={() => setCurrentView("dashboard")}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+              currentView === "dashboard" 
+                ? "bg-white/20 text-white shadow-lg" 
+                : "text-blue-100 hover:bg-white/10"
+            }`}
+          >
+            <Home className="h-5 w-5 flex-shrink-0" />
+            {sidebarOpen && <span className="font-medium">Dashboard</span>}
+          </button>
+
+          <button
+            onClick={() => setCurrentView("applications")}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+              currentView === "applications" 
+                ? "bg-white/20 text-white shadow-lg" 
+                : "text-blue-100 hover:bg-white/10"
+            }`}
+          >
+            <FileText className="h-5 w-5 flex-shrink-0" />
+            {sidebarOpen && <span className="font-medium">Applications</span>}
+          </button>
+
+          <button
+            onClick={() => setCurrentView("tracking")}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+              currentView === "tracking" 
+                ? "bg-white/20 text-white shadow-lg" 
+                : "text-blue-100 hover:bg-white/10"
+            }`}
+          >
+            <Package className="h-5 w-5 flex-shrink-0" />
+            {sidebarOpen && <span className="font-medium">Tracking</span>}
+          </button>
+
+          <button
+            onClick={() => setCurrentView("verification")}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+              currentView === "verification" 
+                ? "bg-white/20 text-white shadow-lg" 
+                : "text-blue-100 hover:bg-white/10"
+            }`}
+          >
+            <ShieldCheck className="h-5 w-5 flex-shrink-0" />
+            {sidebarOpen && <span className="font-medium">Verification</span>}
+          </button>
+
+          <button
+            onClick={() => setCurrentView("support")}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+              currentView === "support" 
+                ? "bg-white/20 text-white shadow-lg" 
+                : "text-blue-100 hover:bg-white/10"
+            }`}
+          >
+            <MessageSquare className="h-5 w-5 flex-shrink-0" />
+            {sidebarOpen && <span className="font-medium">Support</span>}
+          </button>
+
+          <button
+            onClick={() => setCurrentView("audit")}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+              currentView === "audit" 
+                ? "bg-white/20 text-white shadow-lg" 
+                : "text-blue-100 hover:bg-white/10"
+            }`}
+          >
+            <Activity className="h-5 w-5 flex-shrink-0" />
+            {sidebarOpen && <span className="font-medium">Audit Log</span>}
+          </button>
+
+          <button
+            onClick={() => setCurrentView("fees")}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+              currentView === "fees" 
+                ? "bg-white/20 text-white shadow-lg" 
+                : "text-blue-100 hover:bg-white/10"
+            }`}
+          >
+            <DollarSign className="h-5 w-5 flex-shrink-0" />
+            {sidebarOpen && <span className="font-medium">Fee Settings</span>}
+          </button>
+
+          <button
+            onClick={() => setCurrentView("crypto")}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+              currentView === "crypto" 
+                ? "bg-white/20 text-white shadow-lg" 
+                : "text-blue-100 hover:bg-white/10"
+            }`}
+          >
+            <Wallet className="h-5 w-5 flex-shrink-0" />
+            {sidebarOpen && <span className="font-medium">Crypto Wallet</span>}
+          </button>
+        </nav>
+
+        {/* Sidebar Toggle Button (Desktop) */}
+        <div className="absolute bottom-4 left-0 right-0 px-4 hidden md:block">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all text-sm"
+          >
+            {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            {sidebarOpen && <span>Collapse</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Main Content Area */}
+      <div className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'md:ml-64' : 'md:ml-20'}`}>
+        {/* Top Header */}
+        <header className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
+          <div className="px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              {/* Mobile Menu Button */}
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="md:hidden p-2 rounded-lg hover:bg-gray-100"
+              >
+                <Menu className="h-6 w-6 text-gray-600" />
+              </button>
+
+              {/* Search Bar */}
+              <div className="flex-1 max-w-2xl mx-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="Search applications..."
+                    className="pl-10 bg-gray-50 border-gray-200"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
               </div>
-              <Button variant="outline" size="sm" onClick={() => { logout(); window.location.href = "/"; }}>
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign Out
-              </Button>
+
+              {/* Right Side Icons */}
+              <div className="flex items-center gap-3">
+                <button className="p-2 rounded-lg hover:bg-gray-100 relative">
+                  <Bell className="h-5 w-5 text-gray-600" />
+                  <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
+                </button>
+                
+                <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-gray-50">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
+                    {user?.name?.charAt(0) || "A"}
+                  </div>
+                  <div className="hidden sm:block">
+                    <p className="text-sm font-medium text-gray-900">{user?.name || "Admin"}</p>
+                    <p className="text-xs text-gray-500">Administrator</p>
+                  </div>
+                </div>
+
+                <Button variant="outline" size="sm" onClick={() => { logout(); window.location.href = "/"; }}>
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Page Title */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900">Admin Dashboard</h2>
-          <p className="text-gray-600 mt-2">Manage loan applications, verify documents, and configure settings</p>
-        </div>
+        {/* Page Content */}
+        <main className="p-4 sm:p-6 lg:p-8">
+          {/* Dashboard View */}
+          {currentView === "dashboard" && (
+            <div className="space-y-6">
+              {/* Page Title */}
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Dashboard Overview</h2>
+                <p className="text-gray-600 mt-1">Welcome back! Here's what's happening with your loan applications.</p>
+              </div>
 
-        {/* Quick Navigation Links */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <Link href="/admin/settings">
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer border-blue-200 hover:border-blue-400">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <Settings className="h-8 w-8 text-blue-600" />
-                  <div>
-                    <p className="font-semibold text-gray-900">Settings</p>
-                    <p className="text-xs text-gray-600">Configure system</p>
-                  </div>
+              {/* Real-Time Statistics with Falcon-style colored cards */}
+              {statsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
                 </div>
-              </CardContent>
-            </Card>
-          </Link>
+              ) : stats ? (
+                <>
+                  {/* Row 1: Application Counts - Colorful Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                    <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+                      <CardContent className="pt-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-purple-100 text-sm font-medium">Total Applications</p>
+                            <p className="text-3xl font-bold mt-2">{stats.totalApplications}</p>
+                            <p className="text-purple-200 text-xs mt-1">All time</p>
+                          </div>
+                          <div className="bg-white/20 p-3 rounded-lg">
+                            <Users className="h-8 w-8" />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
 
-          <Link href="/admin/users">
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer border-purple-200 hover:border-purple-400">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <Users className="h-8 w-8 text-purple-600" />
-                  <div>
-                    <p className="font-semibold text-gray-900">Users</p>
-                    <p className="text-xs text-gray-600">Manage users</p>
+                    <Card className="bg-gradient-to-br from-amber-500 to-orange-500 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+                      <CardContent className="pt-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-orange-100 text-sm font-medium">Pending Review</p>
+                            <p className="text-3xl font-bold mt-2">{stats.pending}</p>
+                            <p className="text-orange-200 text-xs mt-1">Needs attention</p>
+                          </div>
+                          <div className="bg-white/20 p-3 rounded-lg">
+                            <Clock className="h-8 w-8" />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="bg-gradient-to-br from-green-500 to-emerald-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+                      <CardContent className="pt-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-green-100 text-sm font-medium">Approved</p>
+                            <p className="text-3xl font-bold mt-2">{stats.approved}</p>
+                            <p className="text-green-200 text-xs mt-1">Ready to disburse</p>
+                          </div>
+                          <div className="bg-white/20 p-3 rounded-lg">
+                            <CheckCircle className="h-8 w-8" />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="bg-gradient-to-br from-blue-500 to-cyan-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+                      <CardContent className="pt-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-blue-100 text-sm font-medium">Disbursed</p>
+                            <p className="text-3xl font-bold mt-2">{stats.disbursed}</p>
+                            <p className="text-blue-200 text-xs mt-1">Completed</p>
+                          </div>
+                          <div className="bg-white/20 p-3 rounded-lg">
+                            <Send className="h-8 w-8" />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
 
-          <Link href="/admin/kyc">
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer border-green-200 hover:border-green-400">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-8 w-8 text-green-600" />
-                  <div>
-                    <p className="font-semibold text-gray-900">KYC</p>
-                    <p className="text-xs text-gray-600">Verify identities</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
+                  {/* Row 2: Financial Metrics - White Cards with Colored Accents */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <Card className="border-l-4 border-l-orange-500 shadow-md hover:shadow-lg transition-shadow">
+                      <CardContent className="pt-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-gray-600 font-medium">Total Requested</p>
+                            <p className="text-2xl font-bold text-gray-900 mt-1">${(stats.totalRequested / 100).toLocaleString()}</p>
+                          </div>
+                          <DollarSign className="h-10 w-10 text-orange-500 opacity-20" />
+                        </div>
+                      </CardContent>
+                    </Card>
 
-          <Link href="/admin/support">
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer border-orange-200 hover:border-orange-400">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <Package className="h-8 w-8 text-orange-600" />
-                  <div>
-                    <p className="font-semibold text-gray-900">Support</p>
-                    <p className="text-xs text-gray-600">Manage tickets</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        </div>
+                    <Card className="border-l-4 border-l-green-500 shadow-md hover:shadow-lg transition-shadow">
+                      <CardContent className="pt-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-gray-600 font-medium">Total Approved</p>
+                            <p className="text-2xl font-bold text-gray-900 mt-1">${(stats.totalApproved / 100).toLocaleString()}</p>
+                          </div>
+                          <CheckCircle className="h-10 w-10 text-green-500 opacity-20" />
+                        </div>
+                      </CardContent>
+                    </Card>
 
-        {/* Real-Time Statistics */}
-        {statsLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          </div>
-        ) : stats ? (
-          <>
-            {/* Row 1: Application Counts */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Total Applications</p>
-                      <p className="text-2xl font-bold text-gray-900">{stats.totalApplications}</p>
-                    </div>
-                    <Users className="h-8 w-8 text-blue-500 opacity-20" />
-                  </div>
-                </CardContent>
-              </Card>
+                    <Card className="border-l-4 border-l-purple-500 shadow-md hover:shadow-lg transition-shadow">
+                      <CardContent className="pt-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-gray-600 font-medium">Total Disbursed</p>
+                            <p className="text-2xl font-bold text-gray-900 mt-1">${(stats.totalDisbursed / 100).toLocaleString()}</p>
+                          </div>
+                          <TrendingUp className="h-10 w-10 text-purple-500 opacity-20" />
+                        </div>
+                      </CardContent>
+                    </Card>
 
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Pending Review</p>
-                      <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
-                    </div>
-                    <FileText className="h-8 w-8 text-yellow-500 opacity-20" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Approved</p>
-                      <p className="text-2xl font-bold text-green-600">{stats.approved}</p>
-                    </div>
-                    <CheckCircle className="h-8 w-8 text-green-500 opacity-20" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Disbursed</p>
-                      <p className="text-2xl font-bold text-purple-600">{stats.disbursed}</p>
-                    </div>
-                    <BarChart3 className="h-8 w-8 text-purple-500 opacity-20" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Row 2: Financial Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Total Requested</p>
-                      <p className="text-2xl font-bold text-gray-900">${(stats.totalRequested / 100).toLocaleString()}</p>
-                    </div>
-                    <DollarSign className="h-8 w-8 text-orange-500 opacity-20" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Total Approved</p>
-                      <p className="text-2xl font-bold text-green-600">${(stats.totalApproved / 100).toLocaleString()}</p>
-                    </div>
-                    <CheckCircle className="h-8 w-8 text-green-500 opacity-20" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Total Disbursed</p>
-                      <p className="text-2xl font-bold text-purple-600">${(stats.totalDisbursed / 100).toLocaleString()}</p>
-                    </div>
-                    <Send className="h-8 w-8 text-purple-500 opacity-20" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Fees Collected</p>
-                      <p className="text-2xl font-bold text-blue-600">${(stats.totalFeesCollected / 100).toFixed(2)}</p>
-                    </div>
+                    <Card className="border-l-4 border-l-blue-500 shadow-md hover:shadow-lg transition-shadow">
+                      <CardContent className="pt-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-gray-600 font-medium">Fees Collected</p>
+                            <p className="text-2xl font-bold text-gray-900 mt-1">${(stats.totalFeesCollected / 100).toFixed(2)}</p>
+                          </div>
                     <DollarSign className="h-8 w-8 text-blue-500 opacity-20" />
                   </div>
                 </CardContent>
@@ -651,14 +780,18 @@ export default function AdminDashboard() {
           </>
         ) : null}
 
+        {/* Analytics Dashboard - Real-time Metrics */}
+        <div className="mb-8">
+          <AdminAnalyticsDashboard />
+        </div>
+
         {/* Tabs */}
         <Tabs defaultValue="applications" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="applications">Applications</TabsTrigger>
             <TabsTrigger value="tracking">Tracking</TabsTrigger>
             <TabsTrigger value="verification">Verification</TabsTrigger>
             <TabsTrigger value="support">Support</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="audit">Audit Log</TabsTrigger>
             <TabsTrigger value="settings">Fees</TabsTrigger>
             <TabsTrigger value="crypto">Crypto</TabsTrigger>
@@ -1497,12 +1630,6 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* Analytics Tab */}
-          <TabsContent value="analytics">
-            {/* Advanced Analytics Dashboard - NEW FEATURE #5 */}
-            <AdminAnalyticsDashboard />
           </TabsContent>
 
           {/* Audit Log Tab */}

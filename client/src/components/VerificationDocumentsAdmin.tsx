@@ -23,7 +23,8 @@ import {
   ThumbsUp,
   ThumbsDown,
   User,
-  Calendar
+  Calendar,
+  RefreshCw
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -62,8 +63,10 @@ export default function VerificationDocumentsAdmin() {
   const [viewDialog, setViewDialog] = useState(false);
   const [approveDialog, setApproveDialog] = useState(false);
   const [rejectDialog, setRejectDialog] = useState(false);
+  const [reverifyDialog, setReverifyDialog] = useState(false);
   const [adminNotes, setAdminNotes] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
+  const [reverifyReason, setReverifyReason] = useState("");
 
   const utils = trpc.useUtils();
   const { data: documents, isLoading } = trpc.verification.adminList.useQuery(undefined, {
@@ -97,6 +100,20 @@ export default function VerificationDocumentsAdmin() {
     },
   });
 
+  const reverifyMutation = trpc.verification.adminRequestReverification.useMutation({
+    onSuccess: () => {
+      toast.success("Re-verification request sent to user via email");
+      utils.verification.adminList.invalidate();
+      setReverifyDialog(false);
+      setSelectedDocument(null);
+      setReverifyReason("");
+      setAdminNotes("");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to request re-verification");
+    },
+  });
+
   const handleApprove = () => {
     if (!selectedDocument) return;
     approveMutation.mutate({
@@ -117,6 +134,18 @@ export default function VerificationDocumentsAdmin() {
     });
   };
 
+  const handleReverify = () => {
+    if (!selectedDocument || !reverifyReason.trim()) {
+      toast.error("Please provide a reason for re-verification request");
+      return;
+    }
+    reverifyMutation.mutate({
+      id: selectedDocument.id,
+      requestReason: reverifyReason,
+      adminNotes: adminNotes || undefined,
+    });
+  };
+
   const openViewDialog = (doc: any) => {
     setSelectedDocument(doc);
     setViewDialog(true);
@@ -130,6 +159,11 @@ export default function VerificationDocumentsAdmin() {
   const openRejectDialog = (doc: any) => {
     setSelectedDocument(doc);
     setRejectDialog(true);
+  };
+
+  const openReverifyDialog = (doc: any) => {
+    setSelectedDocument(doc);
+    setReverifyDialog(true);
   };
 
   const pendingDocuments = documents?.filter(d => d.status === "pending" || d.status === "under_review");
@@ -221,6 +255,15 @@ export default function VerificationDocumentsAdmin() {
                       >
                         <ThumbsUp className="w-4 h-4 mr-2" />
                         Approve
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                        onClick={() => openReverifyDialog(doc)}
+                      >
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Request Re-verification
                       </Button>
                       <Button
                         variant="destructive"
@@ -489,6 +532,76 @@ export default function VerificationDocumentsAdmin() {
                 <>
                   <XCircle className="w-4 h-4 mr-2" />
                   Reject Document
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Request Re-verification Dialog */}
+      <Dialog open={reverifyDialog} onOpenChange={setReverifyDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Document Re-verification</DialogTitle>
+            <DialogDescription>
+              Request the user to resubmit this document. They will receive an email notification with your reason.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="reverifyReason">Reason for Re-verification Request *</Label>
+              <Textarea
+                id="reverifyReason"
+                value={reverifyReason}
+                onChange={(e) => setReverifyReason(e.target.value)}
+                placeholder="e.g., Document is about to expire, need a clearer image, information needs updating..."
+                rows={3}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="reverifyNotes">Admin Notes (Optional)</Label>
+              <Textarea
+                id="reverifyNotes"
+                value={adminNotes}
+                onChange={(e) => setAdminNotes(e.target.value)}
+                placeholder="Add any internal notes for tracking..."
+                rows={2}
+              />
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm text-blue-900">
+                <strong>Note:</strong> The user will receive an email notification asking them to upload a new version of this document.
+                The document status will be set to "Pending" until they resubmit.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReverifyDialog(false);
+                setReverifyReason("");
+                setAdminNotes("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-orange-600 hover:bg-orange-700"
+              onClick={handleReverify}
+              disabled={reverifyMutation.isPending || !reverifyReason.trim()}
+            >
+              {reverifyMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Sending Request...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Send Re-verification Request
                 </>
               )}
             </Button>

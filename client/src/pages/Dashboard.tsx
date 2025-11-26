@@ -3,12 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import AiSupportWidget from "@/components/AiSupportWidget";
+import UserNotificationBell from "@/components/UserNotificationBell";
 import {
   CheckCircle2,
   Clock,
@@ -31,6 +33,10 @@ import {
   Download,
   Calendar,
   Receipt,
+  Menu,
+  X,
+  Search,
+  Filter,
 } from "lucide-react";
 import { Link } from "wouter";
 import VerificationUpload from "@/components/VerificationUpload";
@@ -94,6 +100,20 @@ export default function Dashboard() {
   const [newTicketMessage, setNewTicketMessage] = useState("");
   const [newTicketCategory, setNewTicketCategory] = useState("general_inquiry");
   
+  // Mobile responsive state
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // Search and filter state
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [amountMin, setAmountMin] = useState("");
+  const [amountMax, setAmountMax] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [paymentSearchTerm, setPaymentSearchTerm] = useState("");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
+  
   // Fetch real support tickets for messages
   const { data: supportTicketsData, refetch: refetchTickets, isLoading: ticketsLoading } = trpc.supportTickets.getUserTickets.useQuery(undefined, {
     enabled: isAuthenticated,
@@ -132,6 +152,94 @@ export default function Dashboard() {
       ? `${p.cardBrand || "Card"} ****${p.cardLast4 || ""}` 
       : `${p.cryptoCurrency || "Crypto"}`,
   }));
+
+  // Filter loans based on search and filters
+  const filteredLoans = loans?.filter((loan) => {
+    // Search term filter
+    if (searchTerm && !loan.trackingNumber.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        !loan.loanType.toLowerCase().includes(searchTerm.toLowerCase())) {
+      return false;
+    }
+
+    // Status filter
+    if (statusFilter !== "all" && loan.status !== statusFilter) {
+      return false;
+    }
+
+    // Date range filter
+    if (dateFrom && new Date(loan.createdAt) < new Date(dateFrom)) {
+      return false;
+    }
+    if (dateTo && new Date(loan.createdAt) > new Date(dateTo)) {
+      return false;
+    }
+
+    // Amount range filter
+    const amount = loan.requestedAmount / 100;
+    if (amountMin && amount < parseFloat(amountMin)) {
+      return false;
+    }
+    if (amountMax && amount > parseFloat(amountMax)) {
+      return false;
+    }
+
+    return true;
+  }) || [];
+
+  // Filter payments based on search and status
+  const filteredPayments = payments.filter((payment) => {
+    // Search term filter
+    if (paymentSearchTerm && 
+        !payment.trackingNumber.toLowerCase().includes(paymentSearchTerm.toLowerCase()) &&
+        !payment.paymentMethod.toLowerCase().includes(paymentSearchTerm.toLowerCase())) {
+      return false;
+    }
+
+    // Status filter
+    if (paymentStatusFilter !== "all" && payment.status !== paymentStatusFilter) {
+      return false;
+    }
+
+    return true;
+  });
+
+  // Export to CSV function
+  const exportToCSV = (data: any[], filename: string) => {
+    if (data.length === 0) {
+      toast.error("No data to export");
+      return;
+    }
+
+    const headers = Object.keys(data[0]);
+    const csvContent = [
+      headers.join(","),
+      ...data.map(row => 
+        headers.map(header => {
+          const value = row[header];
+          // Handle dates
+          if (value instanceof Date) {
+            return value.toLocaleDateString();
+          }
+          // Handle strings with commas
+          if (typeof value === "string" && value.includes(",")) {
+            return `"${value}"`;
+          }
+          return value;
+        }).join(",")
+      )
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${filename}-${new Date().toISOString().split("T")[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Data exported successfully!");
+  };
 
   const handleLogout = () => {
     logout();
@@ -307,26 +415,40 @@ export default function Dashboard() {
       <header className="sticky top-0 z-50 bg-white border-b shadow-sm">
         <div className="container mx-auto px-4 py-2 sm:py-2.5 md:py-3">
           <div className="flex items-center justify-between">
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="md:hidden p-2 rounded-lg hover:bg-gray-100"
+              aria-label="Menu"
+            >
+              {isMobileMenuOpen ? (
+                <X className="w-6 h-6 text-gray-700" />
+              ) : (
+                <Menu className="w-6 h-6 text-gray-700" />
+              )}
+            </button>
+
             <Link href="/">
               <a className="flex items-center flex-shrink-0">
                 <img
                   src="/logo.jpg"
                   alt="AmeriLend"
-                  className="h-20 sm:h-24 md:h-28 w-auto object-contain brightness-105 contrast-110"
+                  className="h-16 sm:h-20 md:h-24 w-auto object-contain brightness-105 contrast-110"
                 />
               </a>
             </Link>
-            <div className="flex items-center gap-3">
-              <div className="hidden md:flex items-center gap-2 text-gray-700 hover:text-[#0033A0]">
-                <Bell className="w-4 h-4" />
-                <span className="text-sm">Notifications</span>
-              </div>
+
+            <div className="flex items-center gap-2 md:gap-3">
+              {/* Notification Bell */}
+              <UserNotificationBell />
+
+              {/* Phone Number */}
               <a
                 href="tel:+19452121609"
-                className="hidden md:flex items-center gap-2 text-gray-700 hover:text-[#0033A0]"
+                className="hidden lg:flex items-center gap-2 text-gray-700 hover:text-[#0033A0]"
               >
                 <Phone className="w-4 h-4" />
-                +1 945 212-1609
+                <span className="text-sm">+1 945 212-1609</span>
               </a>
               
               {/* Profile Dropdown */}
@@ -368,6 +490,96 @@ export default function Dashboard() {
           </div>
         </div>
       </header>
+
+      {/* Mobile Menu Overlay */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+          <div className="absolute top-0 left-0 bottom-0 w-64 bg-white shadow-xl">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-bold text-[#0033A0]">Menu</h2>
+            </div>
+            <nav className="p-4">
+              <Link href="/dashboard#applications">
+                <a
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-700"
+                >
+                  <FileText className="w-5 h-5" />
+                  <span>Applications</span>
+                </a>
+              </Link>
+              <Link href="/dashboard#payments">
+                <a
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-700"
+                >
+                  <CreditCard className="w-5 h-5" />
+                  <span>Payments</span>
+                </a>
+              </Link>
+              <Link href="/dashboard#messages">
+                <a
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-700"
+                >
+                  <MessageSquare className="w-5 h-5" />
+                  <span>Messages</span>
+                </a>
+              </Link>
+              <Link href="/dashboard#documents">
+                <a
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-700"
+                >
+                  <FileText className="w-5 h-5" />
+                  <span>Documents</span>
+                </a>
+              </Link>
+              <Link href="/settings">
+                <a
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-700"
+                >
+                  <Settings className="w-5 h-5" />
+                  <span>Settings</span>
+                </a>
+              </Link>
+              <Link href="/profile">
+                <a
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-700"
+                >
+                  <User className="w-5 h-5" />
+                  <span>Profile</span>
+                </a>
+              </Link>
+              <div className="border-t mt-4 pt-4">
+                <a
+                  href="tel:+19452121609"
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-700"
+                >
+                  <Phone className="w-5 h-5" />
+                  <span>+1 945 212-1609</span>
+                </a>
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    handleLogout();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-red-50 text-red-700 mt-2"
+                >
+                  <LogOut className="w-5 h-5" />
+                  <span>Log Out</span>
+                </button>
+              </div>
+            </nav>
+          </div>
+        </div>
+      )}
 
       {/* Welcome Banner */}
       <div className="bg-[#0033A0] text-white py-8">
@@ -529,7 +741,128 @@ export default function Dashboard() {
           </TabsList>            <TabsContent value="applications" id="applications">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-2xl text-[#0033A0]">My Loan Applications</CardTitle>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <CardTitle className="text-2xl text-[#0033A0]">My Loan Applications</CardTitle>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowFilters(!showFilters)}
+                        className="flex items-center gap-2"
+                      >
+                        <Filter className="w-4 h-4" />
+                        Filters
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => exportToCSV(
+                          filteredLoans.map(loan => ({
+                            trackingNumber: loan.trackingNumber,
+                            type: loan.loanType,
+                            amount: loan.requestedAmount / 100,
+                            status: loan.status,
+                            date: new Date(loan.createdAt).toLocaleDateString(),
+                          })),
+                          "loan-applications"
+                        )}
+                        className="flex items-center gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        Export
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Search Bar */}
+                  <div className="mt-4 relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input
+                      type="text"
+                      placeholder="Search by tracking number or loan type..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+
+                  {/* Advanced Filters */}
+                  {showFilters && (
+                    <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
+                      <h4 className="font-semibold text-gray-900">Advanced Filters</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div>
+                          <Label>Status</Label>
+                          <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Statuses</SelectItem>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="approved">Approved</SelectItem>
+                              <SelectItem value="rejected">Rejected</SelectItem>
+                              <SelectItem value="fee_paid">Fee Paid</SelectItem>
+                              <SelectItem value="disbursed">Disbursed</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Date From</Label>
+                          <Input
+                            type="date"
+                            value={dateFrom}
+                            onChange={(e) => setDateFrom(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <Label>Date To</Label>
+                          <Input
+                            type="date"
+                            value={dateTo}
+                            onChange={(e) => setDateTo(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <Label>Min Amount ($)</Label>
+                          <Input
+                            type="number"
+                            placeholder="0"
+                            value={amountMin}
+                            onChange={(e) => setAmountMin(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <Label>Max Amount ($)</Label>
+                          <Input
+                            type="number"
+                            placeholder="50000"
+                            value={amountMax}
+                            onChange={(e) => setAmountMax(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSearchTerm("");
+                            setStatusFilter("all");
+                            setDateFrom("");
+                            setDateTo("");
+                            setAmountMin("");
+                            setAmountMax("");
+                          }}
+                        >
+                          Clear Filters
+                        </Button>
+                        <p className="text-sm text-gray-600 flex items-center">
+                          Showing {filteredLoans.length} of {loans?.length || 0} applications
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent>
                   {isLoading ? (
@@ -537,9 +870,9 @@ export default function Dashboard() {
                       <div className="inline-block w-8 h-8 border-4 border-[#0033A0] border-t-transparent rounded-full animate-spin"></div>
                       <p className="text-gray-600 mt-4">Loading your applications...</p>
                     </div>
-                  ) : loans && loans.length > 0 ? (
+                  ) : filteredLoans && filteredLoans.length > 0 ? (
                     <div className="space-y-4">
-                      {loans.map((loan) => (
+                      {filteredLoans.map((loan) => (
                         <Card key={loan.id} id={`loan-${loan.id}`} className="border-l-4 border-l-[#0033A0]">
                           <CardContent className="p-6">
                             <button

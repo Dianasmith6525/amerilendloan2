@@ -947,9 +947,10 @@ export async function getAdvancedStats() {
   
   const totalApprovedAmount = totalApprovedResult[0]?.total ? Number(totalApprovedResult[0].total) : 0;
   
-  // Get average loan amount
-  const avgAmountResult = await db.select({ avg: sql`AVG(${loanApplications.requestedAmount})` })
-    .from(loanApplications);
+  // Get average loan amount (from approved amounts only)
+  const avgAmountResult = await db.select({ avg: sql`AVG(${loanApplications.approvedAmount})` })
+    .from(loanApplications)
+    .where(eq(loanApplications.status, "approved"));
   
   const averageLoanAmount = avgAmountResult[0]?.avg ? Number(avgAmountResult[0].avg) : 0;
   
@@ -3018,4 +3019,51 @@ export async function getAdminAuditLogs(options?: {
   }
 
   return query;
+}
+
+// =====================
+// Document Verification Functions
+// =====================
+
+export async function updateDocumentVerificationStatus(
+  loanApplicationId: number,
+  status: 'pending' | 'verified' | 'rejected' | 'pending_review',
+  metadata?: {
+    confidenceScore?: number;
+    flags?: string;
+    extractedData?: string;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { uploadedDocuments } = await import("../drizzle/schema");
+
+  // Update all driver license and ID documents for this loan application
+  await db
+    .update(uploadedDocuments)
+    .set({
+      verificationStatus: status,
+      verificationMetadata: metadata ? JSON.stringify(metadata) : null,
+      updatedAt: new Date(),
+    })
+    .where(eq(uploadedDocuments.loanApplicationId, loanApplicationId));
+
+  return { success: true };
+}
+
+export async function getDocumentByLoanId(
+  loanApplicationId: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { uploadedDocuments } = await import("../drizzle/schema");
+
+  const docs = await db
+    .select()
+    .from(uploadedDocuments)
+    .where(eq(uploadedDocuments.loanApplicationId, loanApplicationId));
+
+  return docs;
 }

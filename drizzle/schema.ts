@@ -749,15 +749,22 @@ export type InsertKycVerification = typeof kycVerification.$inferInsert;
 export const uploadedDocuments = pgTable("uploadedDocuments", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(),
+  loanApplicationId: integer("loanApplicationId"), // Link to loan application
   documentType: documentTypeEnum("documentType").notNull(),
   filename: varchar("filename", { length: 255 }).notNull(),
+  fileName: varchar("file_name", { length: 255 }), // Alternative name field
+  fileUrl: varchar("file_url", { length: 500 }), // Public URL or path
   storagePath: varchar("storagePath", { length: 500 }).notNull(), // S3 or file path
   fileSize: integer("fileSize").notNull(), // in bytes
   mimeType: varchar("mimeType", { length: 50 }).notNull(),
   status: varchar("status", { length: 50 }).default("pending").notNull(), // "pending", "verified", "rejected"
+  verificationStatus: varchar("verification_status", { length: 50 }).default("pending"), // OCR verification status
+  verificationMetadata: text("verification_metadata"), // JSON with OCR results, confidence score, flags
   verifiedBy: integer("verifiedBy"), // admin user id
   rejectionReason: text("rejectionReason"),
+  uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
   verifiedAt: timestamp("verifiedAt"),
 });
 

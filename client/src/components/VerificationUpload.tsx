@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
-import { Upload, FileText, CheckCircle2, XCircle, Clock, Loader2, Eye } from "lucide-react";
+import { Upload, FileText, CheckCircle2, XCircle, Clock, Loader2, Eye, Shield, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -53,10 +53,11 @@ export default function VerificationUpload() {
   const { data: documents, isLoading } = trpc.verification.myDocuments.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+  
   const uploadMutation = trpc.verification.uploadDocument.useMutation({
     onSuccess: () => {
       utils.verification.myDocuments.invalidate();
-      toast.success("Document uploaded successfully");
+      toast.success("Document uploaded successfully - verification will be processed automatically");
       setSelectedType("");
       setSelectedFile(null);
       setPreviewUrl(null);

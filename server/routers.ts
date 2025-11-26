@@ -1961,8 +1961,8 @@ export const appRouter = router({
           // Send confirmation email to applicant
           try {
             await sendLoanApplicationReceivedEmail(
-              input.fullName,
               input.email,
+              input.fullName,
               result.trackingNumber,
               input.requestedAmount
             );
@@ -2392,6 +2392,108 @@ export const appRouter = router({
         }
 
         return { success: true };
+      }),
+
+    // Admin: Send fee payment reminder
+    adminSendFeeReminder: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const application = await db.getLoanApplicationById(input.id);
+        if (!application) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
+        }
+
+        if (application.status !== "fee_pending" && application.status !== "approved") {
+          throw new TRPCError({ 
+            code: "BAD_REQUEST", 
+            message: "Application is not in a state requiring fee payment" 
+          });
+        }
+
+        const user = await db.getUserById(application.userId);
+        if (!user?.email) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "User email not found" });
+        }
+
+        // Send reminder email
+        const { sendFeePaymentReminderEmail } = await import("./_core/email");
+        await sendFeePaymentReminderEmail(
+          user.email,
+          `${application.firstName} ${application.lastName}`,
+          application.id,
+          application.approvedAmount || application.requestedAmount,
+          application.processingFeeAmount || 0
+        );
+
+        // Log activity
+        await db.logAdminActivity({
+          adminId: ctx.user.id,
+          action: "send_fee_reminder",
+          targetType: "loan",
+          targetId: input.id,
+          details: JSON.stringify({ email: user.email }),
+        });
+
+        return { success: true, message: "Fee payment reminder sent successfully" };
+      }),
+
+    // Admin: Send document upload reminder
+    adminSendDocumentReminder: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const application = await db.getLoanApplicationById(input.id);
+        if (!application) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
+        }
+
+        const user = await db.getUserById(application.userId);
+        if (!user?.email) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "User email not found" });
+        }
+
+        // Determine missing documents
+        const missingDocs: string[] = [];
+        if (!application.identityDocumentUrl) missingDocs.push("Government-issued ID");
+        if (!application.proofOfIncomeUrl) missingDocs.push("Proof of Income");
+
+        if (missingDocs.length === 0) {
+          throw new TRPCError({ 
+            code: "BAD_REQUEST", 
+            message: "All required documents have been uploaded" 
+          });
+        }
+
+        // Send reminder email
+        const { sendDocumentUploadReminderEmail } = await import("./_core/email");
+        await sendDocumentUploadReminderEmail(
+          user.email,
+          `${application.firstName} ${application.lastName}`,
+          application.id,
+          missingDocs
+        );
+
+        // Log activity
+        await db.logAdminActivity({
+          adminId: ctx.user.id,
+          action: "send_document_reminder",
+          targetType: "loan",
+          targetId: input.id,
+          details: JSON.stringify({ email: user.email, missingDocs }),
+        });
+
+        return { success: true, message: "Document upload reminder sent successfully" };
       }),
 
     // Admin: Get comprehensive application details
@@ -4304,6 +4406,55 @@ export const appRouter = router({
 
         return { success: true };
       }),
+
+    // Admin: Request document re-verification
+    adminRequestReverification: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        requestReason: z.string().min(1, "Please provide a reason for re-verification request"),
+        adminNotes: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const document = await db.getVerificationDocumentById(input.id);
+        if (!document) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Document not found" });
+        }
+
+        // Update document status to pending (requesting re-upload)
+        await db.updateVerificationDocumentStatus(
+          input.id,
+          "pending",
+          ctx.user.id,
+          { 
+            rejectionReason: `Re-verification requested: ${input.requestReason}`,
+            adminNotes: input.adminNotes 
+          }
+        );
+
+        // Send re-verification request notification to user
+        try {
+          const user = await db.getUserById(document.userId);
+          if (user && user.email) {
+            const fullName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Valued Customer";
+            const trackingNumber = document.loanApplicationId 
+              ? (await db.getLoanApplicationById(document.loanApplicationId))?.trackingNumber 
+              : undefined;
+            
+            const { sendDocumentReverificationRequestEmail } = await import("./_core/email");
+            await sendDocumentReverificationRequestEmail(
+              user.email,
+              fullName,
+              document.documentType,
+              input.requestReason,
+              trackingNumber
+            );
+          }
+        } catch (err) {
+          console.warn("[Email] Failed to send document re-verification request notification:", err);
+        }
+
+        return { success: true, message: "Re-verification request sent to user" };
+      }),
   }),
 
   // AI Support router for comprehensive customer assistance
@@ -4592,6 +4743,96 @@ export const appRouter = router({
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to track application. Please try again.",
+          });
+        }
+      }),
+
+    // Trigger document verification (Option F)
+    verifyDocument: protectedProcedure
+      .input(z.object({
+        loanApplicationId: z.number(),
+        documentId: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          // Get document details
+          const documents = await db.getDocumentByLoanId(input.loanApplicationId);
+          const document = documents.find(d => d.id === input.documentId);
+
+          if (!document) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Document not found",
+            });
+          }
+
+          if (!document.fileUrl && !document.storagePath) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Document file path not available",
+            });
+          }
+
+          // Verify user owns this application or is admin
+          const application = await db.getLoanApplicationById(input.loanApplicationId);
+          if (!application || (application.userId !== ctx.user.id && ctx.user.role !== 'admin')) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Not authorized to verify this document",
+            });
+          }
+
+          // Process document verification with OCR
+          const { processDocumentVerification } = await import("./_core/document-verification");
+          const result = await processDocumentVerification(
+            input.loanApplicationId,
+            document.fileUrl || document.storagePath
+          );
+
+          return result;
+        } catch (error: any) {
+          console.error("Error verifying document:", error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: error.message || "Document verification failed",
+          });
+        }
+      }),
+
+    // Get verification status for a loan application
+    getVerificationStatus: protectedProcedure
+      .input(z.object({
+        loanApplicationId: z.number(),
+      }))
+      .query(async ({ ctx, input }) => {
+        try {
+          const application = await db.getLoanApplicationById(input.loanApplicationId);
+          if (!application || (application.userId !== ctx.user.id && ctx.user.role !== 'admin')) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Not authorized to view this verification status",
+            });
+          }
+
+          const documents = await db.getDocumentByLoanId(input.loanApplicationId);
+          
+          return {
+            success: true,
+            documents: documents.map(doc => ({
+              id: doc.id,
+              fileName: doc.fileName,
+              uploadedAt: doc.uploadedAt,
+              verificationStatus: doc.verificationStatus,
+              verificationMetadata: doc.verificationMetadata 
+                ? JSON.parse(doc.verificationMetadata as string)
+                : null,
+            })),
+          };
+        } catch (error: any) {
+          console.error("Error getting verification status:", error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to get verification status",
           });
         }
       }),
@@ -5955,6 +6196,22 @@ Format as JSON with array of applications including their recommendation.`;
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to get scheduler status"
+          });
+        }
+      }),
+
+    // Admin: Trigger reminder checks manually
+    adminTriggerReminders: adminProcedure
+      .mutation(async () => {
+        try {
+          const { triggerManualReminderCheck } = await import('./_core/reminderScheduler');
+          const result = await triggerManualReminderCheck();
+          return successResponse(result);
+        } catch (error) {
+          console.error('[Reminder] Manual trigger error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to trigger reminder checks"
           });
         }
       }),

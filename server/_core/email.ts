@@ -2605,6 +2605,653 @@ AmeriLend Verification Team
 }
 
 /**
+ * Send document re-verification request notification to user
+ */
+export async function sendDocumentReverificationRequestEmail(
+  email: string,
+  fullName: string,
+  documentType: string,
+  requestReason: string,
+  trackingNumber?: string
+): Promise<void> {
+  const documentLabels: Record<string, string> = {
+    drivers_license_front: "Driver's License (Front)",
+    drivers_license_back: "Driver's License (Back)",
+    passport: "Passport",
+    national_id_front: "National ID (Front)",
+    national_id_back: "National ID (Back)",
+    ssn_card: "Social Security Card",
+    bank_statement: "Bank Statement",
+    utility_bill: "Utility Bill",
+    pay_stub: "Pay Stub",
+    tax_return: "Tax Return",
+    w2: "W-2 Form",
+    other: "Document"
+  };
+
+  const docLabel = documentLabels[documentType] || "Document";
+  const subject = `Action Required: Document Re-verification Requested - AmeriLend`;
+
+  const text = `
+Dear ${fullName},
+
+Our verification team has requested that you resubmit your ${docLabel} for re-verification.
+
+Document Type: ${docLabel}
+Status: 🔄 Re-verification Requested
+Request Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+
+Reason for Request:
+${requestReason}
+
+${trackingNumber ? `Loan Tracking #: ${trackingNumber}\n` : ''}
+
+Please submit a new copy of your ${docLabel} through your dashboard. Make sure:
+- The document is clear and all text is readable
+- The document is current and has not expired (if applicable)
+- All corners and edges are visible
+- The document matches the information in your application
+
+You can upload your document through your dashboard at any time. This helps us process your application faster.
+
+If you have any questions or need assistance, please contact our support team.
+
+Best regards,
+AmeriLend Verification Team
+
+Phone: (945) 212-1609
+Email: support@amerilendloan.com
+  `;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333;">
+        ${getEmailHeader()}
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="margin: 0; color: #ff9800; font-size: 28px;">🔄 Re-verification Requested</h1>
+            <p style="margin: 10px 0 0 0; color: #666; font-size: 16px;">We need an updated copy of your document</p>
+          </div>
+
+          <div style="background-color: #fff3e0; border-left: 4px solid #ff9800; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h2 style="margin-top: 0; color: #e65100;">Document Re-verification Details</h2>
+            <table style="width: 100%; margin-top: 15px;">
+              <tr style="border-bottom: 1px solid #ffe0b2;">
+                <td style="padding: 12px 0; color: #e65100;"><strong>Document Type:</strong></td>
+                <td style="padding: 12px 0; text-align: right; font-weight: bold;">${docLabel}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #ffe0b2;">
+                <td style="padding: 12px 0; color: #e65100;"><strong>Status:</strong></td>
+                <td style="padding: 12px 0; text-align: right; color: #f57c00;"><strong>🔄 Re-verification Required</strong></td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; color: #e65100;"><strong>Requested On:</strong></td>
+                <td style="padding: 12px 0; text-align: right;">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #333;">Why We Need This Document Again</h3>
+            <p style="margin: 0; color: #555; font-size: 15px; line-height: 1.8;">${requestReason}</p>
+          </div>
+
+          ${trackingNumber ? `<div style="background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #0033A0;">Your Application</h3>
+            <p style="margin: 10px 0; color: #666;"><strong>Loan Tracking #:</strong> ${trackingNumber}</p>
+            <p style="margin: 10px 0; color: #666;">Uploading your document quickly will help us process your application faster.</p>
+          </div>` : ''}
+
+          <div style="background-color: #e8f5e9; border-radius: 8px; padding: 20px; margin: 30px 0;">
+            <h3 style="margin-top: 0; color: #2e7d32;">Document Requirements</h3>
+            <ul style="margin: 10px 0; padding-left: 20px; color: #1b5e20;">
+              <li style="margin-bottom: 8px;">Document must be clear and all text readable</li>
+              <li style="margin-bottom: 8px;">Document must be current and not expired</li>
+              <li style="margin-bottom: 8px;">All four corners must be visible</li>
+              <li style="margin-bottom: 8px;">Information must match your application details</li>
+              <li>Accepted formats: JPEG, PNG, PDF (max 10MB)</li>
+            </ul>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${COMPANY_INFO.website}/dashboard" style="background-color: #ff9800; color: white; padding: 14px 35px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">Upload Document Now</a>
+          </div>
+
+          <div style="border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 30px;">
+            <p style="margin: 0; color: #666; font-size: 13px;">
+              <strong>Need Help?</strong><br>
+              Phone: <a href="tel:+19452121609" style="color: #0033A0;">(945) 212-1609</a><br>
+              Email: <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a>
+            </p>
+          </div>
+
+          <p style="margin-top: 20px; color: #999; font-size: 12px; text-align: center;">This is an automated notification. Please do not reply to this email.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
+ * Send incomplete application reminder email
+ */
+export async function sendIncompleteApplicationReminderEmail(
+  email: string,
+  fullName: string,
+  loanAmount: number,
+  loanPurpose: string,
+  trackingNumber: string
+): Promise<void> {
+  const formattedAmount = loanAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const subject = `Complete Your Loan Application - ${trackingNumber}`;
+
+  const text = `
+Dear ${fullName},
+
+We noticed you started a loan application but haven't completed it yet. We're here to help you finish!
+
+Application Details:
+Tracking Number: ${trackingNumber}
+Loan Amount: $${formattedAmount}
+Purpose: ${loanPurpose}
+
+Complete your application today to:
+✓ Get instant approval decision
+✓ Access competitive rates
+✓ Receive funds within 24-48 hours
+
+Your application is saved and waiting for you. It only takes 5-10 minutes to complete.
+
+Need help? Our support team is ready to assist you:
+Phone: (945) 212-1609
+Email: support@amerilendloan.com
+
+Best regards,
+The AmeriLend Team
+  `;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333;">
+        ${getEmailHeader()}
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="margin: 0; color: #0033A0; font-size: 28px;">⏰ Your Application is Waiting!</h1>
+            <p style="margin: 10px 0 0 0; color: #666; font-size: 16px;">Let's finish what you started</p>
+          </div>
+
+          <div style="background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h2 style="margin-top: 0; color: #0033A0;">Application Details</h2>
+            <table style="width: 100%; margin-top: 15px;">
+              <tr style="border-bottom: 1px solid #b3d9ff;">
+                <td style="padding: 12px 0; color: #0033A0;"><strong>Tracking Number:</strong></td>
+                <td style="padding: 12px 0; text-align: right; font-weight: bold;">${trackingNumber}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #b3d9ff;">
+                <td style="padding: 12px 0; color: #0033A0;"><strong>Loan Amount:</strong></td>
+                <td style="padding: 12px 0; text-align: right;">$${formattedAmount}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; color: #0033A0;"><strong>Purpose:</strong></td>
+                <td style="padding: 12px 0; text-align: right; text-transform: capitalize;">${loanPurpose}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 30px 0;">
+            <h3 style="margin-top: 0; color: #333;">Why Complete Your Application?</h3>
+            <ul style="margin: 10px 0; padding-left: 20px; color: #666;">
+              <li style="margin-bottom: 10px;">✓ <strong>Instant Decision:</strong> Get approved in minutes</li>
+              <li style="margin-bottom: 10px;">✓ <strong>Fast Funding:</strong> Receive funds within 24-48 hours</li>
+              <li style="margin-bottom: 10px;">✓ <strong>Competitive Rates:</strong> Best rates for qualified applicants</li>
+              <li style="margin-bottom: 10px;">✓ <strong>Simple Process:</strong> Only 5-10 minutes to complete</li>
+            </ul>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${COMPANY_INFO.website}/dashboard" style="background-color: #0033A0; color: white; padding: 14px 35px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">Complete Application Now</a>
+          </div>
+
+          <div style="border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 30px;">
+            <p style="margin: 0; color: #666; font-size: 13px;">
+              <strong>Need Help?</strong><br>
+              Phone: <a href="tel:+19452121609" style="color: #0033A0;">(945) 212-1609</a><br>
+              Email: <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a>
+            </p>
+          </div>
+
+          <p style="margin-top: 20px; color: #999; font-size: 12px; text-align: center;">This is an automated reminder. If you've already completed your application, please disregard this message.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
+ * Send unpaid processing fee reminder email
+ */
+export async function sendUnpaidFeeReminderEmail(
+  email: string,
+  fullName: string,
+  loanAmount: number,
+  processingFee: number,
+  trackingNumber: string
+): Promise<void> {
+  const formattedAmount = loanAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formattedFee = processingFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const subject = `Payment Required: Processing Fee for Loan ${trackingNumber}`;
+
+  const text = `
+Dear ${fullName},
+
+Congratulations! Your loan application has been approved. To proceed with disbursement, please pay the processing fee.
+
+Loan Details:
+Tracking Number: ${trackingNumber}
+Approved Amount: $${formattedAmount}
+Processing Fee: $${formattedFee}
+
+Pay your processing fee now to receive your loan funds within 24-48 hours.
+
+Payment Methods Available:
+- Credit/Debit Card
+- Cryptocurrency (Bitcoin, Ethereum, USDT)
+
+Once payment is confirmed, we'll proceed with disbursement immediately.
+
+Best regards,
+The AmeriLend Team
+  `;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333;">
+        ${getEmailHeader()}
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="margin: 0; color: #28a745; font-size: 28px;">✅ Loan Approved!</h1>
+            <p style="margin: 10px 0 0 0; color: #666; font-size: 16px;">One final step to receive your funds</p>
+          </div>
+
+          <div style="background-color: #d4edda; border-left: 4px solid #28a745; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h2 style="margin-top: 0; color: #155724;">Your Loan is Approved!</h2>
+            <p style="margin: 0; color: #155724;">Pay the processing fee below to receive your funds within 24-48 hours.</p>
+          </div>
+
+          <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #856404;">Payment Required</h3>
+            <table style="width: 100%; margin-top: 15px;">
+              <tr style="border-bottom: 1px solid #ffeaa7;">
+                <td style="padding: 12px 0; color: #856404;"><strong>Tracking Number:</strong></td>
+                <td style="padding: 12px 0; text-align: right; font-weight: bold;">${trackingNumber}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #ffeaa7;">
+                <td style="padding: 12px 0; color: #856404;"><strong>Approved Amount:</strong></td>
+                <td style="padding: 12px 0; text-align: right;">$${formattedAmount}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; color: #856404;"><strong>Processing Fee:</strong></td>
+                <td style="padding: 12px 0; text-align: right; font-size: 18px; font-weight: bold; color: #d39e00;">$${formattedFee}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 30px 0;">
+            <h3 style="margin-top: 0; color: #333;">Payment Methods</h3>
+            <ul style="margin: 10px 0; padding-left: 20px; color: #666;">
+              <li style="margin-bottom: 8px;">💳 Credit/Debit Card (Instant)</li>
+              <li style="margin-bottom: 8px;">₿ Bitcoin</li>
+              <li style="margin-bottom: 8px;">Ξ Ethereum</li>
+              <li style="margin-bottom: 8px;">💵 USDT (Tether)</li>
+            </ul>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${COMPANY_INFO.website}/dashboard" style="background-color: #ffc107; color: #000; padding: 14px 35px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">Pay Processing Fee Now</a>
+          </div>
+
+          <div style="background-color: #e7f3ff; border-radius: 8px; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; color: #0033A0; font-size: 14px;">
+              <strong>⚡ Fast Processing:</strong> Once payment is confirmed, your loan will be disbursed within 24-48 hours!
+            </p>
+          </div>
+
+          <div style="border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 30px;">
+            <p style="margin: 0; color: #666; font-size: 13px;">
+              <strong>Questions?</strong><br>
+              Phone: <a href="tel:+19452121609" style="color: #0033A0;">(945) 212-1609</a><br>
+              Email: <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a>
+            </p>
+          </div>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
+ * Send pending disbursement method reminder email
+ */
+export async function sendPendingDisbursementReminderEmail(
+  email: string,
+  fullName: string,
+  loanAmount: number,
+  trackingNumber: string
+): Promise<void> {
+  const formattedAmount = loanAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const subject = `Action Required: Choose Disbursement Method - ${trackingNumber}`;
+
+  const text = `
+Dear ${fullName},
+
+Great news! Your processing fee has been received. To receive your loan funds, please set up your disbursement method.
+
+Loan Details:
+Tracking Number: ${trackingNumber}
+Loan Amount: $${formattedAmount}
+
+Choose how you want to receive your funds:
+- Bank Transfer (ACH) - 1-2 business days
+- Cryptocurrency Wallet - Instant
+
+Set up your disbursement method now to receive your funds as soon as possible.
+
+Best regards,
+The AmeriLend Team
+  `;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333;">
+        ${getEmailHeader()}
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="margin: 0; color: #0033A0; font-size: 28px;">💰 Ready to Receive Your Funds!</h1>
+            <p style="margin: 10px 0 0 0; color: #666; font-size: 16px;">Choose your disbursement method</p>
+          </div>
+
+          <div style="background-color: #d1ecf1; border-left: 4px solid #17a2b8; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h2 style="margin-top: 0; color: #0c5460;">Payment Received!</h2>
+            <p style="margin: 0; color: #0c5460;">Your processing fee has been confirmed. Now choose how you want to receive your loan.</p>
+          </div>
+
+          <div style="background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #0033A0;">Loan Details</h3>
+            <table style="width: 100%; margin-top: 15px;">
+              <tr style="border-bottom: 1px solid #b3d9ff;">
+                <td style="padding: 12px 0; color: #0033A0;"><strong>Tracking Number:</strong></td>
+                <td style="padding: 12px 0; text-align: right; font-weight: bold;">${trackingNumber}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; color: #0033A0;"><strong>Loan Amount:</strong></td>
+                <td style="padding: 12px 0; text-align: right; font-size: 18px; font-weight: bold; color: #28a745;">$${formattedAmount}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 30px 0;">
+            <h3 style="margin-top: 0; color: #333;">Choose Your Disbursement Method</h3>
+            <div style="margin: 15px 0;">
+              <div style="padding: 15px; background-color: white; border: 2px solid #0033A0; border-radius: 8px; margin-bottom: 10px;">
+                <h4 style="margin: 0 0 5px 0; color: #0033A0;">🏦 Bank Transfer (ACH)</h4>
+                <p style="margin: 0; color: #666; font-size: 14px;">Receive funds in 1-2 business days</p>
+              </div>
+              <div style="padding: 15px; background-color: white; border: 2px solid #ffc107; border-radius: 8px;">
+                <h4 style="margin: 0 0 5px 0; color: #856404;">₿ Cryptocurrency Wallet</h4>
+                <p style="margin: 0; color: #666; font-size: 14px;">Instant transfer (Bitcoin, Ethereum, USDT)</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${COMPANY_INFO.website}/dashboard" style="background-color: #0033A0; color: white; padding: 14px 35px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">Set Up Disbursement Now</a>
+          </div>
+
+          <div style="background-color: #fff3cd; border-radius: 8px; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; color: #856404; font-size: 14px;">
+              <strong>⏰ Quick Action Needed:</strong> Set up your disbursement method to receive your funds as soon as possible!
+            </p>
+          </div>
+
+          <div style="border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 30px;">
+            <p style="margin: 0; color: #666; font-size: 13px;">
+              <strong>Need Help?</strong><br>
+              Phone: <a href="tel:+19452121609" style="color: #0033A0;">(945) 212-1609</a><br>
+              Email: <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a>
+            </p>
+          </div>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
+ * Send incomplete documents reminder email
+ */
+export async function sendIncompleteDocumentsReminderEmail(
+  email: string,
+  fullName: string,
+  missingDocuments: string[],
+  trackingNumber: string
+): Promise<void> {
+  const subject = `Action Required: Upload Missing Documents - ${trackingNumber}`;
+  const docList = missingDocuments.join(', ');
+
+  const text = `
+Dear ${fullName},
+
+To process your loan application, we need you to upload the following required documents:
+
+Missing Documents:
+${missingDocuments.map(doc => `- ${doc}`).join('\n')}
+
+Application Tracking Number: ${trackingNumber}
+
+Upload your documents today to move your application forward. We can't proceed without these required documents.
+
+Accepted formats: JPEG, PNG, PDF (max 10MB each)
+
+Best regards,
+The AmeriLend Team
+  `;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333;">
+        ${getEmailHeader()}
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="margin: 0; color: #ff9800; font-size: 28px;">📄 Documents Required</h1>
+            <p style="margin: 10px 0 0 0; color: #666; font-size: 16px;">We need a few documents to process your application</p>
+          </div>
+
+          <div style="background-color: #fff3e0; border-left: 4px solid #ff9800; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h2 style="margin-top: 0; color: #e65100;">Missing Documents</h2>
+            <p style="margin: 10px 0; color: #e65100;"><strong>Application #:</strong> ${trackingNumber}</p>
+            <ul style="margin: 15px 0; padding-left: 20px; color: #e65100;">
+              ${missingDocuments.map(doc => `<li style="margin-bottom: 8px;"><strong>${doc}</strong></li>`).join('')}
+            </ul>
+          </div>
+
+          <div style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 30px 0;">
+            <h3 style="margin-top: 0; color: #333;">Document Requirements</h3>
+            <ul style="margin: 10px 0; padding-left: 20px; color: #666;">
+              <li style="margin-bottom: 8px;">✓ Clear and readable images</li>
+              <li style="margin-bottom: 8px;">✓ All four corners visible</li>
+              <li style="margin-bottom: 8px;">✓ Current and not expired</li>
+              <li style="margin-bottom: 8px;">✓ Formats: JPEG, PNG, or PDF</li>
+              <li style="margin-bottom: 8px;">✓ Maximum size: 10MB per file</li>
+            </ul>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${COMPANY_INFO.website}/dashboard" style="background-color: #ff9800; color: white; padding: 14px 35px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">Upload Documents Now</a>
+          </div>
+
+          <div style="background-color: #e7f3ff; border-radius: 8px; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; color: #0033A0; font-size: 14px;">
+              <strong>⚡ Fast Processing:</strong> Upload your documents today and get approved faster!
+            </p>
+          </div>
+
+          <div style="border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 30px;">
+            <p style="margin: 0; color: #666; font-size: 13px;">
+              <strong>Need Help?</strong><br>
+              Phone: <a href="tel:+19452121609" style="color: #0033A0;">(945) 212-1609</a><br>
+              Email: <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a>
+            </p>
+          </div>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
+ * Send inactive user re-engagement reminder email
+ */
+export async function sendInactiveUserReminderEmail(
+  email: string,
+  fullName: string
+): Promise<void> {
+  const subject = `We Miss You! Quick Loan Approval Waiting - AmeriLend`;
+
+  const text = `
+Dear ${fullName},
+
+We noticed you created an account with AmeriLend but haven't applied for a loan yet. We're here to help!
+
+Why Choose AmeriLend?
+✓ Fast approval in minutes
+✓ Competitive interest rates
+✓ Flexible loan amounts
+✓ Simple application process
+✓ Funds within 24-48 hours
+
+Start your loan application today and get the financial assistance you need.
+
+Need help getting started? Our support team is ready to assist you:
+Phone: (945) 212-1609
+Email: support@amerilendloan.com
+
+Best regards,
+The AmeriLend Team
+  `;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333;">
+        ${getEmailHeader()}
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="margin: 0; color: #0033A0; font-size: 28px;">👋 We Miss You!</h1>
+            <p style="margin: 10px 0 0 0; color: #666; font-size: 16px;">Ready to get the funds you need?</p>
+          </div>
+
+          <div style="background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+            <h2 style="margin-top: 0; color: #0033A0;">Your Account is Ready!</h2>
+            <p style="margin: 0; color: #0033A0;">Start your loan application and get approved in minutes.</p>
+          </div>
+
+          <div style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 30px 0;">
+            <h3 style="margin-top: 0; color: #333;">Why AmeriLend?</h3>
+            <div style="margin: 15px 0;">
+              <div style="padding: 12px; background-color: white; border-radius: 6px; margin-bottom: 10px;">
+                <strong style="color: #0033A0;">⚡ Fast Approval</strong>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Get approved in minutes, not days</p>
+              </div>
+              <div style="padding: 12px; background-color: white; border-radius: 6px; margin-bottom: 10px;">
+                <strong style="color: #0033A0;">💰 Competitive Rates</strong>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Best rates for qualified applicants</p>
+              </div>
+              <div style="padding: 12px; background-color: white; border-radius: 6px; margin-bottom: 10px;">
+                <strong style="color: #0033A0;">📱 Simple Process</strong>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Apply online in just 5-10 minutes</p>
+              </div>
+              <div style="padding: 12px; background-color: white; border-radius: 6px;">
+                <strong style="color: #0033A0;">🚀 Quick Funding</strong>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Receive funds within 24-48 hours</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${COMPANY_INFO.website}/apply" style="background-color: #0033A0; color: white; padding: 14px 35px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">Start Application Now</a>
+          </div>
+
+          <div style="background-color: #d4edda; border-radius: 8px; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; color: #155724; font-size: 14px; text-align: center;">
+              <strong>💚 Special Offer:</strong> Apply now and get our lowest rates!
+            </p>
+          </div>
+
+          <div style="border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 30px;">
+            <p style="margin: 0; color: #666; font-size: 13px;">
+              <strong>Questions? We're Here to Help!</strong><br>
+              Phone: <a href="tel:+19452121609" style="color: #0033A0;">(945) 212-1609</a><br>
+              Email: <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a>
+            </p>
+          </div>
+
+          <p style="margin-top: 20px; color: #999; font-size: 12px; text-align: center;">
+            If you no longer wish to receive these emails, you can <a href="${COMPANY_INFO.website}/unsubscribe" style="color: #999;">unsubscribe here</a>.
+          </p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
  * Send document rejection notification to user
  */
 export async function sendDocumentRejectedEmail(
@@ -3373,6 +4020,127 @@ export async function sendPaymentFailedEmail(
     console.error(`[Email] Failed to send payment failure notification to ${email}:`, result.error);
     throw new Error(`Failed to send payment failure notification: ${result.error}`);
   }
+}
+
+/**
+ * Send reminder email for fee payment
+ */
+export async function sendFeePaymentReminderEmail(
+  email: string,
+  fullName: string,
+  applicationId: number,
+  approvedAmount: number,
+  feeAmount: number
+): Promise<void> {
+  const formattedAmount = (approvedAmount / 100).toFixed(2);
+  const formattedFee = (feeAmount / 100).toFixed(2);
+  const subject = "Payment Reminder: Complete Your Loan Processing - AmeriLend";
+  const text = `Dear ${fullName},\n\nThis is a friendly reminder that your loan application (#${applicationId}) has been approved for $${formattedAmount}, but we're still waiting for your processing fee payment of $${formattedFee}.\n\nTo complete your loan and receive your funds:\n1. Log in to your dashboard\n2. Navigate to your application\n3. Complete the fee payment\n\nOnce your fee is paid, we'll process your disbursement within 1-2 business days.\n\nIf you have any questions or need assistance, please contact our support team.\n\nBest regards,\nThe AmeriLend Team`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <h2 style="color: #0033A0; margin-top: 0;">⏰ Payment Reminder</h2>
+          <p>Dear ${fullName},</p>
+          <p>This is a friendly reminder about your approved loan application.</p>
+          
+          <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #856404;">Action Required</h3>
+            <p style="margin: 5px 0;"><strong>Application ID:</strong> #${applicationId}</p>
+            <p style="margin: 5px 0;"><strong>Approved Amount:</strong> $${formattedAmount}</p>
+            <p style="margin: 5px 0;"><strong>Processing Fee:</strong> $${formattedFee}</p>
+            <p style="margin: 5px 0; color: #856404;"><strong>Status:</strong> Awaiting Fee Payment</p>
+          </div>
+
+          <h3 style="color: #0033A0;">Complete Your Loan Process</h3>
+          <ol style="padding-left: 20px;">
+            <li>Log in to your AmeriLend dashboard</li>
+            <li>Navigate to your loan application</li>
+            <li>Complete the processing fee payment</li>
+            <li>Receive your funds within 1-2 business days</li>
+          </ol>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="https://amerilendloan.com/dashboard" style="display: inline-block; background-color: #0033A0; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Pay Fee Now</a>
+          </div>
+
+          <p style="margin-top: 30px;">If you have any questions or need assistance, please contact our support team at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a>.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
+ * Send reminder email for document upload
+ */
+export async function sendDocumentUploadReminderEmail(
+  email: string,
+  fullName: string,
+  applicationId: number,
+  missingDocuments: string[]
+): Promise<void> {
+  const subject = "Action Required: Upload Missing Documents - AmeriLend";
+  const docList = missingDocuments.join(", ");
+  const text = `Dear ${fullName},\n\nWe noticed that your loan application (#${applicationId}) is missing some required documents.\n\nMissing Documents:\n${missingDocuments.map(doc => `- ${doc}`).join('\n')}\n\nTo proceed with your application:\n1. Log in to your dashboard\n2. Navigate to your application\n3. Upload the required documents\n\nUploading these documents will help us process your application faster.\n\nIf you have any questions, please contact our support team.\n\nBest regards,\nThe AmeriLend Team`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <h2 style="color: #0033A0; margin-top: 0;">📄 Documents Required</h2>
+          <p>Dear ${fullName},</p>
+          <p>We're reviewing your loan application (#${applicationId}) and noticed that some required documents are missing.</p>
+          
+          <div style="background-color: #f8d7da; border-left: 4px solid #dc3545; padding: 15px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #721c24;">Missing Documents</h3>
+            <ul style="margin: 10px 0; padding-left: 20px;">
+              ${missingDocuments.map(doc => `<li>${doc}</li>`).join('')}
+            </ul>
+          </div>
+
+          <h3 style="color: #0033A0;">How to Upload Documents</h3>
+          <ol style="padding-left: 20px;">
+            <li>Log in to your AmeriLend dashboard</li>
+            <li>Navigate to your loan application</li>
+            <li>Click on "Upload Documents"</li>
+            <li>Select and upload the required files</li>
+          </ol>
+
+          <div style="background-color: #d1ecf1; border-left: 4px solid #0c5460; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; color: #0c5460;"><strong>💡 Tip:</strong> Uploading clear, legible copies of your documents will help us process your application faster!</p>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="https://amerilendloan.com/dashboard" style="display: inline-block; background-color: #0033A0; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Upload Documents</a>
+          </div>
+
+          <p style="margin-top: 30px;">If you have any questions about which documents to upload, please contact our support team at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a>.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
 }
 
 

@@ -1,91 +1,56 @@
-import { useState, useEffect } from "react";
-import { trpc } from "@/lib/trpc";
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Bell, BellOff, Mail, MessageSquare, CheckCircle2, Clock } from "lucide-react";
+import { Bell, BellOff, Mail, MessageSquare, CheckCircle2, Clock, CreditCard, FileText } from "lucide-react";
 import { toast } from "sonner";
-
-interface Notification {
-  id: number;
-  type: "payment_due" | "payment_confirmed" | "status_change" | "document_required" | "general";
-  title: string;
-  message: string;
-  read: boolean;
-  createdAt: Date;
-  loanId?: number;
-}
+import { useUserNotifications } from "@/hooks/useUserNotifications";
+import { useLocation } from "wouter";
 
 export default function NotificationCenter() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
+  const [, setLocation] = useLocation();
 
-  // Mock notifications - in production, fetch from backend
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: 1,
-      type: "payment_due",
-      title: "Payment Due Soon",
-      message: "Your loan payment of $250.00 is due in 5 days",
-      read: false,
-      createdAt: new Date(),
-      loanId: 1,
-    },
-    {
-      id: 2,
-      type: "status_change",
-      title: "Application Approved",
-      message: "Great news! Your loan application has been approved",
-      read: false,
-      createdAt: new Date(Date.now() - 86400000),
-      loanId: 2,
-    },
-    {
-      id: 3,
-      type: "document_required",
-      title: "Document Upload Required",
-      message: "Please upload your bank statement to complete verification",
-      read: true,
-      createdAt: new Date(Date.now() - 172800000),
-    },
-  ]);
+  // Use real notifications from hook
+  const { notifications, unreadCount, markAsRead, markAllAsRead, clearAll } = useUserNotifications();
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
-
-  const getNotificationIcon = (type: Notification["type"]) => {
+  const getNotificationIcon = (type: string) => {
     switch (type) {
-      case "payment_due":
-        return <Clock className="w-5 h-5 text-orange-600" />;
-      case "payment_confirmed":
+      case "loan_status":
         return <CheckCircle2 className="w-5 h-5 text-green-600" />;
-      case "status_change":
-        return <Bell className="w-5 h-5 text-blue-600" />;
-      case "document_required":
-        return <Mail className="w-5 h-5 text-purple-600" />;
+      case "payment":
+        return <CreditCard className="w-5 h-5 text-blue-600" />;
+      case "message":
+        return <MessageSquare className="w-5 h-5 text-purple-600" />;
+      case "document":
+        return <FileText className="w-5 h-5 text-orange-600" />;
       default:
-        return <MessageSquare className="w-5 h-5 text-gray-600" />;
+        return <Bell className="w-5 h-5 text-gray-600" />;
     }
   };
 
-  const markAsRead = (id: number) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
-  };
-
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    toast.success("All notifications marked as read");
-  };
-
-  const handleNotificationClick = (notification: Notification) => {
+  const handleNotificationClick = (notification: any) => {
     markAsRead(notification.id);
-    // Navigate to relevant page based on notification type
-    if (notification.loanId) {
-      // Could navigate to loan details
-      console.log("Navigate to loan:", notification.loanId);
+    
+    // Navigate based on notification type
+    switch (notification.type) {
+      case "loan_status":
+        setLocation("/dashboard#applications");
+        break;
+      case "payment":
+        setLocation("/dashboard#payments");
+        break;
+      case "message":
+        setLocation("/dashboard#messages");
+        break;
+      case "document":
+        setLocation("/dashboard#documents");
+        break;
+      default:
+        setLocation("/dashboard");
     }
   };
 
@@ -182,11 +147,18 @@ export default function NotificationCenter() {
                 {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount !== 1 ? "s" : ""}` : "You're all caught up!"}
               </CardDescription>
             </div>
-            {unreadCount > 0 && (
-              <Button variant="outline" size="sm" onClick={markAllAsRead}>
-                Mark all as read
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {unreadCount > 0 && (
+                <Button variant="outline" size="sm" onClick={markAllAsRead}>
+                  Mark all read
+                </Button>
+              )}
+              {notifications.length > 0 && (
+                <Button variant="outline" size="sm" onClick={clearAll}>
+                  Clear all
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -246,32 +218,23 @@ export default function NotificationCenter() {
         </CardContent>
       </Card>
 
-      {/* Upcoming Reminders */}
+      {/* Auto-Pay Reminder */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl text-[#0033A0]">Upcoming Payment Reminders</CardTitle>
-          <CardDescription>Never miss a payment date</CardDescription>
+          <CardTitle className="text-xl text-[#0033A0]">Payment Reminders</CardTitle>
+          <CardDescription>Stay on top of your payments</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-orange-50 border border-orange-200 rounded-lg">
-              <div className="flex items-center gap-3">
-                <Clock className="w-5 h-5 text-orange-600" />
-                <div>
-                  <p className="font-medium text-sm text-gray-900">Next Payment Due</p>
-                  <p className="text-xs text-gray-600">December 1, 2025 - $250.00</p>
-                </div>
-              </div>
-              <Button size="sm" variant="outline">
-                Pay Now
-              </Button>
-            </div>
-            
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-xs text-blue-800">
-                💡 <strong>Tip:</strong> Enable auto-pay to never miss a payment and avoid late fees!
-              </p>
-            </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm text-blue-900 mb-3">
+              💡 <strong>Never miss a payment!</strong>
+            </p>
+            <p className="text-xs text-blue-800 mb-4">
+              Enable auto-pay in the Auto-Pay tab to automatically process your loan payments and avoid late fees.
+            </p>
+            <Button size="sm" variant="outline" className="border-blue-600 text-blue-600" asChild>
+              <a href="/dashboard#auto-pay">Set Up Auto-Pay</a>
+            </Button>
           </div>
         </CardContent>
       </Card>

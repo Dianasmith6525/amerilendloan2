@@ -7,7 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import ApplyLoan from "./pages/ApplyLoan";
 import Dashboard from "./pages/Dashboard";
-import AdminDashboard from "./pages/AdminDashboard";
+import AdminDashboardFalcon from "./pages/AdminDashboardFalcon";
 import PaymentPage from "./pages/PaymentPage";
 import OTPLogin from "./pages/OTPLogin";
 import EnhancedPaymentPage from "./pages/EnhancedPaymentPage";
@@ -47,7 +47,7 @@ function Router() {
       <Route path={"/referrals"} component={ReferralsAndRewards} />
       <Route path={"/bank-accounts"} component={BankAccountManagement} />
       <Route path={"/settings"} component={Settings} />
-      <Route path={"/admin"} component={AdminDashboard} />
+      <Route path={"/admin"} component={AdminDashboardFalcon} />
       <Route path={"/admin/application/:id"} component={AdminApplicationDetail} />
       <Route path={"/admin/settings"} component={AdminSettings} />
       <Route path={"/admin/users"} component={AdminUserManagement} />
