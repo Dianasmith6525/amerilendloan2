@@ -15,6 +15,19 @@ export type EmailPayload = {
 };
 
 /**
+ * Format currency amount with thousand separators
+ * @param cents - Amount in cents
+ * @returns Formatted string like "$10,000.00"
+ */
+function formatCurrency(cents: number): string {
+  const dollars = cents / 100;
+  return dollars.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+/**
  * Send email using SendGrid API
  */
 export async function sendEmail(payload: EmailPayload): Promise<{ success: boolean; error?: string }> {
@@ -139,7 +152,7 @@ export async function sendLoanApplicationReceivedEmail(
   trackingNumber: string,
   requestedAmount: number
 ): Promise<void> {
-  const formattedAmount = (requestedAmount / 100).toFixed(2);
+  const formattedAmount = formatCurrency(requestedAmount);
   const subject = "Loan Application Received - AmeriLend";
   const text = `Dear ${fullName},\n\nThank you for submitting your loan application to AmeriLend!\n\nYour application has been received and is now under review.\n\nApplication Details:\nTracking Number: ${trackingNumber}\nRequested Amount: $${formattedAmount}\n\nWhat's Next?\n- Our team will review your application within 24 hours\n- You'll receive an email notification once a decision is made\n- You can track your application status in your dashboard\n\nIf you have any questions, please contact our support team.\n\nBest regards,\nThe AmeriLend Team`;
   
@@ -193,8 +206,8 @@ export async function sendLoanApplicationApprovedEmail(
   processingFee: number
 ): Promise<void> {
   console.log(`[Email Debug] sendLoanApplicationApprovedEmail: approvedAmount=${approvedAmount} cents, processingFee=${processingFee} cents`);
-  const formattedAmount = (approvedAmount / 100).toFixed(2);
-  const formattedFee = (processingFee / 100).toFixed(2);
+  const formattedAmount = formatCurrency(approvedAmount);
+  const formattedFee = formatCurrency(processingFee);
   console.log(`[Email Debug] Formatted values: approvedAmount=$${formattedAmount}, processingFee=$${formattedFee}`);
   const subject = "Congratulations! Your Loan Application is Approved - AmeriLend";
   const text = `Dear ${fullName},\n\nGreat news! Your loan application has been approved!\n\nApplication Details:\nTracking Number: ${trackingNumber}\nApproved Amount: $${formattedAmount}\nProcessing Fee: $${formattedFee}\n\nNext Steps:\n1. Log in to your dashboard to review the loan agreement\n2. Pay the processing fee to proceed with disbursement\n3. Once the fee is paid, your funds will be disbursed within 1-2 business days\n\nPlease log in to your account to complete the next steps.\n\nBest regards,\nThe AmeriLend Team`;
@@ -305,7 +318,7 @@ export async function sendLoanApplicationProcessingEmail(
   trackingNumber: string,
   processingFee: number
 ): Promise<void> {
-  const formattedFee = (processingFee / 100).toFixed(2);
+  const formattedFee = formatCurrency(processingFee);
   const subject = "Action Required: Complete Your Loan Processing - AmeriLend";
   const text = `Dear ${fullName},\n\nYour loan application (${trackingNumber}) is currently being processed!\n\nTo complete the disbursement process, please pay the processing fee of $${formattedFee}.\n\nProcessing Fee: $${formattedFee}\n\nOnce we receive your payment, your loan funds will be disbursed within 1-2 business days using your selected disbursement method.\n\nPlease log in to your dashboard to complete the payment.\n\nBest regards,\nThe AmeriLend Team`;
   
@@ -745,8 +758,8 @@ export async function sendApplicationApprovedNotificationEmail(
   processingFee: number,
   adminNotes?: string
 ): Promise<void> {
-  const formattedAmount = (approvedAmount / 100).toFixed(2);
-  const formattedFee = (processingFee / 100).toFixed(2);
+  const formattedAmount = formatCurrency(approvedAmount);
+  const formattedFee = formatCurrency(processingFee);
   const subject = "✓ Loan Application Approved - Action Required - AmeriLend";
   
   const text = `Dear ${fullName},\n\nGreat news! Your loan application has been approved!\n\nApplication Details:\nTracking Number: ${trackingNumber}\nApproved Amount: $${formattedAmount}\nProcessing Fee: $${formattedFee}\n\n${adminNotes ? `Admin Notes: ${adminNotes}\n\n` : ''}Next Steps:\n1. Log in to your dashboard\n2. Review and sign the loan agreement\n3. Pay the processing fee ($${formattedFee})\n4. Once fee is paid, funds will be disbursed within 1-2 business days\n\nPlease complete these steps to proceed with your loan.\n\nBest regards,\nThe AmeriLend Team`;
@@ -901,7 +914,7 @@ export async function sendApplicationDisbursedNotificationEmail(
   disbursedAmount: number,
   estimatedArrivalDate: string
 ): Promise<void> {
-  const formattedAmount = (disbursedAmount / 100).toFixed(2);
+  const formattedAmount = formatCurrency(disbursedAmount);
   const subject = "🎉 Your Loan Has Been Disbursed! - AmeriLend";
   
   const text = `Dear ${fullName},\n\nExciting news! Your loan funds have been disbursed and are on their way to your account!\n\nDisbursement Details:\nTracking Number: ${trackingNumber}\nDisbursed Amount: $${formattedAmount}\nEstimated Arrival: ${estimatedArrivalDate}\n\nYour funds should appear in your bank account within 1-2 business days. Please note that your bank may take an additional day to process the deposit.\n\nWhat's Next:\n- Monitor your bank account for the deposit\n- Contact us if you don't receive the funds within 2 business days\n- Log in to your dashboard to view your loan details and payment schedule\n\nThank you for choosing AmeriLend!\n\nBest regards,\nThe AmeriLend Team`;
@@ -1793,7 +1806,7 @@ export async function sendAuthorizeNetPaymentConfirmedEmail(
   cardBrand: string,
   transactionId: string
 ): Promise<void> {
-  const formattedAmount = (amount / 100).toFixed(2);
+  const formattedAmount = formatCurrency(amount);
   const subject = "✓ Payment Confirmed - Authorize.net - AmeriLend";
   const text = `Dear ${fullName},\n\nYour payment has been successfully processed!\n\nPayment Details:\nTracking Number: ${trackingNumber}\nAmount: $${formattedAmount}\nCard: ${cardBrand} ending in ${cardLast4}\nTransaction ID: ${transactionId}\n\nYour loan application is now being processed. You will receive updates via email as your application progresses.\n\nIf you have any questions, please contact our support team.\n\nBest regards,\nThe AmeriLend Team`;
 
@@ -1884,7 +1897,7 @@ export async function sendAdminAuthorizeNetPaymentNotification(
   cardLast4: string,
   transactionId: string
 ): Promise<void> {
-  const formattedAmount = (amount / 100).toFixed(2);
+  const formattedAmount = formatCurrency(amount);
   const subject = `Payment Received - Authorize.net - ${userName} [${paymentId}]`;
   const text = `A new payment has been received via Authorize.net.\n\nPayment Details:\nPayment ID: ${paymentId}\nTransaction ID: ${transactionId}\nAmount: $${formattedAmount}\nCard: ${cardBrand} ending in ${cardLast4}\n\nUser Information:\nName: ${userName}\nEmail: ${userEmail}\n\nAction: Review payment in admin dashboard and process application accordingly.`;
 
@@ -1974,7 +1987,7 @@ export async function sendCryptoPaymentConfirmedEmail(
   walletAddress: string,
   transactionHash?: string
 ): Promise<void> {
-  const formattedAmount = (usdAmount / 100).toFixed(2);
+  const formattedAmount = formatCurrency(usdAmount);
   const subject = `✓ Cryptocurrency Payment Received - AmeriLend`;
   const text = `Dear ${fullName},\n\nYour cryptocurrency payment has been successfully received and confirmed!\n\nPayment Details:\nTracking Number: ${trackingNumber}\nUSD Equivalent: $${formattedAmount}\nAmount: ${cryptoAmount} ${cryptoCurrency}\nWallet: ${walletAddress}${transactionHash ? `\nTransaction Hash: ${transactionHash}` : ''}\n\nYour loan application is now being processed. You will receive updates via email as your application progresses.\n\nIf you have any questions, please contact our support team.\n\nBest regards,\nThe AmeriLend Team`;
 
@@ -2070,7 +2083,7 @@ export async function sendAdminCryptoPaymentNotification(
   transactionHash: string | undefined,
   walletAddress: string
 ): Promise<void> {
-  const formattedAmount = (usdAmount / 100).toFixed(2);
+  const formattedAmount = formatCurrency(usdAmount);
   const subject = `Payment Received - Cryptocurrency - ${userName} [${paymentId}]`;
   const text = `A new cryptocurrency payment has been received.\n\nPayment Details:\nPayment ID: ${paymentId}\n${transactionHash ? `Transaction Hash: ${transactionHash}\n` : ""}USD Amount: $${formattedAmount}\nCrypto Amount: ${cryptoAmount} ${cryptoCurrency}\nWallet: ${walletAddress}\n\nUser Information:\nName: ${userName}\nEmail: ${userEmail}\n\nAction: ${transactionHash ? "Verify payment on blockchain and process application accordingly." : "Awaiting transaction hash - user has generated payment address."}`;
 
@@ -2182,7 +2195,10 @@ export async function sendPaymentReceiptEmail(
     second: '2-digit',
   });
 
-  const formattedAmount = amount.toFixed(2);
+  const formattedAmount = amount.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
   const receiptNumber = `RCP-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
   const subject = `Payment Receipt #${receiptNumber} - AmeriLend Processing Fee`;
@@ -2342,7 +2358,7 @@ export async function sendPaymentFailureEmail(
   failureReason: string,
   paymentMethod: "card" | "crypto" = "card"
 ): Promise<void> {
-  const formattedAmount = (amount / 100).toFixed(2);
+  const formattedAmount = formatCurrency(amount);
   const subject = `Payment Failed - Action Required - AmeriLend Loan #${trackingNumber}`;
   
   const failureReasons: Record<string, { title: string; instructions: string }> = {
@@ -3525,7 +3541,7 @@ export async function sendCheckTrackingNotificationEmail(
 
   const carrier = trackingLinks[trackingCompany] || trackingLinks["Other"];
   const trackingUrl = trackingCompany !== "Other" ? carrier.url(checkTrackingNumber) : undefined;
-  const formattedAmount = (loanAmount / 100).toFixed(2);
+  const formattedAmount = formatCurrency(loanAmount);
   
   // Format delivery address
   const deliveryAddress = street && city && state && zipCode
@@ -3733,7 +3749,7 @@ export async function sendPaymentDueReminderEmail(
     month: "long",
     day: "numeric",
   });
-  const dueAmountFormatted = (dueAmount / 100).toFixed(2);
+  const dueAmountFormatted = formatCurrency(dueAmount);
 
   const subject = `Payment Due Reminder - ${loanNumber} on ${dueDateFormatted}`;
   const text = `Dear ${fullName},\n\nThis is a friendly reminder that your loan payment is due on ${dueDateFormatted}.\n\nPayment Details:\nLoan Number: ${loanNumber}\nAmount Due: $${dueAmountFormatted}\nDue Date: ${dueDateFormatted}\n\nPlease make your payment on time to avoid late fees.\n\n${
@@ -3810,7 +3826,7 @@ export async function sendPaymentOverdueAlertEmail(
     month: "long",
     day: "numeric",
   });
-  const dueAmountFormatted = (dueAmount / 100).toFixed(2);
+  const dueAmountFormatted = formatCurrency(dueAmount);
 
   const subject = `⚠️ URGENT: Payment Overdue - ${loanNumber}`;
   const text = `Dear ${fullName},\n\nYour loan payment is now ${daysOverdue} days overdue.\n\nPayment Details:\nLoan Number: ${loanNumber}\nAmount Due: $${dueAmountFormatted}\nOriginal Due Date: ${originalDueDateFormatted}\nDays Overdue: ${daysOverdue}\n\nIMPORTANT: Please make payment immediately to avoid:\n- Additional late fees\n- Delinquency on your credit report\n- Potential legal action\n\n${
@@ -3894,8 +3910,8 @@ export async function sendPaymentReceivedEmail(
     month: "long",
     day: "numeric",
   });
-  const paymentAmountFormatted = (paymentAmount / 100).toFixed(2);
-  const newBalanceFormatted = newBalance ? (newBalance / 100).toFixed(2) : "N/A";
+  const paymentAmountFormatted = formatCurrency(paymentAmount);
+  const newBalanceFormatted = newBalance ? formatCurrency(newBalance) : "N/A";
 
   const subject = `Payment Received - ${loanNumber}`;
   const text = `Dear ${fullName},\n\nWe have received your payment.\n\nPayment Details:\nLoan Number: ${loanNumber}\nAmount Paid: $${paymentAmountFormatted}\nPayment Date: ${paymentDateFormatted}\nPayment Method: ${paymentMethod}\nNew Balance: $${newBalanceFormatted}\n\nThank you for your on-time payment.\n\nBest regards,\nThe AmeriLend Team`;
@@ -3959,7 +3975,7 @@ export async function sendPaymentFailedEmail(
   failureReason: string,
   paymentLink?: string
 ): Promise<void> {
-  const paymentAmountFormatted = (paymentAmount / 100).toFixed(2);
+  const paymentAmountFormatted = formatCurrency(paymentAmount);
 
   const subject = `Payment Failed - Action Required - ${loanNumber}`;
   const text = `Dear ${fullName},\n\nYour payment attempt failed.\n\nPayment Details:\nLoan Number: ${loanNumber}\nAttempted Amount: $${paymentAmountFormatted}\nReason: ${failureReason}\n\nPlease try again or use a different payment method.\n\n${
@@ -4034,8 +4050,8 @@ export async function sendFeePaymentReminderEmail(
   approvedAmount: number,
   feeAmount: number
 ): Promise<void> {
-  const formattedAmount = (approvedAmount / 100).toFixed(2);
-  const formattedFee = (feeAmount / 100).toFixed(2);
+  const formattedAmount = formatCurrency(approvedAmount);
+  const formattedFee = formatCurrency(feeAmount);
   const subject = "Payment Reminder: Complete Your Loan Processing - AmeriLend";
   const text = `Dear ${fullName},\n\nThis is a friendly reminder that your loan application (#${applicationId}) has been approved for $${formattedAmount}, but we're still waiting for your processing fee payment of $${formattedFee}.\n\nTo complete your loan and receive your funds:\n1. Log in to your dashboard\n2. Navigate to your application\n3. Complete the fee payment\n\nOnce your fee is paid, we'll process your disbursement within 1-2 business days.\n\nIf you have any questions or need assistance, please contact our support team.\n\nBest regards,\nThe AmeriLend Team`;
   
