@@ -51,11 +51,11 @@ export async function sendEmail(payload: EmailPayload): Promise<{ success: boole
           },
         ],
         from: {
-          email: "noreply@amerilendloan.com",
+          email: process.env.SENDGRID_VERIFIED_EMAIL || "noreply@amerilendloan.com",
           name: "AmeriLend",
         },
         reply_to: {
-          email: "support@amerilendloan.com",
+          email: process.env.SENDGRID_VERIFIED_EMAIL || "support@amerilendloan.com",
           name: "AmeriLend Support",
         },
         content: [
