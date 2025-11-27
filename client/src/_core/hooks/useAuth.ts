@@ -28,20 +28,28 @@ export function useAuth(options?: UseAuthOptions) {
       // First, clear the user data from cache
       utils.auth.me.setData(undefined, null);
       
+      // Clear any local storage items
+      localStorage.removeItem("manus-runtime-user-info");
+      
       // Call the logout mutation
       await logoutMutation.mutateAsync();
       
       // Invalidate all queries to clear cache
       await utils.invalidate();
       
+      // Clear session storage as well
+      sessionStorage.clear();
+      
       // Force a full page reload to home page (clears all state)
-      window.location.replace("/");
+      window.location.href = "/";
     } catch (error: unknown) {
       // Even if logout fails, clear local data and redirect
       console.error("Logout error:", error);
       utils.auth.me.setData(undefined, null);
+      localStorage.removeItem("manus-runtime-user-info");
+      sessionStorage.clear();
       await utils.invalidate();
-      window.location.replace("/");
+      window.location.href = "/";
     }
   }, [logoutMutation, utils]);
 
