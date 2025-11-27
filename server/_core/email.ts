@@ -31,6 +31,16 @@ function formatCurrency(cents: number): string {
  * Send email using SendGrid API
  */
 export async function sendEmail(payload: EmailPayload): Promise<{ success: boolean; error?: string }> {
+  // Test mode - log email instead of sending to save credits
+  if (ENV.emailTestMode) {
+    console.log("\n📧 [TEST MODE] Email would be sent:");
+    console.log("   To:", payload.to);
+    console.log("   Subject:", payload.subject);
+    console.log("   Preview:", payload.text.substring(0, 100) + "...");
+    console.log("   ✅ Email logged (not sent - test mode active)\n");
+    return { success: true };
+  }
+
   if (!ENV.sendGridApiKey) {
     console.error("SendGrid API key not configured");
     return { success: false, error: "Email service not configured" };
