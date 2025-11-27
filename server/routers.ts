@@ -3964,6 +3964,77 @@ export const appRouter = router({
         const status = await getNetworkStatus(input.currency);
         return status;
       }),
+
+    // Payment Method Management
+    getSavedMethods: protectedProcedure.query(async ({ ctx }) => {
+      return db.getSavedPaymentMethods(ctx.user.id);
+    }),
+
+    addPaymentMethod: protectedProcedure
+      .input(z.object({
+        type: z.enum(["card", "crypto"]),
+        cardNumber: z.string().optional(),
+        expiryMonth: z.string().optional(),
+        expiryYear: z.string().optional(),
+        cvv: z.string().optional(),
+        nameOnCard: z.string().optional(),
+        walletAddress: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (input.type === "card") {
+          if (!input.cardNumber || !input.expiryMonth || !input.expiryYear || !input.cvv || !input.nameOnCard) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Missing required card details" });
+          }
+
+          // Determine card brand
+          const firstDigit = input.cardNumber[0];
+          let cardBrand = "Unknown";
+          if (firstDigit === "4") cardBrand = "Visa";
+          else if (firstDigit === "5") cardBrand = "Mastercard";
+          else if (firstDigit === "3") cardBrand = "Amex";
+          else if (firstDigit === "6") cardBrand = "Discover";
+
+          const last4 = input.cardNumber.slice(-4);
+
+          return db.addSavedPaymentMethod(ctx.user.id, {
+            type: "card",
+            cardBrand,
+            last4,
+            expiryMonth: input.expiryMonth,
+            expiryYear: input.expiryYear,
+            nameOnCard: input.nameOnCard,
+          });
+        } else {
+          if (!input.walletAddress) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Missing wallet address" });
+          }
+
+          return db.addSavedPaymentMethod(ctx.user.id, {
+            type: "crypto",
+            walletAddress: input.walletAddress,
+          });
+        }
+      }),
+
+    deletePaymentMethod: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const method = await db.getSavedPaymentMethodById(input.id);
+        if (!method || method.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "NOT_FOUND" });
+        }
+        return db.deleteSavedPaymentMethod(input.id);
+      }),
+
+    setDefaultMethod: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const method = await db.getSavedPaymentMethodById(input.id);
+        if (!method || method.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "NOT_FOUND" });
+        }
+        return db.setDefaultPaymentMethod(ctx.user.id, input.id);
+      }),
   }),
 
   // Disbursement router (admin only)

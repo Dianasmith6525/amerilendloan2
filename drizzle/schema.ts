@@ -254,6 +254,36 @@ export const payments = pgTable("payments", {
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = typeof payments.$inferInsert;
 
+/**
+ * Saved payment methods for users
+ */
+export const savedPaymentMethods = pgTable("savedPaymentMethods", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  
+  // Method type
+  type: varchar("type", { length: 20 }).notNull(), // 'card' or 'crypto'
+  
+  // Card details
+  cardBrand: varchar("cardBrand", { length: 50 }), // 'Visa', 'Mastercard', etc.
+  last4: varchar("last4", { length: 4 }),
+  expiryMonth: varchar("expiryMonth", { length: 2 }),
+  expiryYear: varchar("expiryYear", { length: 4 }),
+  nameOnCard: varchar("nameOnCard", { length: 255 }),
+  
+  // Crypto wallet details
+  walletAddress: varchar("walletAddress", { length: 255 }),
+  
+  // Settings
+  isDefault: boolean("isDefault").default(false).notNull(),
+  
+  // Timestamps
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type SavedPaymentMethod = typeof savedPaymentMethods.$inferSelect;
+export type InsertSavedPaymentMethod = typeof savedPaymentMethods.$inferInsert;
+
 export const disbursementStatusEnum = pgEnum("disbursement_status", [
   "pending",      // Awaiting processing
   "processing",   // Being processed

@@ -748,6 +748,75 @@ export async function updateDisbursementTracking(
     .where(eq(disbursements.id, id));
 }
 
+// Payment Method Management
+export async function getSavedPaymentMethods(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { savedPaymentMethods } = await import("../drizzle/schema");
+  
+  return db.select()
+    .from(savedPaymentMethods)
+    .where(eq(savedPaymentMethods.userId, userId))
+    .orderBy(desc(savedPaymentMethods.createdAt));
+}
+
+export async function getSavedPaymentMethodById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const { savedPaymentMethods } = await import("../drizzle/schema");
+  
+  const result = await db.select()
+    .from(savedPaymentMethods)
+    .where(eq(savedPaymentMethods.id, id))
+    .limit(1);
+  
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function addSavedPaymentMethod(userId: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { savedPaymentMethods } = await import("../drizzle/schema");
+  
+  const result = await db.insert(savedPaymentMethods).values({
+    userId,
+    ...data,
+    isDefault: false,
+    createdAt: new Date(),
+  }).returning();
+  
+  return result[0];
+}
+
+export async function deleteSavedPaymentMethod(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { savedPaymentMethods } = await import("../drizzle/schema");
+  
+  return db.delete(savedPaymentMethods).where(eq(savedPaymentMethods.id, id));
+}
+
+export async function setDefaultPaymentMethod(userId: number, id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { savedPaymentMethods } = await import("../drizzle/schema");
+  
+  // First, set all methods to non-default
+  await db.update(savedPaymentMethods)
+    .set({ isDefault: false })
+    .where(eq(savedPaymentMethods.userId, userId));
+  
+  // Then set the selected method as default
+  return db.update(savedPaymentMethods)
+    .set({ isDefault: true })
+    .where(eq(savedPaymentMethods.id, id));
+}
+
 export async function getAllDisbursements() {
   const db = await getDb();
   if (!db) return [];
