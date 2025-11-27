@@ -1,5 +1,4 @@
 import * as Sentry from "@sentry/node";
-import { ProfilingIntegration } from "@sentry/profiling-node";
 import { Express, Request, Response, NextFunction } from "express";
 
 // Initialize Sentry
@@ -15,10 +14,8 @@ export function initSentry(app: Express) {
     integrations: [
       new Sentry.Integrations.Http({ tracing: true }),
       new Sentry.Integrations.Express({ app }),
-      new ProfilingIntegration(),
     ],
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-    profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
     
     // Filter sensitive data
     beforeSend(event, hint) {
