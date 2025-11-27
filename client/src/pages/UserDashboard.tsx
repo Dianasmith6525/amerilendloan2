@@ -196,7 +196,7 @@ export function UserDashboard() {
                 {formatCurrency(totalPaid)}
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
-                {Math.round((totalPaid / totalLoansAmount) * 100)}% paid
+                {totalLoansAmount > 0 ? Math.round((totalPaid / totalLoansAmount) * 100) : 0}% paid
               </p>
             </CardContent>
           </Card>
