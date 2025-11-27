@@ -47,10 +47,7 @@ export const upload = multer({
 export async function handleFileUpload(req: Request, res: Response) {
   try {
     // Authenticate user
-    const auth = await sdk.authenticateRequest(req);
-    if (!auth.authenticated || !auth.userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+    const user = await sdk.authenticateRequest(req);
 
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -64,7 +61,7 @@ export async function handleFileUpload(req: Request, res: Response) {
 
     // Verify user owns the loan application
     const loan = await getLoanApplicationById(parseInt(loanApplicationId));
-    if (!loan || loan.userId !== auth.userId) {
+    if (!loan || loan.userId !== user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -76,7 +73,7 @@ export async function handleFileUpload(req: Request, res: Response) {
       filePath: req.file.path,
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
-      uploadedBy: auth.userId,
+      uploadedBy: user.id,
     });
 
     res.json({
@@ -95,10 +92,7 @@ export async function handleFileUpload(req: Request, res: Response) {
 // Download handler
 export async function handleFileDownload(req: Request, res: Response) {
   try {
-    const auth = await sdk.authenticateRequest(req);
-    if (!auth.authenticated || !auth.userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+    const user = await sdk.authenticateRequest(req);
 
     const documentId = parseInt(req.params.id);
     const document = await getLoanDocument(documentId);
@@ -109,7 +103,7 @@ export async function handleFileDownload(req: Request, res: Response) {
 
     // Verify user has access to this document
     const loan = await getLoanApplicationById(document.loanApplicationId);
-    if (!loan || (loan.userId !== auth.userId && !auth.isAdmin)) {
+    if (!loan || (loan.userId !== user.id && user.role !== 'admin')) {
       return res.status(403).json({ error: 'Access denied' });
     }
 

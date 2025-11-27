@@ -148,10 +148,11 @@ export function QuickPaymentButton({
       try {
         await createPaymentMutation.mutateAsync({
           loanApplicationId: applicationId,
-          amount: processingFeeAmount,
-          paymentMethodNonce: response.opaqueData.dataValue,
           paymentMethod: "card",
-          description: `Processing fee payment for loan application #${applicationId}`,
+          opaqueData: {
+            dataDescriptor: response.opaqueData.dataDescriptor,
+            dataValue: response.opaqueData.dataValue,
+          },
         });
       } catch (error) {
         console.error("Payment error:", error);
@@ -170,12 +171,8 @@ export function QuickPaymentButton({
     try {
       await createPaymentMutation.mutateAsync({
         loanApplicationId: applicationId,
-        amount: processingFeeAmount,
         paymentMethod: "crypto",
         cryptoCurrency: selectedCrypto,
-        cryptoAmount: cryptoConversion?.amount || "0",
-        cryptoAddress: cryptoAddressData.address,
-        description: `Processing fee payment (${selectedCrypto}) for loan application #${applicationId}`,
       });
     } catch (error) {
       console.error("Crypto payment error:", error);

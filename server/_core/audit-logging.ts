@@ -1,5 +1,5 @@
 import { Request } from "express";
-import { db } from "../db";
+import { getDb } from "../db";
 
 export enum AuditEventType {
   // Authentication events

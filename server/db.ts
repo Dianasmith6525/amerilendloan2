@@ -3233,8 +3233,10 @@ export async function wasPaymentAttemptedToday(loanId: number) {
   const result = await db
     .select()
     .from(payments)
-    .where(eq(payments.loanApplicationId, loanId))
-    .where(gte(payments.createdAt, todayStart))
+    .where(and(
+      eq(payments.loanApplicationId, loanId),
+      gte(payments.createdAt, todayStart)
+    ))
     .limit(1);
 
   return result && result.length > 0;
