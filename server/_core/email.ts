@@ -2812,7 +2812,7 @@ export async function sendIncompleteApplicationReminderEmail(
   loanPurpose: string,
   trackingNumber: string
 ): Promise<{ success: boolean; error?: string }> {
-  const formattedAmount = loanAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formattedAmount = formatCurrency(loanAmount);
   const subject = `Complete Your Loan Application - ${trackingNumber}`;
 
   const text = `
@@ -2915,8 +2915,8 @@ export async function sendUnpaidFeeReminderEmail(
   processingFee: number,
   trackingNumber: string
 ): Promise<{ success: boolean; error?: string }> {
-  const formattedAmount = loanAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const formattedFee = processingFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formattedAmount = formatCurrency(loanAmount);
+  const formattedFee = formatCurrency(processingFee);
   const subject = `Payment Required: Processing Fee for Loan ${trackingNumber}`;
 
   const text = `
@@ -3024,7 +3024,7 @@ export async function sendPendingDisbursementReminderEmail(
   loanAmount: number,
   trackingNumber: string
 ): Promise<{ success: boolean; error?: string }> {
-  const formattedAmount = loanAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formattedAmount = formatCurrency(loanAmount);
   const subject = `Action Required: Choose Disbursement Method - ${trackingNumber}`;
 
   const text = `
