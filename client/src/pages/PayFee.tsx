@@ -40,7 +40,7 @@ export default function PayFee() {
   // Redirect to login if not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      setLocation("/auth");
+      setLocation("/login");
     }
   }, [isAuthenticated, authLoading, setLocation]);
 
@@ -60,7 +60,9 @@ export default function PayFee() {
     document.body.appendChild(script);
     
     return () => {
-      document.body.removeChild(script);
+      if (script && document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
     };
   }, [authorizeNetConfig]);
 
@@ -188,6 +190,10 @@ export default function PayFee() {
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
+  }
+
+  if (!isAuthenticated) {
+    return null; // Will redirect via useEffect
   }
 
   if (paymentSuccess) {

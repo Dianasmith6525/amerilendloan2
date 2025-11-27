@@ -294,7 +294,7 @@ export default function Dashboard() {
   // Calculate dashboard statistics
   const stats = {
     total: loans?.length || 0,
-    approved: loans?.filter(l => l.status === "approved" || l.status === "fee_paid" || l.status === "disbursed").length || 0,
+    approved: loans?.filter(l => l.status === "approved" || l.status === "fee_pending" || l.status === "fee_paid" || l.status === "disbursed").length || 0,
     pending: loans?.filter(l => l.status === "pending").length || 0,
     totalFunded: loans?.filter(l => l.status === "disbursed").reduce((sum, l) => sum + (l.approvedAmount || 0), 0) || 0,
   };
