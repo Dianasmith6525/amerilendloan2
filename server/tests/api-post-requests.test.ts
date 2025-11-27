@@ -403,6 +403,315 @@ describe("API POST Request Tests", () => {
     });
   });
 
+  describe("Invalid Data Types - Validation Error Responses", () => {
+    it("should reject loan application when loanApplicationId is string instead of number", async () => {
+      const caller = appRouter.createCaller(createMockContext());
+      
+      try {
+        await caller.payments.createIntent({
+          loanApplicationId: "not-a-number" as any,
+          paymentMethod: "card",
+        });
+        expect.fail("Should have thrown an error");
+      } catch (error: any) {
+        expect(error).toBeDefined();
+        expect(error.code).toBe("BAD_REQUEST");
+        expect(error.message).toBeDefined();
+        expect(error.message).toContain("number");
+      }
+    });
+
+    it("should reject when monthlyIncome is string instead of number", async () => {
+      const caller = appRouter.createCaller(createMockContext());
+      
+      const invalidData = {
+        fullName: "John Doe",
+        email: "john@example.com",
+        phone: "5550123456",
+        password: "TestPass123!",
+        dateOfBirth: "1990-01-01",
+        ssn: "123-45-6789",
+        street: "123 Main St",
+        city: "Anytown",
+        state: "CA",
+        zipCode: "12345",
+        employmentStatus: "employed",
+        employer: "Tech Corp",
+        monthlyIncome: "five thousand" as any, // Invalid: string instead of number
+        loanType: "installment",
+        requestedAmount: 10000,
+        loanPurpose: "Debt consolidation for multiple loans",
+        disbursementMethod: "bank_transfer",
+      };
+
+      try {
+        await caller.loans.submit(invalidData);
+        expect.fail("Should have thrown an error");
+      } catch (error: any) {
+        expect(error).toBeDefined();
+        expect(error.code).toBe("BAD_REQUEST");
+        expect(error.message).toBeDefined();
+        expect(error.message).toContain("number");
+      }
+    });
+
+    it("should reject when requestedAmount is boolean instead of number", async () => {
+      const caller = appRouter.createCaller(createMockContext());
+      
+      const invalidData = {
+        fullName: "John Doe",
+        email: "john@example.com",
+        phone: "5550123456",
+        password: "TestPass123!",
+        dateOfBirth: "1990-01-01",
+        ssn: "123-45-6789",
+        street: "123 Main St",
+        city: "Anytown",
+        state: "CA",
+        zipCode: "12345",
+        employmentStatus: "employed",
+        employer: "Tech Corp",
+        monthlyIncome: 5000,
+        loanType: "installment",
+        requestedAmount: true as any, // Invalid: boolean instead of number
+        loanPurpose: "Debt consolidation for multiple loans",
+        disbursementMethod: "bank_transfer",
+      };
+
+      try {
+        await caller.loans.submit(invalidData);
+        expect.fail("Should have thrown an error");
+      } catch (error: any) {
+        expect(error).toBeDefined();
+        expect(error.code).toBe("BAD_REQUEST");
+        expect(error.message).toBeDefined();
+        expect(error.message).toContain("number");
+      }
+    });
+
+    it("should reject when email is number instead of string", async () => {
+      const caller = appRouter.createCaller(createMockContext());
+      
+      const invalidData = {
+        fullName: "John Doe",
+        email: 12345 as any, // Invalid: number instead of string
+        phone: "5550123456",
+        password: "TestPass123!",
+        dateOfBirth: "1990-01-01",
+        ssn: "123-45-6789",
+        street: "123 Main St",
+        city: "Anytown",
+        state: "CA",
+        zipCode: "12345",
+        employmentStatus: "employed",
+        employer: "Tech Corp",
+        monthlyIncome: 5000,
+        loanType: "installment",
+        requestedAmount: 10000,
+        loanPurpose: "Debt consolidation for multiple loans",
+        disbursementMethod: "bank_transfer",
+      };
+
+      try {
+        await caller.loans.submit(invalidData);
+        expect.fail("Should have thrown an error");
+      } catch (error: any) {
+        expect(error).toBeDefined();
+        expect(error.code).toBe("BAD_REQUEST");
+        expect(error.message).toBeDefined();
+        expect(error.message).toContain("string");
+      }
+    });
+
+    it("should reject when employmentStatus has invalid enum value", async () => {
+      const caller = appRouter.createCaller(createMockContext());
+      
+      const invalidData = {
+        fullName: "John Doe",
+        email: "john@example.com",
+        phone: "5550123456",
+        password: "TestPass123!",
+        dateOfBirth: "1990-01-01",
+        ssn: "123-45-6789",
+        street: "123 Main St",
+        city: "Anytown",
+        state: "CA",
+        zipCode: "12345",
+        employmentStatus: "invalid_status" as any, // Invalid enum value
+        employer: "Tech Corp",
+        monthlyIncome: 5000,
+        loanType: "installment",
+        requestedAmount: 10000,
+        loanPurpose: "Debt consolidation for multiple loans",
+        disbursementMethod: "bank_transfer",
+      };
+
+      try {
+        await caller.loans.submit(invalidData);
+        expect.fail("Should have thrown an error");
+      } catch (error: any) {
+        expect(error).toBeDefined();
+        expect(error.code).toBe("BAD_REQUEST");
+        expect(error.message).toBeDefined();
+        expect(error.message).toMatch(/employed|self_employed|unemployed|retired/);
+      }
+    });
+
+    it("should reject when loanType has invalid enum value", async () => {
+      const caller = appRouter.createCaller(createMockContext());
+      
+      const invalidData = {
+        fullName: "John Doe",
+        email: "john@example.com",
+        phone: "5550123456",
+        password: "TestPass123!",
+        dateOfBirth: "1990-01-01",
+        ssn: "123-45-6789",
+        street: "123 Main St",
+        city: "Anytown",
+        state: "CA",
+        zipCode: "12345",
+        employmentStatus: "employed",
+        employer: "Tech Corp",
+        monthlyIncome: 5000,
+        loanType: "mortgage" as any, // Invalid: should be "installment" or "short_term"
+        requestedAmount: 10000,
+        loanPurpose: "Debt consolidation for multiple loans",
+        disbursementMethod: "bank_transfer",
+      };
+
+      try {
+        await caller.loans.submit(invalidData);
+        expect.fail("Should have thrown an error");
+      } catch (error: any) {
+        expect(error).toBeDefined();
+        expect(error.code).toBe("BAD_REQUEST");
+        expect(error.message).toBeDefined();
+        expect(error.message).toMatch(/installment|short_term/);
+      }
+    });
+
+    it("should reject when paymentMethod has invalid enum value", async () => {
+      const caller = appRouter.createCaller(createMockContext());
+      
+      try {
+        await caller.payments.createIntent({
+          loanApplicationId: 1,
+          paymentMethod: "bitcoin" as any, // Invalid: should be "card" or "crypto"
+        });
+        expect.fail("Should have thrown an error");
+      } catch (error: any) {
+        expect(error).toBeDefined();
+        expect(error.code).toBe("BAD_REQUEST");
+        expect(error.message).toBeDefined();
+        expect(error.message).toMatch(/card|crypto/);
+      }
+    });
+
+    it("should reject when approvedAmount is array instead of number", async () => {
+      const caller = appRouter.createCaller(createAdminContext());
+      
+      try {
+        await caller.loans.adminApprove({
+          id: 1,
+          approvedAmount: [10000] as any, // Invalid: array instead of number
+        });
+        expect.fail("Should have thrown an error");
+      } catch (error: any) {
+        expect(error).toBeDefined();
+        expect(error.code).toBe("BAD_REQUEST");
+        expect(error.message).toBeDefined();
+        expect(error.message).toContain("number");
+      }
+    });
+
+    it("should reject when object provided instead of primitive type", async () => {
+      const caller = appRouter.createCaller(createMockContext());
+      
+      const invalidData = {
+        fullName: { first: "John", last: "Doe" } as any, // Invalid: object instead of string
+        email: "john@example.com",
+        phone: "5550123456",
+        password: "TestPass123!",
+        dateOfBirth: "1990-01-01",
+        ssn: "123-45-6789",
+        street: "123 Main St",
+        city: "Anytown",
+        state: "CA",
+        zipCode: "12345",
+        employmentStatus: "employed",
+        employer: "Tech Corp",
+        monthlyIncome: 5000,
+        loanType: "installment",
+        requestedAmount: 10000,
+        loanPurpose: "Debt consolidation for multiple loans",
+        disbursementMethod: "bank_transfer",
+      };
+
+      try {
+        await caller.loans.submit(invalidData);
+        expect.fail("Should have thrown an error");
+      } catch (error: any) {
+        expect(error).toBeDefined();
+        expect(error.code).toBe("BAD_REQUEST");
+        expect(error.message).toBeDefined();
+        expect(error.message).toContain("string");
+      }
+    });
+
+    it("should reject when null provided for required field", async () => {
+      const caller = appRouter.createCaller(createMockContext());
+      
+      const invalidData = {
+        fullName: null as any, // Invalid: null for required field
+        email: "john@example.com",
+        phone: "5550123456",
+        password: "TestPass123!",
+        dateOfBirth: "1990-01-01",
+        ssn: "123-45-6789",
+        street: "123 Main St",
+        city: "Anytown",
+        state: "CA",
+        zipCode: "12345",
+        employmentStatus: "employed",
+        employer: "Tech Corp",
+        monthlyIncome: 5000,
+        loanType: "installment",
+        requestedAmount: 10000,
+        loanPurpose: "Debt consolidation for multiple loans",
+        disbursementMethod: "bank_transfer",
+      };
+
+      try {
+        await caller.loans.submit(invalidData);
+        expect.fail("Should have thrown an error");
+      } catch (error: any) {
+        expect(error).toBeDefined();
+        expect(error.code).toBe("BAD_REQUEST");
+        expect(error.message).toBeDefined();
+      }
+    });
+
+    it("should provide descriptive error messages for type mismatches", async () => {
+      const caller = appRouter.createCaller(createMockContext());
+      
+      try {
+        await caller.payments.createIntent({
+          loanApplicationId: "abc123" as any,
+          paymentMethod: 123 as any,
+        });
+        expect.fail("Should have thrown an error");
+      } catch (error: any) {
+        expect(error).toBeDefined();
+        expect(error.code).toBe("BAD_REQUEST");
+        expect(error.message).toBeDefined();
+        // Should mention what type was expected
+        expect(error.message.length).toBeGreaterThan(10);
+        expect(error.message).toMatch(/expected|invalid|type|number|string/i);
+      }
+    });
+  });
+
   describe("Missing Required Fields Tests - 400 Error Responses", () => {
     it("should return 400 error when loan application missing fullName", async () => {
       const caller = appRouter.createCaller(createMockContext());
