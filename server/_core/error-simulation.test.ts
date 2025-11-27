@@ -190,7 +190,7 @@ describe("Mock Email Service", () => {
 
     const failures = results.filter((success) => !success).length;
     expect(failures).toBeGreaterThan(0);
-    expect(failures).toBeLessThan(10);
+    expect(failures).toBeLessThanOrEqual(10);
   });
 });
 

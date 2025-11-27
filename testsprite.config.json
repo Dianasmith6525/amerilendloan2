@@ -1,0 +1,117 @@
+{
+  "project": {
+    "name": "AmeriLend Loan Application Platform",
+    "description": "Comprehensive end-to-end testing for loan application, payment processing, and admin workflows",
+    "version": "1.0.0",
+    "baseUrl": "https://www.amerilendloan.com",
+    "apiBaseUrl": "https://www.amerilendloan.com/api/trpc"
+  },
+  "environment": {
+    "test": {
+      "baseUrl": "http://localhost:5000",
+      "apiBaseUrl": "http://localhost:5000/api/trpc",
+      "database": "postgresql://postgres.jrgjlizudizscwqvuqbe:Olami6525$$@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&sslmode=no-verify"
+    },
+    "production": {
+      "baseUrl": "https://www.amerilendloan.com",
+      "apiBaseUrl": "https://www.amerilendloan.com/api/trpc"
+    }
+  },
+  "testSuites": [
+    {
+      "name": "Loan Application End-to-End",
+      "description": "Complete loan application workflow from submission to approval",
+      "priority": "critical",
+      "tests": [
+        "loan-application-submit",
+        "loan-application-track",
+        "loan-application-duplicate-check",
+        "admin-loan-approval",
+        "admin-loan-rejection"
+      ]
+    },
+    {
+      "name": "Authentication & Authorization",
+      "description": "User authentication, OTP verification, and access control",
+      "priority": "critical",
+      "tests": [
+        "auth-signup",
+        "auth-login",
+        "auth-otp-verify",
+        "auth-password-reset",
+        "auth-role-based-access"
+      ]
+    },
+    {
+      "name": "Payment Processing",
+      "description": "Payment intent creation, processing, and verification",
+      "priority": "high",
+      "tests": [
+        "payment-card-authorize-net",
+        "payment-crypto-btc",
+        "payment-crypto-eth",
+        "payment-verification",
+        "payment-failure-handling"
+      ]
+    },
+    {
+      "name": "API Validation & Security",
+      "description": "Input validation, type checking, and security tests",
+      "priority": "high",
+      "tests": [
+        "api-invalid-data-types",
+        "api-missing-required-fields",
+        "api-sql-injection-prevention",
+        "api-xss-prevention",
+        "api-rate-limiting"
+      ]
+    },
+    {
+      "name": "Admin Dashboard Operations",
+      "description": "Admin-specific features and workflows",
+      "priority": "medium",
+      "tests": [
+        "admin-view-applications",
+        "admin-search-applications",
+        "admin-statistics",
+        "admin-activity-log",
+        "admin-fee-configuration"
+      ]
+    }
+  ],
+  "coverage": {
+    "endpoints": [
+      "/api/trpc/loans.submit",
+      "/api/trpc/loans.myApplications",
+      "/api/trpc/loans.getById",
+      "/api/trpc/loans.checkDuplicate",
+      "/api/trpc/loans.getLoanByTrackingNumber",
+      "/api/trpc/loans.adminList",
+      "/api/trpc/loans.adminApprove",
+      "/api/trpc/loans.adminReject",
+      "/api/trpc/loans.adminStatistics",
+      "/api/trpc/auth.signUp",
+      "/api/trpc/auth.signIn",
+      "/api/trpc/auth.requestOTP",
+      "/api/trpc/auth.verifyOTP",
+      "/api/trpc/auth.resetPassword",
+      "/api/trpc/payments.createIntent",
+      "/api/trpc/payments.processCrypto",
+      "/api/trpc/payments.getByLoanId",
+      "/api/trpc/payments.verifyCryptoPayment",
+      "/api/trpc/feeConfig.adminGet",
+      "/api/trpc/feeConfig.adminUpdate",
+      "/api/trpc/disbursements.adminInitiate",
+      "/api/trpc/disbursements.updateStatus",
+      "/api/trpc/system.chatWithAi",
+      "/api/trpc/system.health"
+    ],
+    "minimumCoverage": 80
+  },
+  "reporting": {
+    "formats": ["json", "html", "junit"],
+    "outputDir": "./test-results",
+    "screenshots": true,
+    "videoOnFailure": true
+  }
+}

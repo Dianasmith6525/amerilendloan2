@@ -1,0 +1,33 @@
+{
+  "name": "amerilend-tests",
+  "version": "1.0.0",
+  "description": "TestSprite test suite for AmeriLend loan application platform",
+  "scripts": {
+    "test": "testsprite run",
+    "test:loan": "testsprite run test-scenarios/loan-application.spec.ts",
+    "test:auth": "testsprite run test-scenarios/authentication.spec.ts",
+    "test:payment": "testsprite run test-scenarios/payment.spec.ts",
+    "test:admin": "testsprite run test-scenarios/admin.spec.ts",
+    "test:security": "testsprite run test-scenarios/security.spec.ts",
+    "test:ci": "testsprite run --env test --reporter junit",
+    "test:report": "testsprite run --reporter html --output test-results/",
+    "test:watch": "testsprite run --watch",
+    "test:debug": "testsprite run --debug",
+    "test:load": "testsprite run --load 100 --duration 60s",
+    "test:stress": "testsprite run --stress --users 1000"
+  },
+  "devDependencies": {
+    "@testsprite/cli": "latest",
+    "@testsprite/core": "latest",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "testsprite": {
+    "config": "./testsprite.config.json",
+    "testDir": "./test-scenarios",
+    "timeout": 30000,
+    "retries": 2,
+    "parallel": true,
+    "workers": 4
+  }
+}
