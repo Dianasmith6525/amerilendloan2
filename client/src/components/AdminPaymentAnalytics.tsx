@@ -1,7 +1,7 @@
 import React from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, PieChart, Pie, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from "recharts";
-import { TrendingUp, DollarSign, Users, Activity, CreditCard, Calendar, AlertCircle } from "lucide-react";
+import { TrendingUp, DollarSign, Users, Activity, CreditCard, Calendar, AlertCircle, Clock } from "lucide-react";
 
 interface AdminPaymentAnalyticsProps {
   payments: Array<{

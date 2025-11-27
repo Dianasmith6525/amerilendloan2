@@ -11,7 +11,7 @@ import {
   getLoanApplicationById
 } from "../db";
 import { 
-  sendPaymentReminderEmail, 
+  sendFeePaymentReminderEmail, 
   sendPaymentDueReminderEmail,
   sendPaymentOverdueEmail 
 } from "./email";

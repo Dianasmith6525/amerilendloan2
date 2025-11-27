@@ -122,7 +122,7 @@ export function QuickPaymentButton({
     const secureData = {
       authData: {
         clientKey: authorizeNetConfig.clientKey,
-        apiLoginID: authorizeNetConfig.apiLoginID,
+        apiLoginID: authorizeNetConfig.apiLoginId,
       },
       cardData: {
         cardNumber: cardNumber.replace(/\s/g, ""),
@@ -147,7 +147,7 @@ export function QuickPaymentButton({
 
       try {
         await createPaymentMutation.mutateAsync({
-          applicationId,
+          loanApplicationId: applicationId,
           amount: processingFeeAmount,
           paymentMethodNonce: response.opaqueData.dataValue,
           paymentMethod: "card",
@@ -169,7 +169,7 @@ export function QuickPaymentButton({
 
     try {
       await createPaymentMutation.mutateAsync({
-        applicationId,
+        loanApplicationId: applicationId,
         amount: processingFeeAmount,
         paymentMethod: "crypto",
         cryptoCurrency: selectedCrypto,

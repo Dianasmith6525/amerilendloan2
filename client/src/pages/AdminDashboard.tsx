@@ -1685,7 +1685,8 @@ export default function AdminDashboard() {
             <PaymentReminderAdmin />
           </TabsContent>
         </Tabs>
-      </main>
+        </main>
+    </div>
 
       {/* Approval Dialog */}
       <Dialog open={approvalDialog.open} onOpenChange={(open) => setApprovalDialog({ ...approvalDialog, open })}>
