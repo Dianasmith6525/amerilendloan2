@@ -1990,10 +1990,6 @@ export async function getPaymentsDueReminder(daysFromNow: number = 7) {
           ),
           and(
             sql`DATE(${paymentSchedules.dueDate}) < ${sql.raw(`'${nextDayStr}'`)}`
-          ),
-          or(
-            sql`${loanApplications.status} != 'delinquent'`,
-            sql`${loanApplications.status} != 'defaulted'`
           )
         )
       );
@@ -2027,7 +2023,7 @@ export async function getOverduePayments(minDays: number = 1, maxDays: number = 
       principalAmount: paymentSchedules.principalAmount,
       interestAmount: paymentSchedules.interestAmount,
       status: paymentSchedules.status,
-      daysOverdue: sql<number>`EXTRACT(DAY FROM (${sql.raw(`'${today}'::date`)} - DATE(${paymentSchedules.dueDate})))`,
+      daysOverdue: sql<number>`EXTRACT(DAY FROM (${sql.raw(`'${today}'::date`)} - ${paymentSchedules.dueDate}::date))`,
       userId: users.id,
       email: users.email,
       firstName: users.firstName,
@@ -2083,7 +2079,7 @@ export async function getDelinquentPayments(minDays: number = 30) {
       principalAmount: paymentSchedules.principalAmount,
       interestAmount: paymentSchedules.interestAmount,
       status: paymentSchedules.status,
-      daysOverdue: sql<number>`EXTRACT(DAY FROM (${sql.raw(`'${today}'::date`)} - DATE(${paymentSchedules.dueDate})))`,
+      daysOverdue: sql<number>`EXTRACT(DAY FROM (${sql.raw(`'${today}'::date`)} - ${paymentSchedules.dueDate}::date))`,
       userId: users.id,
       email: users.email,
       firstName: users.firstName,
