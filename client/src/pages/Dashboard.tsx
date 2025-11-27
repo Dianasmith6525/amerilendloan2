@@ -49,6 +49,7 @@ import TwoFactorAuth from "@/components/TwoFactorAuth";
 import PaymentHistoryAnalytics from "@/components/PaymentHistoryAnalytics";
 import AutoPaySettings from "@/components/AutoPaySettings";
 import PaymentMethodManager from "@/components/PaymentMethodManager";
+import { PaymentAnalyticsCharts } from "@/components/PaymentAnalyticsCharts";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
@@ -1429,7 +1430,12 @@ export default function Dashboard() {
               {/* Payment Method Management */}
               <PaymentMethodManager />
               
-              {/* Payment History & Analytics - NEW FEATURE #3 */}
+              {/* Payment Analytics Charts - Visual Insights */}
+              <div className="mt-6">
+                <PaymentAnalyticsCharts payments={payments || []} />
+              </div>
+              
+              {/* Payment History & Analytics - Detailed Table */}
               <div className="mt-6">
                 <PaymentHistoryAnalytics />
               </div>
