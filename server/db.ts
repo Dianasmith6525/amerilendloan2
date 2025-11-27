@@ -3307,6 +3307,7 @@ export async function createAuditLog(data: {
   timestamp: Date;
 }) {
   const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
   const { auditLog } = await import("../drizzle/schema");
 
   try {
@@ -3326,6 +3327,7 @@ export async function getAuditLogs(filters?: {
   offset?: number;
 }) {
   const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
   const { auditLog } = await import("../drizzle/schema");
 
   try {
@@ -3383,6 +3385,7 @@ export async function addLoanDocument(data: {
   uploadedBy: number;
 }) {
   const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
   const { loanDocuments } = await import("../drizzle/schema");
 
   try {
@@ -3401,6 +3404,7 @@ export async function addLoanDocument(data: {
 
 export async function getLoanDocuments(loanApplicationId: number) {
   const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
   const { loanDocuments } = await import("../drizzle/schema");
 
   try {
@@ -3417,6 +3421,7 @@ export async function getLoanDocuments(loanApplicationId: number) {
 
 export async function getLoanDocument(documentId: number) {
   const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
   const { loanDocuments } = await import("../drizzle/schema");
 
   try {
@@ -3440,6 +3445,7 @@ export async function updateDocumentStatus(
   reviewNotes?: string
 ) {
   const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
   const { loanDocuments } = await import("../drizzle/schema");
 
   try {

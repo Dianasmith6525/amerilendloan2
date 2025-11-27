@@ -150,7 +150,7 @@ export function EnhancedDocumentUpload({ loanApplicationId, onUploadComplete }: 
       
       // Refresh document list
       setTimeout(() => {
-        utils.loans.getLoanDocuments.invalidate({ loanApplicationId });
+        // utils.loans.getLoanDocuments.invalidate({ loanApplicationId }); // TODO: Add getLoanDocuments endpoint
         onUploadComplete?.();
       }, 500);
 
