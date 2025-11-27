@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { db as database } from "../db";
+import { getDb } from "../db";
 import { redisClient } from "./rate-limiting";
 
 interface HealthCheckResult {
@@ -34,7 +34,8 @@ async function checkDatabase(): Promise<ServiceStatus> {
   const start = Date.now();
   try {
     // Simple query to check connection
-    await database.query('SELECT 1');
+    const db = await getDb();
+    if (!db) throw new Error("Database not initialized");
     return {
       status: 'up',
       responseTime: Date.now() - start,

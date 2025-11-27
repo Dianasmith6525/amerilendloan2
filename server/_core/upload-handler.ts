@@ -1,8 +1,12 @@
 import { Request, Response } from "express";
 import multer from "multer";
 import path from "path";
-import { db } from "../db";
-import { authenticateRequest } from "./sdk";
+import { 
+  getLoanApplicationById,
+  addLoanDocument,
+  getLoanDocument
+} from "../db";
+import { sdk } from "./sdk";
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -43,7 +47,7 @@ export const upload = multer({
 export async function handleFileUpload(req: Request, res: Response) {
   try {
     // Authenticate user
-    const auth = await authenticateRequest(req);
+    const auth = await sdk.authenticateRequest(req);
     if (!auth.authenticated || !auth.userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -59,13 +63,13 @@ export async function handleFileUpload(req: Request, res: Response) {
     }
 
     // Verify user owns the loan application
-    const loan = await db.getLoanApplication(parseInt(loanApplicationId));
+    const loan = await getLoanApplicationById(parseInt(loanApplicationId));
     if (!loan || loan.userId !== auth.userId) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
     // Save document metadata
-    const document = await db.addLoanDocument({
+    const document = await addLoanDocument({
       loanApplicationId: parseInt(loanApplicationId),
       documentType: documentType || 'other',
       fileName: req.file.originalname,
@@ -91,20 +95,20 @@ export async function handleFileUpload(req: Request, res: Response) {
 // Download handler
 export async function handleFileDownload(req: Request, res: Response) {
   try {
-    const auth = await authenticateRequest(req);
+    const auth = await sdk.authenticateRequest(req);
     if (!auth.authenticated || !auth.userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
     const documentId = parseInt(req.params.id);
-    const document = await db.getLoanDocument(documentId);
+    const document = await getLoanDocument(documentId);
 
     if (!document) {
       return res.status(404).json({ error: 'Document not found' });
     }
 
     // Verify user has access to this document
-    const loan = await db.getLoanApplication(document.loanApplicationId);
+    const loan = await getLoanApplicationById(document.loanApplicationId);
     if (!loan || (loan.userId !== auth.userId && !auth.isAdmin)) {
       return res.status(403).json({ error: 'Access denied' });
     }

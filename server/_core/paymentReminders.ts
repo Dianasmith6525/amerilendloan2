@@ -3,7 +3,13 @@
  * Sends automated email reminders before payment due dates
  */
 
-import { db } from "../db";
+import { 
+  getAllDisbursedLoans,
+  getUserNotificationPreferences,
+  logPaymentReminder,
+  getUserById,
+  getLoanApplicationById
+} from "../db";
 import { 
   sendPaymentReminderEmail, 
   sendPaymentDueReminderEmail,
@@ -21,7 +27,7 @@ export async function checkAndSendPaymentReminders() {
     const now = new Date();
     
     // Get all disbursed loans (active loans that need payments)
-    const activeLoans = await db.getAllDisbursedLoans();
+    const activeLoans = await getAllDisbursedLoans();
     
     if (!activeLoans || activeLoans.length === 0) {
       console.log("[Payment Reminders] No active loans found");
@@ -46,13 +52,13 @@ export async function checkAndSendPaymentReminders() {
         const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
         
         // Check if user has disabled reminders
-        const userPreferences = await db.getUserNotificationPreferences(loan.userId);
+        const userPreferences = await getUserNotificationPreferences(loan.userId);
         if (userPreferences?.disablePaymentReminders) {
           continue;
         }
         
         // Get user email
-        const user = await db.getUserById(loan.userId);
+        const user = await getUserById(loan.userId);
         if (!user?.email) continue;
         
         // Send reminder based on days until due
@@ -104,7 +110,7 @@ export async function checkAndSendPaymentReminders() {
         }
         
         // Log the reminder
-        await db.logPaymentReminder(loan.id, daysUntilDue);
+        await logPaymentReminder(loan.id, daysUntilDue);
         
       } catch (loanError) {
         console.error(`[Payment Reminders] Error processing loan ${loan.id}:`, loanError);
@@ -163,12 +169,12 @@ export async function sendTestPaymentReminder(loanId: number) {
   console.log(`[Payment Reminders] Sending test reminder for loan ${loanId}...`);
   
   try {
-    const loan = await db.getLoanApplicationById(loanId);
+    const loan = await getLoanApplicationById(loanId);
     if (!loan) {
       throw new Error("Loan not found");
     }
     
-    const user = await db.getUserById(loan.userId);
+    const user = await getUserById(loan.userId);
     if (!user?.email) {
       throw new Error("User email not found");
     }

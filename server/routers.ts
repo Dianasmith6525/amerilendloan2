@@ -6494,9 +6494,6 @@ Format as JSON with array of applications including their recommendation.`;
         }
       }),
   }),
-
-  // Auto-Pay Router
-  autoPay: autoPayRouter,
 });
 
 // Helper function to determine next steps based on application status

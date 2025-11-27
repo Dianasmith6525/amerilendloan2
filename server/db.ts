@@ -3292,42 +3292,6 @@ export async function logAutoPayFailure(loanId: number, reason: string) {
   }
 }
 
-/**
- * Create a payment record
- */
-export async function createPayment(paymentData: {
-  userId: number;
-  loanApplicationId: number;
-  amount: number;
-  method: string;
-  status: string;
-  transactionId?: string;
-  metadata?: any;
-}) {
-  const db = await getDb();
-  if (!db) throw new Error("Database connection failed");
-
-  const { payments } = await import("../drizzle/schema");
-
-  try {
-    const result = await db.insert(payments).values({
-      userId: paymentData.userId,
-      loanApplicationId: paymentData.loanApplicationId,
-      amount: paymentData.amount,
-      method: paymentData.method,
-      status: paymentData.status,
-      transactionId: paymentData.transactionId,
-      metadata: paymentData.metadata ? JSON.stringify(paymentData.metadata) : null,
-      createdAt: new Date(),
-    }).returning();
-
-    return result[0];
-  } catch (error) {
-    console.error("Error creating payment:", error);
-    throw error;
-  }
-}
-
 // ============================================
 // AUDIT LOGGING FUNCTIONS (Priority 4)
 // ============================================
