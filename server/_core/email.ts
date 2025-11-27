@@ -72,12 +72,46 @@ export async function sendEmail(payload: EmailPayload): Promise<{ success: boole
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error("SendGrid API error:", errorData);
-      return { success: false, error: errorData.errors?.[0]?.message || "Failed to send email" };
+      const errorText = await response.text();
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { errors: [{ message: errorText }] };
+      }
+      
+      console.error("SendGrid API error:", {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorData
+      });
+      
+      // Provide helpful error messages based on status code
+      if (response.status === 401) {
+        console.error("❌ SENDGRID AUTHENTICATION FAILED");
+        console.error("   Your SendGrid API key is invalid or not set");
+        console.error("   Check environment variable: SENDGRID_API_KEY");
+        console.error("   Get your API key from: https://app.sendgrid.com/settings/api_keys");
+        return { success: false, error: "SendGrid API key is invalid. Please check your configuration." };
+      }
+      
+      const errorMessage = errorData.errors?.[0]?.message || "Failed to send email";
+      
+      if (errorMessage.includes("not a verified sender") || errorMessage.includes("sender identity")) {
+        console.error("⚠️  SENDER NOT VERIFIED: You need to verify 'noreply@amerilendloan.com' in SendGrid");
+        console.error("   Go to: https://app.sendgrid.com/settings/sender_auth/senders");
+        return { success: false, error: "Sender email not verified in SendGrid. Please verify noreply@amerilendloan.com" };
+      }
+      
+      if (errorMessage.includes("Maximum credits exceeded") || errorMessage.includes("credits")) {
+        console.error("⚠️  SENDGRID CREDITS EXCEEDED: Check your SendGrid account billing");
+        console.error("   Go to: https://app.sendgrid.com/settings/billing");
+      }
+      
+      return { success: false, error: errorMessage };
     }
 
-    console.log(`Email sent successfully to ${payload.to}`);
+    console.log(`✅ Email sent successfully to ${payload.to}`);
     return { success: true };
   } catch (error) {
     console.error("Error sending email:", error);
