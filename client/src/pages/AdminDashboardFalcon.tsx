@@ -1259,9 +1259,6 @@ export default function AdminDashboardFalcon() {
             <DialogDescription>Set the approved loan amount and any admin notes</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 p-3 rounded text-sm">
-              <strong>Debug Info:</strong> requestedAmount from DB = {applications?.find(a => a.id === approvalDialog.applicationId)?.requestedAmount} (should be in cents)
-            </div>
             <div>
               <Label>Approved Amount ($)</Label>
               <Input
