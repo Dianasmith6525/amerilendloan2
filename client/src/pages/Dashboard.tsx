@@ -177,8 +177,9 @@ export default function Dashboard() {
   // Filter loans based on search and filters
   const filteredLoans = loans?.filter((loan) => {
     // Search term filter
-    if (searchTerm && !loan.trackingNumber.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        !loan.loanType.toLowerCase().includes(searchTerm.toLowerCase())) {
+    if (searchTerm && 
+        !loan.trackingNumber?.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        !loan.loanType?.toLowerCase().includes(searchTerm.toLowerCase())) {
       return false;
     }
 
@@ -196,7 +197,7 @@ export default function Dashboard() {
     }
 
     // Amount range filter
-    const amount = loan.requestedAmount / 100;
+    const amount = (loan.requestedAmount || 0) / 100;
     if (amountMin && amount < parseFloat(amountMin)) {
       return false;
     }
