@@ -16,7 +16,10 @@ export default function AdvancedAnalytics() {
 
   // Calculate monthly application trends
   const monthlyTrends = applications.reduce((acc: any, app: any) => {
-    const month = new Date(app.createdAt).toLocaleString('default', { month: 'short', year: 'numeric' });
+    if (!app.createdAt) return acc;
+    const date = new Date(app.createdAt);
+    if (isNaN(date.getTime())) return acc;
+    const month = date.toLocaleString('default', { month: 'short', year: 'numeric' });
     if (!acc[month]) {
       acc[month] = { month, applications: 0, approved: 0, rejected: 0, totalAmount: 0 };
     }
@@ -64,7 +67,10 @@ export default function AdvancedAnalytics() {
   const dailyDisbursements = disbursements
     .filter((d: any) => d.status === 'completed')
     .reduce((acc: any, d: any) => {
-      const date = new Date(d.createdAt).toLocaleDateString();
+      if (!d.createdAt) return acc;
+      const dateObj = new Date(d.createdAt);
+      if (isNaN(dateObj.getTime())) return acc;
+      const date = dateObj.toLocaleDateString();
       if (!acc[date]) {
         acc[date] = { date, amount: 0, count: 0 };
       }
@@ -85,9 +91,12 @@ export default function AdvancedAnalytics() {
         applications
           .filter((a: any) => a.updatedAt && a.createdAt)
           .reduce((sum: number, a: any) => {
-            const hours = (new Date(a.updatedAt).getTime() - new Date(a.createdAt).getTime()) / (1000 * 60 * 60);
+            const updatedDate = new Date(a.updatedAt);
+            const createdDate = new Date(a.createdAt);
+            if (isNaN(updatedDate.getTime()) || isNaN(createdDate.getTime())) return sum;
+            const hours = (updatedDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60);
             return sum + hours;
-          }, 0) / applications.length
+          }, 0) / applications.filter((a: any) => a.updatedAt && a.createdAt).length
       )
     : 0;
 

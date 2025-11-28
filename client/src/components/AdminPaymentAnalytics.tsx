@@ -26,14 +26,16 @@ export function AdminPaymentAnalytics({ payments, loans }: AdminPaymentAnalytics
     const monthlyRevenue: Record<string, { revenue: number; count: number }> = {};
     
     payments.forEach(payment => {
+      if (!payment.createdAt) return;
       const date = new Date(payment.createdAt);
+      if (isNaN(date.getTime())) return;
       const monthName = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
       
       if (!monthlyRevenue[monthName]) {
         monthlyRevenue[monthName] = { revenue: 0, count: 0 };
       }
       
-      if (payment.status === 'completed') {
+      if (payment.status === 'completed' && payment.amount) {
         monthlyRevenue[monthName].revenue += payment.amount / 100;
         monthlyRevenue[monthName].count++;
       }
@@ -57,7 +59,7 @@ export function AdminPaymentAnalytics({ payments, loans }: AdminPaymentAnalytics
         methodStats[method] = { count: 0, amount: 0, avgAmount: 0 };
       }
       methodStats[method].count++;
-      if (payment.status === 'completed') {
+      if (payment.status === 'completed' && payment.amount) {
         methodStats[method].amount += payment.amount / 100;
       }
     });
@@ -79,7 +81,7 @@ export function AdminPaymentAnalytics({ payments, loans }: AdminPaymentAnalytics
         statusCount[status] = { count: 0, amount: 0 };
       }
       statusCount[status].count++;
-      statusCount[status].amount += payment.amount / 100;
+      statusCount[status].amount += (payment.amount || 0) / 100;
     });
     
     return Object.entries(statusCount).map(([status, data]) => ({
