@@ -3479,7 +3479,9 @@ export const appRouter = router({
           throw new TRPCError({ code: "FORBIDDEN" });
         }
         
-        if (application.status !== "approved") {
+        // Allow payment for both "approved" and "fee_pending" status
+        // fee_pending means user already initiated payment but may need to retry
+        if (application.status !== "approved" && application.status !== "fee_pending") {
           throw new TRPCError({ 
             code: "BAD_REQUEST", 
             message: "Loan must be approved before payment" 
@@ -3689,18 +3691,12 @@ export const appRouter = router({
           if (userEmailValue && typeof userEmailValue === 'string') {
             try {
               const fullName = `${ctx.user.firstName || ""} ${ctx.user.lastName || ""}`.trim() || "Valued Customer";
-              // For crypto, send initial notification (not confirmed yet)
-              await sendCryptoPaymentConfirmedEmail(
-                userEmailValue,
-                fullName,
-                application!.trackingNumber,
-                application!.processingFeeAmount,
-                charge.cryptoAmount || "0",
-                input.cryptoCurrency,
-                charge.paymentAddress || ""
-              );
+              // Send initial instructions - NOT a confirmation email
+              // TODO: Create a separate sendCryptoPaymentInstructionsEmail function
+              console.log(`[Crypto] Payment address created for user ${ctx.user.id}: ${charge.paymentAddress}`);
+              console.log(`[Crypto] User needs to send ${charge.cryptoAmount} ${input.cryptoCurrency} and submit transaction hash`);
             } catch (err) {
-              console.warn("[Email] Failed to send crypto payment notification:", err);
+              console.warn("[Email] Failed to log crypto payment creation:", err);
             }
 
             // Send admin notification
@@ -3723,10 +3719,13 @@ export const appRouter = router({
 
           const cryptoResponse = { 
             success: true,
+            pending: true, // Payment address created but not yet sent
             paymentId: cryptoPayment?.id,
             amount: application.processingFeeAmount,
             cryptoAddress: charge.paymentAddress,
             cryptoAmount: charge.cryptoAmount,
+            status: "pending",
+            message: "Crypto payment address created. Please send crypto and submit transaction hash.",
           };
 
           // Cache result if idempotency key provided
@@ -3832,10 +3831,13 @@ export const appRouter = router({
         }
 
         // Update payment with transaction hash and status
-        await db.updatePaymentStatus(input.paymentId, verification.confirmed ? "succeeded" : "processing", {
+        const newStatus = verification.confirmed ? "succeeded" : "processing";
+        await db.updatePaymentStatus(input.paymentId, newStatus, {
           cryptoTxHash: input.txHash,
           completedAt: verification.confirmed ? new Date() : undefined,
         });
+
+        console.log(`[Crypto] Payment ${input.paymentId} verification: ${verification.confirmed ? "CONFIRMED" : "PENDING"} - Status: ${newStatus}`);
 
         // If confirmed, update loan status to fee_paid
         if (verification.confirmed) {
@@ -3901,9 +3903,10 @@ export const appRouter = router({
           return { 
             success: true, 
             verified: true, 
-            confirmed: verification.confirmed,
+            confirmed: true,
             transactionHash: input.txHash,
-            message: "Crypto payment verified and confirmed successfully"
+            status: "succeeded",
+            message: "✅ Payment confirmed on blockchain! Your loan will be processed."
           };
         }
 
@@ -3913,7 +3916,8 @@ export const appRouter = router({
           verified: true, 
           confirmed: false,
           transactionHash: input.txHash,
-          message: verification.message || "Payment verified, waiting for blockchain confirmations"
+          status: "processing",
+          message: verification.message || "⏳ Transaction found on blockchain. Waiting for confirmations..."
         };
       }),
 
