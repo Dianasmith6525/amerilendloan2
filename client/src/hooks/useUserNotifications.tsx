@@ -13,7 +13,12 @@ export interface Notification {
 
 export function useUserNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [lastCheck, setLastCheck] = useState<Date>(new Date());
+  
+  // Initialize lastCheck from localStorage or use current time for first visit
+  const [lastCheck, setLastCheck] = useState<Date>(() => {
+    const stored = localStorage.getItem('notificationsLastCheck');
+    return stored ? new Date(stored) : new Date();
+  });
 
   // Fetch real data from tRPC queries
   const { data: loans } = trpc.loans.myApplications.useQuery(undefined, {
@@ -176,10 +181,12 @@ export function useUserNotifications() {
 
   }, [loans, supportTicketsData, paymentsData, lastCheck]);
 
-  // Update last check timestamp every 30 seconds
+  // Update last check timestamp every 30 seconds and persist to localStorage
   useEffect(() => {
     const interval = setInterval(() => {
-      setLastCheck(new Date());
+      const now = new Date();
+      setLastCheck(now);
+      localStorage.setItem('notificationsLastCheck', now.toISOString());
     }, 30000);
 
     return () => clearInterval(interval);
