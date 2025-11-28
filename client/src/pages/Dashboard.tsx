@@ -151,7 +151,7 @@ export default function Dashboard() {
     id: msg.id,
     sender: msg.isFromAdmin ? "Support Team" : (msg.userName || "You"),
     message: msg.message,
-    timestamp: new Date(msg.createdAt),
+    timestamp: msg.createdAt ? new Date(msg.createdAt) : new Date(),
     isAdmin: msg.isFromAdmin,
     attachmentUrl: msg.attachmentUrl,
   })) : [];
@@ -163,7 +163,7 @@ export default function Dashboard() {
   const payments = Array.isArray(paymentsData) ? paymentsData.map((p: any) => ({
     id: p.id,
     loanId: p.loanApplicationId,
-    date: new Date(p.createdAt),
+    date: p.createdAt ? new Date(p.createdAt) : new Date(),
     amount: p.amount / 100, // Convert cents to dollars
     status: p.status === "succeeded" ? "completed" : p.status,
     trackingNumber: p.loanTrackingNumber || `LN-${p.loanApplicationId}`,
@@ -189,10 +189,10 @@ export default function Dashboard() {
     }
 
     // Date range filter
-    if (dateFrom && new Date(loan.createdAt) < new Date(dateFrom)) {
+    if (dateFrom && loan.createdAt && new Date(loan.createdAt) < new Date(dateFrom)) {
       return false;
     }
-    if (dateTo && new Date(loan.createdAt) > new Date(dateTo)) {
+    if (dateTo && loan.createdAt && new Date(loan.createdAt) > new Date(dateTo)) {
       return false;
     }
 
@@ -212,8 +212,8 @@ export default function Dashboard() {
   const filteredPayments = payments.filter((payment) => {
     // Search term filter
     if (paymentSearchTerm && 
-        !payment.trackingNumber.toLowerCase().includes(paymentSearchTerm.toLowerCase()) &&
-        !payment.paymentMethod.toLowerCase().includes(paymentSearchTerm.toLowerCase())) {
+        !payment.trackingNumber?.toLowerCase().includes(paymentSearchTerm.toLowerCase()) &&
+        !payment.paymentMethod?.toLowerCase().includes(paymentSearchTerm.toLowerCase())) {
       return false;
     }
 
