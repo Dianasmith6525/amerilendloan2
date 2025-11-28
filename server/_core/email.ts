@@ -406,6 +406,58 @@ export async function sendLoanApplicationProcessingEmail(
 }
 
 /**
+ * Send loan application cancelled/withdrawn email
+ */
+export async function sendLoanApplicationCancelledEmail(
+  email: string,
+  fullName: string,
+  trackingNumber: string,
+  requestedAmount: number
+): Promise<void> {
+  const formattedAmount = formatCurrency(requestedAmount * 100);
+  const subject = "Application Withdrawn - AmeriLend";
+  const text = `Dear ${fullName},\n\nYour loan application (Tracking #${trackingNumber}) for $${formattedAmount} has been successfully withdrawn at your request.\n\nIf you decide to apply again in the future, we'll be happy to assist you. Simply visit our website and submit a new application.\n\nIf this withdrawal was made in error or you have any questions, please contact our support team immediately.\n\nBest regards,\nThe AmeriLend Team`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <h2 style="color: #0033A0; margin-top: 0;">Application Withdrawn</h2>
+          <p>Dear ${fullName},</p>
+          <p>This confirms that your loan application has been successfully withdrawn at your request.</p>
+          
+          <div style="background-color: white; border-left: 4px solid #6c757d; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Tracking Number:</strong> ${trackingNumber}</p>
+            <p style="margin: 10px 0 0 0;"><strong>Requested Amount:</strong> $${formattedAmount}</p>
+            <p style="margin: 10px 0 0 0;"><strong>Status:</strong> Cancelled</p>
+          </div>
+
+          <h3 style="color: #0033A0;">What This Means</h3>
+          <p>Your application has been removed from our system and will not be processed further. No fees will be charged, and this withdrawal will not affect your credit score.</p>
+
+          <h3 style="color: #0033A0;">Future Applications</h3>
+          <p>If you decide to apply again in the future, we'll be happy to assist you. Simply visit our website and submit a new application whenever you're ready.</p>
+
+          <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Important:</strong> If this withdrawal was made in error or you have any questions, please contact our support team immediately at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
+          </div>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
+}
+
+/**
  * Send login notification email
  */
 export async function sendLoginNotificationEmail(

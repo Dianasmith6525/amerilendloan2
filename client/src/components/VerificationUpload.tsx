@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
-import { Upload, FileText, CheckCircle2, XCircle, Clock, Loader2, Eye, Shield, AlertCircle } from "lucide-react";
+import { Upload, FileText, CheckCircle2, XCircle, Clock, Loader2, Eye, Shield, AlertCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -48,6 +48,7 @@ export default function VerificationUpload() {
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [viewDocument, setViewDocument] = useState<{ url: string; type: string } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: documents, isLoading } = trpc.verification.myDocuments.useQuery(undefined, {
@@ -67,10 +68,24 @@ export default function VerificationUpload() {
     },
   });
 
+  const deleteMutation = trpc.verification.deleteDocument.useMutation({
+    onSuccess: () => {
+      utils.verification.myDocuments.invalidate();
+      toast.success("Document deleted successfully");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to delete document");
+    },
+  });
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    processFile(file);
+  };
+
+  const processFile = (file: File) => {
     // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
       toast.error("File size must be less than 10MB");
@@ -95,6 +110,35 @@ export default function VerificationUpload() {
       reader.readAsDataURL(file);
     } else {
       setPreviewUrl(null);
+    }
+  };
+
+  // Drag and drop handlers
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      processFile(files[0]);
     }
   };
 
@@ -218,16 +262,47 @@ export default function VerificationUpload() {
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="fileUpload">Select File</Label>
-            <Input
-              id="fileUpload"
-              type="file"
-              accept="image/jpeg,image/png,image/jpg,application/pdf"
-              onChange={handleFileSelect}
-              disabled={!selectedType}
-            />
+          {/* Drag and Drop Zone */}
+          <div
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+              isDragging
+                ? "border-[#0033A0] bg-blue-50"
+                : selectedType
+                ? "border-gray-300 hover:border-gray-400 cursor-pointer"
+                : "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
+            }`}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => {
+              if (selectedType) {
+                document.getElementById("fileUpload")?.click();
+              }
+            }}
+          >
+            <Upload className={`w-12 h-12 mx-auto mb-4 ${isDragging ? "text-[#0033A0]" : "text-gray-400"}`} />
+            {isDragging ? (
+              <p className="text-[#0033A0] font-medium">Drop your file here</p>
+            ) : (
+              <>
+                <p className="text-gray-700 font-medium mb-1">
+                  {selectedType ? "Drag and drop your file here" : "Select a document type first"}
+                </p>
+                <p className="text-sm text-gray-500">or click to browse</p>
+                <p className="text-xs text-gray-400 mt-2">JPEG, PNG, PDF • Max 10MB</p>
+              </>
+            )}
           </div>
+
+          <Input
+            id="fileUpload"
+            type="file"
+            accept="image/jpeg,image/png,image/jpg,application/pdf"
+            onChange={handleFileSelect}
+            disabled={!selectedType}
+            className="hidden"
+          />
 
           {previewUrl && (
             <div className="border rounded-lg p-4">
@@ -298,34 +373,52 @@ export default function VerificationUpload() {
                 return (
                   <div
                     key={doc.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
+                    className="flex flex-col p-4 border rounded-lg hover:bg-gray-50"
                   >
-                    <div className="flex items-center gap-3 flex-1">
-                      <FileText className="w-5 h-5 text-gray-600" />
-                      <div className="flex-1">
-                        <p className="font-medium">{documentTypeLabels[doc.documentType]}</p>
-                        <p className="text-sm text-gray-500">{doc.fileName}</p>
-                        <p className="text-xs text-gray-400">
-                          Uploaded {new Date(doc.createdAt).toLocaleDateString()}
-                        </p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 flex-1">
+                        <FileText className="w-5 h-5 text-gray-600" />
+                        <div className="flex-1">
+                          <p className="font-medium">{documentTypeLabels[doc.documentType]}</p>
+                          <p className="text-sm text-gray-500">{doc.fileName}</p>
+                          <p className="text-xs text-gray-400">
+                            Uploaded {new Date(doc.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge className={`${statusColors[doc.status]} border`}>
-                        <StatusIcon
-                          className={`w-3 h-3 mr-1 ${
-                            doc.status === "under_review" ? "animate-spin" : ""
-                          }`}
-                        />
-                        {doc.status.replace("_", " ").toUpperCase()}
-                      </Badge>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => viewDocumentPreview(doc.filePath, doc.mimeType)}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Badge className={`${statusColors[doc.status]} border`}>
+                          <StatusIcon
+                            className={`w-3 h-3 mr-1 ${
+                              doc.status === "under_review" ? "animate-spin" : ""
+                            }`}
+                          />
+                          {doc.status.replace("_", " ").toUpperCase()}
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => viewDocumentPreview(doc.filePath, doc.mimeType)}
+                          title="View document"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        {(doc.status === "pending" || doc.status === "rejected") && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              if (confirm("Are you sure you want to delete this document?")) {
+                                deleteMutation.mutate({ id: doc.id });
+                              }
+                            }}
+                            disabled={deleteMutation.isPending}
+                            title="Delete document"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                     {doc.status === "rejected" && doc.rejectionReason && (
                       <div className="mt-2 text-sm text-red-600 bg-red-50 p-2 rounded">

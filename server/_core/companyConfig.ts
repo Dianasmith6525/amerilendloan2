@@ -64,46 +64,11 @@ export function getEmailFooter(): string {
         </p>
       </div>
       
-      <div style="margin: 25px 0; padding: 20px 0; border-top: 1px solid #ddd; border-bottom: 1px solid #ddd;">
-        <p style="margin: 10px 0 15px 0; font-weight: bold; font-size: 13px; color: #333;">📱 Connect With Us</p>
-        <div style="margin-top: 12px; display: flex; justify-content: center; gap: 60px; flex-wrap: wrap; align-items: center; max-width: 600px; margin-left: auto; margin-right: auto;">
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <a href="https://wa.me/${COMPANY_INFO.contact.whatsapp.replace(/\D/g, '')}" style="display: inline-block; text-decoration: none;" title="WhatsApp">
-              <img src="${COMPANY_INFO.images.whatsappIcon}" alt="WhatsApp" style="display: block; height: 40px; width: 40px; border: 0; border-radius: 5px; max-width: 100%;">
-            </a>
-            <span style="font-size: 11px; color: #666; font-weight: 500;">WhatsApp</span>
-          </div>
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <a href="https://t.me/${COMPANY_INFO.contact.telegram.replace('@', '')}" style="display: inline-block; text-decoration: none;" title="Telegram">
-              <img src="${COMPANY_INFO.images.telegramIcon}" alt="Telegram" style="display: block; height: 40px; width: 40px; border: 0; border-radius: 5px; max-width: 100%;">
-            </a>
-            <span style="font-size: 11px; color: #666; font-weight: 500;">Telegram</span>
-          </div>
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <a href="mailto:${COMPANY_INFO.contact.email}" style="display: inline-block; text-decoration: none;" title="Email Support">
-              <img src="${COMPANY_INFO.images.emailIcon}" alt="Support" style="display: block; height: 40px; width: 40px; border: 0; border-radius: 5px; max-width: 100%;">
-            </a>
-            <span style="font-size: 11px; color: #666; font-weight: 500;">Email</span>
-          </div>
+      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+        <div style="margin-bottom: 20px;">
+          <img src="${COMPANY_INFO.logo.url}" alt="${COMPANY_INFO.logo.alt}" style="height: 80px; max-width: 200px; object-fit: contain; display: block; margin: 0 auto;">
         </div>
-      </div>
-
-      <div style="margin: 25px 0; padding: 20px 0; border-top: 1px solid #ddd; border-bottom: 1px solid #ddd;">
-        <p style="margin: 10px 0 15px 0; font-weight: bold; font-size: 13px; color: #333;">✅ Trusted By Thousands</p>
-        <div style="margin-top: 12px; display: flex; justify-content: center; gap: 50px; flex-wrap: wrap; align-items: center; max-width: 800px; margin-left: auto; margin-right: auto;">
-          <div style="display: flex; justify-content: center; align-items: center; min-width: 120px;">
-            <img src="${COMPANY_INFO.images.trustpilotLogo}" alt="Trustpilot" style="display: block; height: 60px; max-width: 140px; width: auto; border: 0; object-fit: contain;">
-          </div>
-          <div style="display: flex; justify-content: center; align-items: center; min-width: 120px;">
-            <img src="${COMPANY_INFO.images.lendingTreeLogo}" alt="LendingTree" style="display: block; height: 60px; max-width: 140px; width: auto; border: 0; object-fit: contain;">
-          </div>
-          <div style="display: flex; justify-content: center; align-items: center; min-width: 120px;">
-            <img src="${COMPANY_INFO.images.bbbLogo}" alt="Better Business Bureau" style="display: block; height: 60px; max-width: 140px; width: auto; border: 0; object-fit: contain;">
-          </div>
-        </div>
-      </div>
-      
-      <div style="margin-top: 20px; padding-top: 15px;">
+        <p style="margin: 10px 0; color: #0033A0; font-size: 18px; font-weight: bold;">AmeriLend</p>
         <p style="margin: 6px 0; color: #999; font-size: 11px;">
           © ${new Date().getFullYear()} ${COMPANY_INFO.name}. All rights reserved.
         </p>

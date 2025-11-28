@@ -885,6 +885,14 @@ export async function updateVerificationDocumentStatus(
     .where(eq(verificationDocuments.id, id));
 }
 
+export async function deleteVerificationDocument(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return db.delete(verificationDocuments)
+    .where(eq(verificationDocuments.id, id));
+}
+
 // Admin user management functions
 export async function promoteUserToAdmin(userId: number): Promise<void> {
   const db = await getDb();

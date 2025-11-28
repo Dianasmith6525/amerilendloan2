@@ -4,6 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -25,10 +34,8 @@ import {
   Settings,
   ChevronDown,
   TrendingUp,
-  History,
   Bell,
   MessageSquare,
-  Send,
   Download,
   Calendar,
   Receipt,
@@ -40,6 +47,7 @@ import {
   Zap,
   Activity,
   Lock,
+  Paperclip,
 } from "lucide-react";
 import { Link } from "wouter";
 import VerificationUpload from "@/components/VerificationUpload";
@@ -96,9 +104,8 @@ export default function Dashboard() {
   });
   
   const [expandedLoan, setExpandedLoan] = useState<number | null>(null);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [newMessage, setNewMessage] = useState("");
-  const [showMessages, setShowMessages] = useState(false);
+  const [messageAttachment, setMessageAttachment] = useState<File | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<number | null>(null);
   const [showNewTicketForm, setShowNewTicketForm] = useState(false);
   const [newTicketSubject, setNewTicketSubject] = useState("");
@@ -119,6 +126,11 @@ export default function Dashboard() {
   const [showFilters, setShowFilters] = useState(false);
   const [paymentSearchTerm, setPaymentSearchTerm] = useState("");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
+  
+  // Withdrawal dialog state
+  const [withdrawalDialogOpen, setWithdrawalDialogOpen] = useState(false);
+  const [withdrawalLoanId, setWithdrawalLoanId] = useState<number | null>(null);
+  const [withdrawalReason, setWithdrawalReason] = useState("");
   
   // Fetch real support tickets for messages
   const { data: supportTicketsData, refetch: refetchTickets, isLoading: ticketsLoading } = trpc.supportTickets.getUserTickets.useQuery(undefined, {
@@ -141,6 +153,7 @@ export default function Dashboard() {
     message: msg.message,
     timestamp: new Date(msg.createdAt),
     isAdmin: msg.isFromAdmin,
+    attachmentUrl: msg.attachmentUrl,
   }));
   // Fetch real payment history
   const { data: paymentsData = [], isLoading: paymentsLoading } = trpc.payments.getHistory.useQuery(undefined, {
@@ -269,15 +282,58 @@ export default function Dashboard() {
       refetchMessages();
       toast.success("Message sent!");
       setNewMessage("");
+      setMessageAttachment(null);
     },
   });
   
-  const handleSendMessage = () => {
+  const withdrawalMutation = trpc.loans.withdraw.useMutation({
+    onSuccess: () => {
+      toast.success("Application withdrawn successfully");
+      setWithdrawalDialogOpen(false);
+      setWithdrawalLoanId(null);
+      setWithdrawalReason("");
+      // Refetch applications to update the list
+      window.location.reload();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to withdraw application");
+    },
+  });
+  
+  const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedTicket) return;
+    
+    let attachmentUrl: string | undefined = undefined;
+    
+    // Upload attachment if present
+    if (messageAttachment) {
+      try {
+        const formData = new FormData();
+        formData.append("file", messageAttachment);
+        
+        const uploadResponse = await fetch("/api/upload-document", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        
+        if (uploadResponse.ok) {
+          const uploadedFile = await uploadResponse.json();
+          attachmentUrl = uploadedFile.url;
+        } else {
+          toast.error("Failed to upload attachment");
+          return;
+        }
+      } catch (error) {
+        toast.error("Error uploading attachment");
+        return;
+      }
+    }
     
     addMessageMutation.mutate({
       ticketId: selectedTicket,
       message: newMessage,
+      attachmentUrl,
     });
   };
 
@@ -1092,9 +1148,45 @@ export default function Dashboard() {
                                       <Clock className="w-4 h-4" />
                                       Next Steps
                                     </h4>
-                                    <p className="text-sm text-yellow-800">
+                                    <p className="text-sm text-yellow-800 mb-3">
                                       Your application is under review. Our team will contact you within 24-48 hours. Make sure to check your email and upload any required verification documents.
                                     </p>
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => {
+                                        setWithdrawalLoanId(loan.id);
+                                        setWithdrawalDialogOpen(true);
+                                      }}
+                                      className="flex items-center gap-2"
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                      Withdraw Application
+                                    </Button>
+                                  </div>
+                                )}
+                                
+                                {loan.status === "under_review" && (
+                                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                                    <h4 className="font-bold text-blue-800 mb-2 flex items-center gap-2">
+                                      <Clock className="w-4 h-4" />
+                                      Under Review
+                                    </h4>
+                                    <p className="text-sm text-blue-800 mb-3">
+                                      Your application is currently being reviewed by our team. We'll notify you of the decision soon.
+                                    </p>
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => {
+                                        setWithdrawalLoanId(loan.id);
+                                        setWithdrawalDialogOpen(true);
+                                      }}
+                                      className="flex items-center gap-2"
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                      Withdraw Application
+                                    </Button>
                                   </div>
                                 )}
 
@@ -1551,7 +1643,7 @@ export default function Dashboard() {
                         {/* Message Thread */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-4">
                           {messages.length > 0 ? (
-                            messages.map((msg) => (
+                            messages.map((msg: any) => (
                               <div key={msg.id} className={`flex ${msg.isAdmin ? "justify-start" : "justify-end"}`}>
                                 <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
                                   msg.isAdmin 
@@ -1560,6 +1652,19 @@ export default function Dashboard() {
                                 }`}>
                                   <p className="font-semibold text-sm mb-1">{msg.sender}</p>
                                   <p className="text-sm break-words">{msg.message}</p>
+                                  {msg.attachmentUrl && (
+                                    <a
+                                      href={msg.attachmentUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={`flex items-center gap-1 mt-2 text-xs ${
+                                        msg.isAdmin ? "text-blue-600 hover:text-blue-800" : "text-blue-200 hover:text-white"
+                                      }`}
+                                    >
+                                      <Paperclip className="w-3 h-3" />
+                                      <span>View attachment</span>
+                                    </a>
+                                  )}
                                   <p className={`text-xs mt-1 ${msg.isAdmin ? "text-gray-500" : "text-blue-100"}`}>
                                     {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                   </p>
@@ -1575,14 +1680,56 @@ export default function Dashboard() {
                         </div>
 
                         {/* Message Input */}
-                        <div className="border-t border-gray-200 p-4 bg-gray-50">
+                        <div className="border-t border-gray-200 p-4 bg-gray-50 space-y-3">
+                          {/* File attachment preview */}
+                          {messageAttachment && (
+                            <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                              <FileText className="w-4 h-4 text-blue-600" />
+                              <span className="text-sm text-blue-900 flex-1 truncate">{messageAttachment.name}</span>
+                              <span className="text-xs text-blue-600">
+                                {(messageAttachment.size / 1024).toFixed(1)} KB
+                              </span>
+                              <button
+                                onClick={() => setMessageAttachment(null)}
+                                className="text-blue-600 hover:text-blue-800"
+                                title="Remove attachment"
+                                aria-label="Remove attachment"
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                          
                           <div className="flex gap-2">
+                            {/* File attachment button */}
+                            <label className="cursor-pointer" title="Attach file">
+                              <input
+                                type="file"
+                                accept="image/*,.pdf,.doc,.docx,.txt"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    if (file.size > 10 * 1024 * 1024) {
+                                      toast.error("File size must be less than 10MB");
+                                      return;
+                                    }
+                                    setMessageAttachment(file);
+                                  }
+                                }}
+                                className="hidden"
+                                aria-label="Attach file"
+                              />
+                              <div className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors">
+                                <Paperclip className="w-5 h-5 text-gray-600" />
+                              </div>
+                            </label>
+                            
                             <input
                               type="text"
                               placeholder="Type your message..."
                               value={newMessage}
                               onChange={(e) => setNewMessage(e.target.value)}
-                              onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+                              onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && handleSendMessage()}
                               className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0033A0]"
                             />
                             <button
@@ -1925,6 +2072,61 @@ export default function Dashboard() {
           </div>
         </div>
       </footer>
+
+      {/* Withdrawal Confirmation Dialog */}
+      <Dialog open={withdrawalDialogOpen} onOpenChange={setWithdrawalDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Withdraw Loan Application</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to withdraw this loan application? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="withdrawal-reason">Reason for withdrawal (optional)</Label>
+              <Textarea
+                id="withdrawal-reason"
+                placeholder="Let us know why you're withdrawing your application..."
+                value={withdrawalReason}
+                onChange={(e) => setWithdrawalReason(e.target.value)}
+                rows={4}
+              />
+            </div>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-sm text-yellow-800">
+                <strong>Note:</strong> Withdrawing your application will cancel it permanently. You can submit a new application at any time.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setWithdrawalDialogOpen(false);
+                setWithdrawalLoanId(null);
+                setWithdrawalReason("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (withdrawalLoanId) {
+                  withdrawalMutation.mutate({
+                    applicationId: withdrawalLoanId,
+                    reason: withdrawalReason || undefined,
+                  });
+                }
+              }}
+              disabled={withdrawalMutation.isPending}
+            >
+              {withdrawalMutation.isPending ? "Withdrawing..." : "Confirm Withdrawal"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* AI Support Widget - Only for authenticated users */}
       <AiSupportWidget isAuthenticated={true} />

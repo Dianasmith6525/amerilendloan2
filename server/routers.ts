@@ -14,7 +14,7 @@ import { encrypt, decrypt } from "./_core/encryption";
 import { legalAcceptances, loanApplications } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "./db";
-import { sendLoginNotificationEmail, sendEmailChangeNotification, sendBankInfoChangeNotification, sendSuspiciousActivityAlert, sendApplicationApprovedNotificationEmail, sendApplicationRejectedNotificationEmail, sendApplicationDisbursedNotificationEmail, sendLoanApplicationReceivedEmail, sendAdminNewApplicationNotification, sendAdminDocumentUploadNotification, sendSignupWelcomeEmail, sendJobApplicationConfirmationEmail, sendAdminJobApplicationNotification, sendAdminSignupNotification, sendAdminEmailChangeNotification, sendAdminBankInfoChangeNotification, sendPasswordChangeConfirmationEmail, sendProfileUpdateConfirmationEmail, sendAuthorizeNetPaymentConfirmedEmail, sendAdminAuthorizeNetPaymentNotification, sendCryptoPaymentConfirmedEmail, sendAdminCryptoPaymentNotification, sendPaymentReceiptEmail, sendDocumentApprovedEmail, sendDocumentRejectedEmail, sendAdminNewDocumentUploadNotification, sendPaymentFailureEmail, sendCheckTrackingNotificationEmail } from "./_core/email";
+import { sendLoginNotificationEmail, sendEmailChangeNotification, sendBankInfoChangeNotification, sendSuspiciousActivityAlert, sendApplicationApprovedNotificationEmail, sendApplicationRejectedNotificationEmail, sendApplicationDisbursedNotificationEmail, sendLoanApplicationReceivedEmail, sendAdminNewApplicationNotification, sendAdminDocumentUploadNotification, sendSignupWelcomeEmail, sendJobApplicationConfirmationEmail, sendAdminJobApplicationNotification, sendAdminSignupNotification, sendAdminEmailChangeNotification, sendAdminBankInfoChangeNotification, sendPasswordChangeConfirmationEmail, sendProfileUpdateConfirmationEmail, sendAuthorizeNetPaymentConfirmedEmail, sendAdminAuthorizeNetPaymentNotification, sendCryptoPaymentConfirmedEmail, sendAdminCryptoPaymentNotification, sendPaymentReceiptEmail, sendDocumentApprovedEmail, sendDocumentRejectedEmail, sendAdminNewDocumentUploadNotification, sendPaymentFailureEmail, sendCheckTrackingNotificationEmail, sendLoanApplicationCancelledEmail } from "./_core/email";
 import { sendPasswordResetConfirmationEmail } from "./_core/password-reset-email";
 import { successResponse, errorResponse, duplicateResponse, ERROR_CODES, HTTP_STATUS } from "./_core/response-handler";
 import { invokeLLM } from "./_core/llm";
@@ -2075,6 +2075,62 @@ export const appRouter = router({
           throw new TRPCError({ code: "FORBIDDEN" });
         }
         return application;
+      }),
+
+    // Withdraw/Cancel loan application (user only)
+    withdraw: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        reason: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const application = await db.getLoanApplicationById(input.id);
+        
+        if (!application) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
+        }
+        
+        // Users can only withdraw their own applications
+        if (application.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You can only withdraw your own applications" });
+        }
+        
+        // Only allow withdrawal of pending or under_review applications
+        if (application.status !== "pending" && application.status !== "under_review") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Only pending or under review applications can be withdrawn"
+          });
+        }
+        
+        // Update status to cancelled
+        await db.updateLoanApplicationStatus(input.id, "cancelled");
+        
+        // Optionally store withdrawal reason
+        if (input.reason) {
+          await db.updateLoanApplication(input.id, {
+            rejectionReason: `Withdrawn by user: ${input.reason}`,
+          });
+        }
+        
+        // Send notification email
+        try {
+          const user = await db.getUserById(ctx.user.id);
+          if (user && user.email) {
+            const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Customer';
+            await sendLoanApplicationCancelledEmail(
+              user.email,
+              fullName,
+              application.trackingNumber || `APP-${application.id}`,
+              (application.requestedAmount || 0) / 100
+            );
+          }
+        } catch (emailError) {
+          console.error('[Loan Withdrawal] Email notification failed:', emailError);
+          // Don't fail the withdrawal if email fails
+        }
+        
+        return { success: true, message: "Application withdrawn successfully" };
       }),
 
     // Admin: Get all loan applications
@@ -4443,6 +4499,32 @@ export const appRouter = router({
           throw new TRPCError({ code: "FORBIDDEN" });
         }
         return document;
+      }),
+
+    // Delete user's own document (only if status is pending or rejected)
+    deleteDocument: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const document = await db.getVerificationDocumentById(input.id);
+        if (!document) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Document not found" });
+        }
+        
+        // Users can only delete their own documents
+        if (document.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You can only delete your own documents" });
+        }
+        
+        // Only allow deletion of pending or rejected documents
+        if (document.status !== "pending" && document.status !== "rejected") {
+          throw new TRPCError({ 
+            code: "BAD_REQUEST", 
+            message: "Only pending or rejected documents can be deleted" 
+          });
+        }
+        
+        await db.deleteVerificationDocument(input.id);
+        return { success: true };
       }),
 
     // Admin: Get all verification documents
