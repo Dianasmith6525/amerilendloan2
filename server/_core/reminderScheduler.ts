@@ -105,7 +105,7 @@ async function checkUnpaidFees() {
                 user.email,
                 fullName,
                 appData.approvedAmount || appData.requestedAmount || 0,
-                appData.processingFee || 0,
+                appData.processingFeeAmount || 0,
                 app.trackingNumber || `APP-${app.id}`
               );
               if (result && result.success) {

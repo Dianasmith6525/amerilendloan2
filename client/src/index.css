@@ -189,4 +189,9 @@
   .logo-blend {
     mix-blend-mode: multiply;
   }
+
+  /* Logo filter for enhanced appearance */
+  .logo-enhanced {
+    filter: contrast(1.1) brightness(1.05);
+  }
 }

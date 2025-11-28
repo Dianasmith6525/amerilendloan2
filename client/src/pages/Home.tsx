@@ -132,8 +132,7 @@ export default function Home() {
                 <img
                   src="/logo.jpg"
                   alt="AmeriLend"
-                  className="h-24 sm:h-28 md:h-32 w-auto object-contain"
-                  style={{ filter: 'contrast(1.1) brightness(1.05)' }}
+                  className="h-24 sm:h-28 md:h-32 w-auto object-contain logo-enhanced"
                 />
               </a>
             </Link>
