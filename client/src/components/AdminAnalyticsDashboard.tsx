@@ -213,6 +213,18 @@ export default function AdminAnalyticsDashboard() {
           <div className="space-y-3">
             {applicationsByStatus.map((item) => {
               const percentage = (item.count / metrics.totalApplications) * 100;
+              
+              // Map status colors to actual Tailwind classes
+              const colorClasses: Record<string, string> = {
+                amber: 'bg-amber-500',
+                green: 'bg-green-500',
+                blue: 'bg-blue-500',
+                red: 'bg-red-500',
+                gray: 'bg-gray-500',
+              };
+              
+              const barColor = colorClasses[item.color] || colorClasses.gray;
+              
               return (
                 <div key={item.status}>
                   <div className="flex items-center justify-between mb-1">
@@ -221,11 +233,8 @@ export default function AdminAnalyticsDashboard() {
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2.5">
                     <div
-                      className={`h-2.5 rounded-full bg-${item.color}-500`}
-                      style={{ 
-                        width: `${percentage}%`,
-                        backgroundColor: getStatusColor(item.color)
-                      }}
+                      className={`h-2.5 rounded-full ${barColor}`}
+                      style={{ width: `${percentage}%` }}
                     />
                   </div>
                 </div>
@@ -246,18 +255,30 @@ export default function AdminAnalyticsDashboard() {
             {applicationsByStatus.map((status) => {
               const total = applicationsByStatus.reduce((sum, s) => sum + s.count, 0);
               const percentage = total > 0 ? ((status.count / total) * 100).toFixed(1) : 0;
+              
+              // Map status colors to actual Tailwind classes
+              const colorClasses: Record<string, { dot: string; bar: string }> = {
+                amber: { dot: 'bg-amber-500', bar: 'bg-amber-500' },
+                green: { dot: 'bg-green-500', bar: 'bg-green-500' },
+                blue: { dot: 'bg-blue-500', bar: 'bg-blue-500' },
+                red: { dot: 'bg-red-500', bar: 'bg-red-500' },
+                gray: { dot: 'bg-gray-500', bar: 'bg-gray-500' },
+              };
+              
+              const colors = colorClasses[status.color] || colorClasses.gray;
+              
               return (
                 <div key={status.status} className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full bg-${status.color}-500`} />
+                      <div className={`w-3 h-3 rounded-full ${colors.dot}`} />
                       <span className="text-sm font-medium">{status.status}</span>
                     </div>
                     <span className="text-sm text-gray-600">{status.count} ({percentage}%)</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
-                      className={`h-2 rounded-full bg-${status.color}-500`}
+                      className={`h-2 rounded-full ${colors.bar}`}
                       style={{ width: `${percentage}%` }}
                     />
                   </div>

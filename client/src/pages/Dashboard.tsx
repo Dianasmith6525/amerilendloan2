@@ -1,7 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +36,10 @@ import {
   X,
   Search,
   Filter,
+  Home,
+  Zap,
+  Activity,
+  Lock,
 } from "lucide-react";
 import { Link } from "wouter";
 import VerificationUpload from "@/components/VerificationUpload";
@@ -104,6 +107,7 @@ export default function Dashboard() {
   
   // Mobile responsive state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("applications");
   
   // Search and filter state
   const [searchTerm, setSearchTerm] = useState("");
@@ -414,240 +418,339 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white border-b shadow-sm">
-        <div className="container mx-auto px-4 py-2 sm:py-2.5 md:py-3">
-          <div className="flex items-center justify-between">
-            {/* Mobile Menu Button */}
-            <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg hover:bg-gray-100"
-              aria-label="Menu"
-            >
-              {isMobileMenuOpen ? (
-                <X className="w-6 h-6 text-gray-700" />
-              ) : (
-                <Menu className="w-6 h-6 text-gray-700" />
-              )}
-            </button>
-
+    <div className="min-h-screen flex flex-col md:flex-row bg-gray-50">
+      {/* Left Sidebar Navigation */}
+      <aside className={`${
+        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+      } md:translate-x-0 fixed md:sticky top-0 left-0 z-40 w-64 h-screen bg-white border-r shadow-lg transition-transform duration-300 ease-in-out`}>
+        <div className="flex flex-col h-full">
+          {/* Logo */}
+          <div className="p-6 border-b">
             <Link href="/">
-              <a className="flex items-center flex-shrink-0">
+              <a className="flex items-center">
                 <img
                   src="/logo.jpg"
                   alt="AmeriLend"
-                  className="h-16 sm:h-20 md:h-24 w-auto object-contain brightness-105 contrast-110"
+                  className="h-16 w-auto object-contain"
                 />
               </a>
             </Link>
-
-            <div className="flex items-center gap-2 md:gap-3">
-              {/* Notification Bell */}
-              <UserNotificationBell />
-
-              {/* Phone Number */}
-              <a
-                href="tel:+19452121609"
-                className="hidden lg:flex items-center gap-2 text-gray-700 hover:text-[#0033A0]"
-              >
-                <Phone className="w-4 h-4" />
-                <span className="text-sm">+1 945 212-1609</span>
-              </a>
-              
-              {/* Profile Dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowProfileMenu(!showProfileMenu)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-700"
-                >
-                  <User className="w-4 h-4" />
-                  <span className="text-sm font-medium hidden sm:inline">{user?.name?.split(" ")[0] || "Account"}</span>
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-                
-                {showProfileMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                    <Link href="/profile">
-                      <a className="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b">
-                        <User className="w-4 h-4 inline mr-2" />
-                        My Profile
-                      </a>
-                    </Link>
-                    <Link href="/settings">
-                      <a className="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b">
-                        <Settings className="w-4 h-4 inline mr-2" />
-                        Settings & Security
-                      </a>
-                    </Link>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full text-left px-4 py-3 text-sm text-red-700 hover:bg-red-50"
-                    >
-                      <LogOut className="w-4 h-4 inline mr-2" />
-                      Log Out
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
-        </div>
-      </header>
 
-      {/* Mobile Menu Overlay */}
-      {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-          <div className="absolute top-0 left-0 bottom-0 w-64 bg-white shadow-xl">
-            <div className="p-6 border-b">
-              <h2 className="text-xl font-bold text-[#0033A0]">Menu</h2>
+          {/* Navigation Menu */}
+          <nav className="flex-1 overflow-y-auto py-4 px-3">
+            <div className="space-y-1">
+              <button
+                onClick={() => {
+                  setActiveTab("applications");
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  activeTab === "applications"
+                    ? "bg-blue-50 text-[#0033A0] font-semibold"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                <FileText className="w-5 h-5" />
+                <span>My Applications</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab("quick-apply");
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  activeTab === "quick-apply"
+                    ? "bg-blue-50 text-[#0033A0] font-semibold"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                <Zap className="w-5 h-5" />
+                <span>Quick Apply</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab("verification");
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  activeTab === "verification"
+                    ? "bg-blue-50 text-[#0033A0] font-semibold"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                <Shield className="w-5 h-5" />
+                <span>Verification</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab("messages");
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  activeTab === "messages"
+                    ? "bg-blue-50 text-[#0033A0] font-semibold"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                <MessageSquare className="w-5 h-5" />
+                <span>Messages</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab("payments");
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  activeTab === "payments"
+                    ? "bg-blue-50 text-[#0033A0] font-semibold"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                <CreditCard className="w-5 h-5" />
+                <span>Payments</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab("auto-pay");
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  activeTab === "auto-pay"
+                    ? "bg-blue-50 text-[#0033A0] font-semibold"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                <Calendar className="w-5 h-5" />
+                <span>Auto-Pay</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab("timeline");
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  activeTab === "timeline"
+                    ? "bg-blue-50 text-[#0033A0] font-semibold"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                <Activity className="w-5 h-5" />
+                <span>Activity</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab("notifications");
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  activeTab === "notifications"
+                    ? "bg-blue-50 text-[#0033A0] font-semibold"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                <Bell className="w-5 h-5" />
+                <span>Notifications</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab("documents");
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  activeTab === "documents"
+                    ? "bg-blue-50 text-[#0033A0] font-semibold"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                <Download className="w-5 h-5" />
+                <span>Documents</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab("security");
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  activeTab === "security"
+                    ? "bg-blue-50 text-[#0033A0] font-semibold"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                <Lock className="w-5 h-5" />
+                <span>Security</span>
+              </button>
             </div>
-            <nav className="p-4">
-              <Link href="/dashboard#applications">
-                <a
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-700"
-                >
-                  <FileText className="w-5 h-5" />
-                  <span>Applications</span>
-                </a>
-              </Link>
-              <Link href="/dashboard#payments">
-                <a
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-700"
-                >
-                  <CreditCard className="w-5 h-5" />
-                  <span>Payments</span>
-                </a>
-              </Link>
-              <Link href="/dashboard#messages">
-                <a
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-700"
-                >
-                  <MessageSquare className="w-5 h-5" />
-                  <span>Messages</span>
-                </a>
-              </Link>
-              <Link href="/dashboard#documents">
-                <a
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-700"
-                >
-                  <FileText className="w-5 h-5" />
-                  <span>Documents</span>
-                </a>
-              </Link>
+
+            <div className="mt-6 pt-6 border-t">
               <Link href="/settings">
-                <a
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-700"
-                >
+                <a className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-100">
                   <Settings className="w-5 h-5" />
                   <span>Settings</span>
                 </a>
               </Link>
               <Link href="/profile">
-                <a
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-700"
-                >
+                <a className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-100">
                   <User className="w-5 h-5" />
                   <span>Profile</span>
                 </a>
               </Link>
-              <div className="border-t mt-4 pt-4">
-                <a
-                  href="tel:+19452121609"
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-700"
-                >
-                  <Phone className="w-5 h-5" />
-                  <span>+1 945 212-1609</span>
-                </a>
-                <button
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    handleLogout();
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-red-50 text-red-700 mt-2"
-                >
-                  <LogOut className="w-5 h-5" />
-                  <span>Log Out</span>
-                </button>
-              </div>
-            </nav>
-          </div>
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-700 hover:bg-red-50"
+              >
+                <LogOut className="w-5 h-5" />
+                <span>Log Out</span>
+              </button>
+            </div>
+          </nav>
         </div>
+      </aside>
+
+      {/* Mobile Overlay */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
       )}
 
-      {/* Welcome Banner */}
-      <div className="bg-[#0033A0] text-white py-8">
-        <div className="container mx-auto px-4">
-          <h1 className="text-3xl font-bold mb-2">Welcome back, {user?.firstName || user?.name || "there"}!</h1>
-          <p className="text-white/90">
-            Manage your loan applications and track your progress.
-          </p>
-        </div>
-      </div>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-h-screen">
+        {/* Top Header */}
+        <header className="sticky top-0 z-20 bg-white border-b shadow-sm">
+          <div className="px-4 py-3 md:px-6">
+            <div className="flex items-center justify-between">
+              {/* Mobile Menu Button */}
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="md:hidden p-2 rounded-lg hover:bg-gray-100"
+                aria-label="Menu"
+              >
+                <Menu className="w-6 h-6 text-gray-700" />
+              </button>
 
-      {/* Main Content */}
-      <div className="flex-1 py-12">
-        <div className="container mx-auto px-4 max-w-6xl">
+              <div className="flex-1 md:flex-none">
+                <h1 className="text-xl md:text-2xl font-bold text-[#0033A0]">
+                  Welcome, {user?.firstName || user?.name || "there"}!
+                </h1>
+              </div>
+
+              <div className="flex items-center gap-2 md:gap-4">
+                {/* Notification Bell */}
+                <UserNotificationBell />
+
+                {/* Phone Number */}
+                <a
+                  href="tel:+19452121609"
+                  className="hidden lg:flex items-center gap-2 text-gray-700 hover:text-[#0033A0]"
+                >
+                  <Phone className="w-4 h-4" />
+                  <span className="text-sm">+1 945 212-1609</span>
+                </a>
+                
+                {/* Profile Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowProfileMenu(!showProfileMenu)}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-700"
+                  >
+                    <User className="w-4 h-4" />
+                    <span className="text-sm font-medium hidden sm:inline">{user?.name?.split(" ")[0] || "Account"}</span>
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                  
+                  {showProfileMenu && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                      <Link href="/profile">
+                        <a className="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b">
+                          <User className="w-4 h-4 inline mr-2" />
+                          My Profile
+                        </a>
+                      </Link>
+                      <Link href="/settings">
+                        <a className="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b">
+                          <Settings className="w-4 h-4 inline mr-2" />
+                          Settings
+                        </a>
+                      </Link>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left px-4 py-3 text-sm text-red-700 hover:bg-red-50"
+                      >
+                        <LogOut className="w-4 h-4 inline mr-2" />
+                        Log Out
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto bg-gray-50">
+          <div className="max-w-7xl mx-auto">
           {/* Analytics Dashboard */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="p-4 sm:p-6">
+              <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-xs sm:text-sm text-gray-600 mb-1">Total Applications</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-[#0033A0]">{stats.total}</p>
+                    <p className="text-sm text-gray-600 mb-1">Total Applications</p>
+                    <p className="text-3xl font-bold text-[#0033A0]">{stats.total}</p>
                   </div>
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                    <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+                  <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-6 h-6 text-blue-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="p-4 sm:p-6">
+              <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-xs sm:text-sm text-gray-600 mb-1">Approved</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-green-600">{stats.approved}</p>
+                    <p className="text-sm text-gray-600 mb-1">Approved</p>
+                    <p className="text-3xl font-bold text-green-600">{stats.approved}</p>
                   </div>
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                    <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
+                  <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                    <CheckCircle2 className="w-6 h-6 text-green-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="p-4 sm:p-6">
+              <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-xs sm:text-sm text-gray-600 mb-1">Pending Review</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-yellow-600">{stats.pending}</p>
+                    <p className="text-sm text-gray-600 mb-1">Pending Review</p>
+                    <p className="text-3xl font-bold text-yellow-600">{stats.pending}</p>
                   </div>
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
-                    <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600" />
+                  <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
+                    <Clock className="w-6 h-6 text-yellow-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="p-4 sm:p-6">
+              <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-xs sm:text-sm text-gray-600 mb-1">Total Funded</p>
-                    <p className="text-xl sm:text-3xl font-bold text-green-600">
+                    <p className="text-sm text-gray-600 mb-1">Total Funded</p>
+                    <p className="text-2xl font-bold text-green-600">
                       {new Intl.NumberFormat("en-US", {
                         style: "currency",
                         currency: "USD",
@@ -655,94 +758,16 @@ export default function Dashboard() {
                       }).format((stats.totalFunded || 0) / 100)}
                     </p>
                   </div>
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                    <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
-            <Card className="border-l-4 border-l-orange-500 hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
-                    <FileText className="w-6 h-6 text-orange-600" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-bold text-[#0033A0] mb-1">New Application</h3>
-                    <p className="text-sm text-gray-600 mb-3">
-                      Start a new loan application
-                    </p>
-                    <Link href="/apply">
-                      <Button className="bg-[#FFA500] hover:bg-[#FF8C00] text-white w-full">
-                        Apply Now
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                    <Phone className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-bold text-[#0033A0] mb-1">Contact Support</h3>
-                    <p className="text-sm text-gray-600 mb-3">
-                      Speak with a Loan Advocate
-                    </p>
-                    <Button
-                      variant="outline"
-                      className="border-[#0033A0] text-[#0033A0] w-full"
-                      asChild
-                    >
-                      <a href="tel:+19452121609">Call Now</a>
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-green-500 hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                    <History className="w-6 h-6 text-green-600" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-bold text-[#0033A0] mb-1">Application History</h3>
-                    <p className="text-sm text-gray-600 mb-3">
-                      View all past applications
-                    </p>
-                    <Link href="#applications">
-                      <Button variant="outline" className="border-green-500 text-green-600 w-full">
-                        View History
-                      </Button>
-                    </Link>
+                    <TrendingUp className="w-6 h-6 text-green-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
-          <Tabs defaultValue="applications" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 md:grid-cols-9 lg:grid-cols-10">
-            <TabsTrigger value="applications">Applications</TabsTrigger>
-            <TabsTrigger value="quick-apply">Quick Apply</TabsTrigger>
-            <TabsTrigger value="verification">Verification</TabsTrigger>
-            <TabsTrigger value="messages">Messages</TabsTrigger>
-            <TabsTrigger value="payments">Payments</TabsTrigger>
-            <TabsTrigger value="auto-pay">Auto-Pay</TabsTrigger>
-            <TabsTrigger value="timeline">Activity</TabsTrigger>
-            <TabsTrigger value="notifications">Notifications</TabsTrigger>
-            <TabsTrigger value="documents">Documents</TabsTrigger>
-            <TabsTrigger value="security">Security</TabsTrigger>
-          </TabsList>            <TabsContent value="applications" id="applications">
+
+          {/* Tab Content Based on activeTab */}
+          {activeTab === "applications" && (
               <Card>
                 <CardHeader>
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -927,7 +952,7 @@ export default function Dashboard() {
                                       expandedLoan === loan.id ? "rotate-180" : ""
                                     }`}
                                   />
-                                  {loan.status === "approved" && (
+                                  {(loan.status === "approved" || loan.status === "fee_pending") && (
                                     <>
                                       <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800 mb-2 hidden md:block">
                                         <p className="font-semibold">Congratulations!</p>
@@ -1233,10 +1258,10 @@ export default function Dashboard() {
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
+            )}
 
             {/* Quick Apply Tab - NEW FEATURE */}
-            <TabsContent value="quick-apply">
+            {activeTab === "quick-apply" && (
               <div className="space-y-6">
                 <QuickApply 
                   existingUserData={{
@@ -1246,9 +1271,9 @@ export default function Dashboard() {
                   }}
                 />
               </div>
-            </TabsContent>
+            )}
 
-            <TabsContent value="verification">
+            {activeTab === "verification" && (
               <div className="space-y-6">
                 {/* Document Progress Tracker - NEW FEATURE */}
                 <DocumentProgressTracker />
@@ -1256,9 +1281,9 @@ export default function Dashboard() {
                 {/* Original Verification Upload */}
                 <VerificationUpload />
               </div>
-            </TabsContent>
+            )}
 
-            <TabsContent value="activity">
+            {activeTab === "timeline" && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-2xl text-[#0033A0]">Activity Timeline</CardTitle>
@@ -1291,15 +1316,15 @@ export default function Dashboard() {
                   </div>
                 </CardContent>
               </Card>
-            </TabsContent>
+            )}
 
             {/* Notifications Tab - ENHANCED */}
-            <TabsContent value="notifications">
+            {activeTab === "notifications" && (
               <NotificationCenter />
-            </TabsContent>
+            )}
 
             {/* Documents Tab - ENHANCED */}
-            <TabsContent value="documents">
+            {activeTab === "documents" && (
               <div className="space-y-6">
                 {/* Document Download Component for each loan - NEW FEATURE */}
                 {loans && loans.length > 0 && loans.map((loan) => (
@@ -1367,9 +1392,9 @@ export default function Dashboard() {
                   </CardContent>
                 </Card>
               </div>
-            </TabsContent>
+            )}
 
-            <TabsContent value="messages">
+            {activeTab === "messages" && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-2xl text-[#0033A0]">Messages</CardTitle>
@@ -1426,37 +1451,37 @@ export default function Dashboard() {
                   </div>
                 </CardContent>
               </Card>
-            </TabsContent>
+            )}
 
-            <TabsContent value="payments">
-              {/* Payment Method Management */}
-              <PaymentMethodManager />
-              
-              {/* Payment Analytics Charts - Visual Insights */}
-              <div className="mt-6">
-                <PaymentAnalyticsCharts payments={payments || []} />
+            {activeTab === "payments" && (
+              <div className="space-y-6">
+                {/* Payment Method Management */}
+                <PaymentMethodManager />
+                
+                {/* Payment Analytics Charts - Visual Insights */}
+                <div className="mt-6">
+                  <PaymentAnalyticsCharts payments={payments || []} />
+                </div>
+                
+                {/* Payment History & Analytics - Detailed Table */}
+                <div className="mt-6">
+                  <PaymentHistoryAnalytics />
+                </div>
               </div>
-              
-              {/* Payment History & Analytics - Detailed Table */}
-              <div className="mt-6">
-                <PaymentHistoryAnalytics />
-              </div>
-            </TabsContent>
+            )}
 
             {/* Auto-Pay Settings Tab - NEW FEATURE #4 */}
-            <TabsContent value="auto-pay">
+            {activeTab === "auto-pay" && (
               <AutoPaySettings loans={loans} />
-            </TabsContent>
+            )}
 
             {/* Security & 2FA Tab - NEW FEATURE #2 */}
-            <TabsContent value="security">
+            {activeTab === "security" && (
               <TwoFactorAuth />
-            </TabsContent>
+            )}
 
-          </Tabs>
-
-          {/* Payment Schedule Section */}
-          <Card className="mt-6">
+            {/* Payment Schedule Section */}
+            <Card className="mt-6">
             <CardHeader>
               <CardTitle className="text-2xl text-[#0033A0]">Payment Schedule</CardTitle>
               <CardDescription>View your upcoming loan repayment schedule</CardDescription>
@@ -1713,7 +1738,8 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-        </div>
+          </div>
+        </main>
       </div>
 
       {/* Footer */}
