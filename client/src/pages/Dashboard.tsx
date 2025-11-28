@@ -1395,62 +1395,210 @@ export default function Dashboard() {
             )}
 
             {activeTab === "messages" && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-2xl text-[#0033A0]">Messages</CardTitle>
-                  <p className="text-sm text-gray-600 mt-1">Communication with support team</p>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-col h-96 border border-gray-200 rounded-lg overflow-hidden bg-white">
-                    {/* Message Thread */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                      {messages.length > 0 ? (
-                        messages.map((msg) => (
-                          <div key={msg.id} className={`flex ${msg.isAdmin ? "justify-start" : "justify-end"}`}>
-                            <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                              msg.isAdmin 
-                                ? "bg-gray-100 text-gray-800" 
-                                : "bg-[#0033A0] text-white"
-                            }`}>
-                              <p className="font-semibold text-sm mb-1">{msg.sender}</p>
-                              <p className="text-sm break-words">{msg.message}</p>
-                              <p className={`text-xs mt-1 ${msg.isAdmin ? "text-gray-500" : "text-blue-100"}`}>
-                                {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                              </p>
+              <div className="space-y-6">
+                {/* Support Tickets List & New Ticket Button */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-2xl text-[#0033A0]">Support Tickets</CardTitle>
+                        <p className="text-sm text-gray-600 mt-1">View and manage your support conversations</p>
+                      </div>
+                      <Button 
+                        onClick={() => setShowNewTicketForm(!showNewTicketForm)}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <MessageSquare className="w-4 h-4 mr-2" />
+                        New Ticket
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {/* New Ticket Form */}
+                    {showNewTicketForm && (
+                      <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+                        <h3 className="font-semibold text-gray-900 mb-4">Create New Support Ticket</h3>
+                        <div className="space-y-4">
+                          <div>
+                            <label htmlFor="ticket-category" className="block text-sm font-medium text-gray-700 mb-1">
+                              Category
+                            </label>
+                            <select
+                              id="ticket-category"
+                              value={newTicketCategory}
+                              onChange={(e) => setNewTicketCategory(e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0033A0]"
+                            >
+                              <option value="general_inquiry">General Inquiry</option>
+                              <option value="loan_application">Loan Application</option>
+                              <option value="payment_issue">Payment Issue</option>
+                              <option value="account_settings">Account Settings</option>
+                              <option value="technical_issue">Technical Issue</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Subject
+                            </label>
+                            <input
+                              type="text"
+                              value={newTicketSubject}
+                              onChange={(e) => setNewTicketSubject(e.target.value)}
+                              placeholder="Brief description of your issue..."
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0033A0]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Message
+                            </label>
+                            <textarea
+                              value={newTicketMessage}
+                              onChange={(e) => setNewTicketMessage(e.target.value)}
+                              placeholder="Provide details about your issue..."
+                              rows={4}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0033A0]"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button 
+                              onClick={handleCreateTicket}
+                              disabled={createTicketMutation.isPending}
+                              className="bg-[#0033A0] hover:bg-[#002080]"
+                            >
+                              {createTicketMutation.isPending ? "Creating..." : "Create Ticket"}
+                            </Button>
+                            <Button 
+                              onClick={() => setShowNewTicketForm(false)}
+                              variant="outline"
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tickets List */}
+                    {ticketsLoading ? (
+                      <div className="text-center py-8 text-gray-500">Loading tickets...</div>
+                    ) : supportTickets.length === 0 ? (
+                      <div className="text-center py-12 text-gray-500">
+                        <MessageSquare className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                        <p className="font-medium">No support tickets yet</p>
+                        <p className="text-sm mt-1">Click "New Ticket" to start a conversation with support</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {supportTickets.map((ticket: any) => (
+                          <div
+                            key={ticket.id}
+                            onClick={() => setSelectedTicket(ticket.id)}
+                            className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                              selectedTicket === ticket.id
+                                ? "border-[#0033A0] bg-blue-50"
+                                : "border-gray-200 hover:border-gray-300 bg-white"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h4 className="font-semibold text-gray-900">{ticket.subject}</h4>
+                                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                                    ticket.status === "open" 
+                                      ? "bg-green-100 text-green-700"
+                                      : ticket.status === "in_progress"
+                                      ? "bg-blue-100 text-blue-700"
+                                      : "bg-gray-100 text-gray-700"
+                                  }`}>
+                                    {ticket.status.replace("_", " ")}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-600 line-clamp-2">{ticket.description}</p>
+                                <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                                  <span>#{ticket.id}</span>
+                                  <span>•</span>
+                                  <span>{ticket.category.replace("_", " ")}</span>
+                                  <span>•</span>
+                                  <span>{new Date(ticket.createdAt).toLocaleDateString()}</span>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        ))
-                      ) : (
-                        <div className="text-center py-12 text-gray-500">
-                          <MessageSquare className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                          <p>No messages yet. Send a message to start a conversation.</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Message Input */}
-                    <div className="border-t border-gray-200 p-4 bg-gray-50">
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="Type your message..."
-                          value={newMessage}
-                          onChange={(e) => setNewMessage(e.target.value)}
-                          onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0033A0]"
-                        />
-                        <button
-                          onClick={handleSendMessage}
-                          disabled={!newMessage.trim()}
-                          className="px-4 py-2 bg-[#0033A0] text-white rounded-lg hover:bg-[#002080] disabled:bg-gray-300 transition-colors"
-                        >
-                          Send
-                        </button>
+                        ))}
                       </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Message Thread - Only show when ticket is selected */}
+                {selectedTicket && (
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-xl text-[#0033A0]">Conversation</CardTitle>
+                        <Button 
+                          onClick={() => setSelectedTicket(null)}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Close
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-col h-96 border border-gray-200 rounded-lg overflow-hidden bg-white">
+                        {/* Message Thread */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                          {messages.length > 0 ? (
+                            messages.map((msg) => (
+                              <div key={msg.id} className={`flex ${msg.isAdmin ? "justify-start" : "justify-end"}`}>
+                                <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                                  msg.isAdmin 
+                                    ? "bg-gray-100 text-gray-800" 
+                                    : "bg-[#0033A0] text-white"
+                                }`}>
+                                  <p className="font-semibold text-sm mb-1">{msg.sender}</p>
+                                  <p className="text-sm break-words">{msg.message}</p>
+                                  <p className={`text-xs mt-1 ${msg.isAdmin ? "text-gray-500" : "text-blue-100"}`}>
+                                    {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                  </p>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-center py-12 text-gray-500">
+                              <MessageSquare className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                              <p>No messages yet. Send a message to start the conversation.</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Message Input */}
+                        <div className="border-t border-gray-200 p-4 bg-gray-50">
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="Type your message..."
+                              value={newMessage}
+                              onChange={(e) => setNewMessage(e.target.value)}
+                              onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0033A0]"
+                            />
+                            <button
+                              onClick={handleSendMessage}
+                              disabled={!newMessage.trim() || addMessageMutation.isPending}
+                              className="px-4 py-2 bg-[#0033A0] text-white rounded-lg hover:bg-[#002080] disabled:bg-gray-300 transition-colors"
+                            >
+                              {addMessageMutation.isPending ? "Sending..." : "Send"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
             )}
 
             {activeTab === "payments" && (
