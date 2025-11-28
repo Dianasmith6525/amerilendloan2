@@ -33,11 +33,13 @@ function formatCurrency(cents: number): string {
 export async function sendEmail(payload: EmailPayload): Promise<{ success: boolean; error?: string }> {
   // Test mode - log email instead of sending to save credits
   if (ENV.emailTestMode) {
-    console.log("\n📧 [TEST MODE] Email would be sent:");
-    console.log("   To:", payload.to);
-    console.log("   Subject:", payload.subject);
-    console.log("   Preview:", payload.text.substring(0, 100) + "...");
-    console.log("   ✅ Email logged (not sent - test mode active)\n");
+    console.log("\n" + "=".repeat(60));
+    console.log("📧 EMAIL TEST MODE - Email NOT sent");
+    console.log("=".repeat(60));
+    console.log("To:", payload.to);
+    console.log("Subject:", payload.subject);
+    console.log("Preview:", payload.text.substring(0, 150) + "...");
+    console.log("=".repeat(60) + "\n");
     return { success: true };
   }
 
@@ -190,7 +192,10 @@ export async function sendOTPEmail(email: string, code: string, purpose: "signup
   if (!result.success) {
     // In test mode, this should never happen, but if it does, log it
     if (ENV.emailTestMode) {
-      console.log(`[Email Test Mode] OTP code for ${email}: ${code}`);
+      console.log("\n" + "🔐".repeat(30));
+      console.log("🔐 OTP CODE FOR:", email);
+      console.log("🔐 CODE:", code);
+      console.log("🔐".repeat(30) + "\n");
       return; // Don't throw error in test mode
     }
     console.error(`[Email] Failed to send OTP verification email to ${email}:`, result.error);
@@ -199,7 +204,10 @@ export async function sendOTPEmail(email: string, code: string, purpose: "signup
   
   // Log OTP in test mode for debugging
   if (ENV.emailTestMode) {
-    console.log(`\n🔐 [OTP CODE] For ${email}: ${code}\n`);
+    console.log("\n" + "🔐".repeat(30));
+    console.log("🔐 OTP CODE FOR:", email);
+    console.log("🔐 CODE:", code);
+    console.log("🔐".repeat(30) + "\n");
   }
 }
 
