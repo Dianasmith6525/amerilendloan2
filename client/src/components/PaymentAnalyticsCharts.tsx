@@ -19,7 +19,10 @@ export function PaymentAnalyticsCharts({ payments }: PaymentAnalyticsChartsProps
     const monthlyData: Record<string, number> = {};
     
     payments.forEach(payment => {
-      const date = new Date(payment.createdAt);
+      if (!payment.createdAt) return;
+      const date = payment.createdAt instanceof Date ? payment.createdAt : new Date(payment.createdAt);
+      if (isNaN(date.getTime())) return; // Skip invalid dates
+      
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const monthName = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
       
@@ -27,7 +30,7 @@ export function PaymentAnalyticsCharts({ payments }: PaymentAnalyticsChartsProps
         monthlyData[monthName] = 0;
       }
       
-      if (payment.status === 'completed') {
+      if (payment.status === 'completed' && payment.amount) {
         monthlyData[monthName] += payment.amount / 100; // Convert cents to dollars
       }
     });
@@ -63,7 +66,7 @@ export function PaymentAnalyticsCharts({ payments }: PaymentAnalyticsChartsProps
         methodData[method] = { count: 0, amount: 0 };
       }
       methodData[method].count++;
-      if (payment.status === 'completed') {
+      if (payment.status === 'completed' && payment.amount) {
         methodData[method].amount += payment.amount / 100;
       }
     });
@@ -77,7 +80,7 @@ export function PaymentAnalyticsCharts({ payments }: PaymentAnalyticsChartsProps
 
   const calculateStats = () => {
     const completed = payments.filter(p => p.status === 'completed');
-    const totalAmount = completed.reduce((sum, p) => sum + p.amount, 0) / 100;
+    const totalAmount = completed.reduce((sum, p) => sum + (p.amount || 0), 0) / 100;
     const avgAmount = completed.length > 0 ? totalAmount / completed.length : 0;
     
     return {
