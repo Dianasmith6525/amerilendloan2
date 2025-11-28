@@ -3904,6 +3904,7 @@ export const appRouter = router({
             success: true, 
             verified: true, 
             confirmed: true,
+            confirmations: verification.confirmations || 6,
             transactionHash: input.txHash,
             status: "succeeded",
             message: "✅ Payment confirmed on blockchain! Your loan will be processed."
@@ -3915,120 +3916,10 @@ export const appRouter = router({
           success: true, 
           verified: true, 
           confirmed: false,
+          confirmations: verification.confirmations || 0,
           transactionHash: input.txHash,
           status: "processing",
           message: verification.message || "⏳ Transaction found on blockchain. Waiting for confirmations..."
-        };
-      }),
-
-    // Get payments for a loan application
-    getByLoanId: protectedProcedure
-      .input(z.object({ loanApplicationId: z.number() }))
-      .query(async ({ ctx, input }) => {
-        const application = await db.getLoanApplicationById(input.loanApplicationId);
-        
-        if (!application) {
-          throw new TRPCError({ code: "NOT_FOUND" });
-        }
-        
-        if (application.userId !== ctx.user.id && ctx.user.role !== "admin") {
-          throw new TRPCError({ code: "FORBIDDEN" });
-        }
-
-        return db.getPaymentsByLoanApplicationId(input.loanApplicationId);
-      }),
-
-    // Check crypto payment status (for polling)
-    checkCryptoStatus: protectedProcedure
-      .input(z.object({
-        paymentId: z.number(),
-      }))
-      .query(async ({ ctx, input }) => {
-        const payment = await db.getPaymentById(input.paymentId);
-        
-        if (!payment) {
-          throw new TRPCError({ code: "NOT_FOUND" });
-        }
-        
-        if (payment.userId !== ctx.user.id && ctx.user.role !== "admin") {
-          throw new TRPCError({ code: "FORBIDDEN" });
-        }
-
-        // If payment already succeeded, return success
-        if (payment.status === "succeeded") {
-          return {
-            status: "succeeded",
-            confirmed: true,
-            transactionHash: payment.cryptoTxHash,
-          };
-        }
-
-        // Check if there's a transaction hash to verify
-        if (payment.cryptoTxHash) {
-          const verification = await verifyCryptoPaymentByTxHash(
-            payment.cryptoCurrency as any,
-            payment.cryptoTxHash,
-            payment.cryptoAmount || "",
-            payment.cryptoAddress || ""
-          );
-
-          if (verification.confirmed && payment.status !== "succeeded") {
-            // Update payment status
-            await db.updatePaymentStatus(input.paymentId, "succeeded", {
-              completedAt: new Date(),
-            });
-
-            // Update loan status
-            await db.updateLoanApplicationStatus(payment.loanApplicationId, "fee_paid");
-
-            // Send confirmation emails
-            const application = await db.getLoanApplicationById(payment.loanApplicationId);
-            const user = await db.getUserById(payment.userId);
-
-            if (user && user.email && application) {
-              const userEmail = user.email;
-              const fullName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Valued Customer";
-              
-              try {
-                await sendCryptoPaymentConfirmedEmail(
-                  userEmail,
-                  fullName,
-                  application.trackingNumber,
-                  payment.amount,
-                  payment.cryptoAmount || "",
-                  payment.cryptoCurrency || "BTC",
-                  payment.cryptoAddress || "",
-                  payment.cryptoTxHash
-                );
-                
-                await sendPaymentReceiptEmail(
-                  userEmail,
-                  fullName,
-                  application.trackingNumber,
-                  payment.amount,
-                  "crypto",
-                  payment.cryptoAmount || "",
-                  payment.cryptoCurrency || "BTC",
-                  payment.cryptoTxHash
-                );
-              } catch (err) {
-                console.error("[Email] Failed to send crypto payment confirmation emails:", err);
-              }
-            }
-          }
-
-          return {
-            status: "succeeded",
-            confirmed: true,
-            transactionHash: payment.cryptoTxHash,
-          };
-        }
-
-        // Payment is pending, return current status
-        return {
-          status: payment.status,
-          confirmed: false,
-          transactionHash: payment.cryptoTxHash || null,
         };
       }),
 

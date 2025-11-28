@@ -1409,7 +1409,7 @@ export default function Dashboard() {
                       ))
                     ) : (
                       <div className="text-center py-12">
-                        <History className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                        <Activity className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                         <p className="text-gray-600">No activity yet</p>
                       </div>
                     )}
