@@ -131,17 +131,21 @@ export default function AdminDashboard() {
   const { data: stats, isLoading: statsLoading } = trpc.loans.adminStatistics.useQuery();
   const { data: feeConfig } = trpc.feeConfig.getActive.useQuery();
   
+  // Ensure applications and disbursements are always arrays
+  const applicationsList = Array.isArray(applications) ? applications : [];
+  const disbursementsList = Array.isArray(disbursements) ? disbursements : [];
+  
   // Support tickets data
   const { data: ticketsData, refetch: refetchTickets, isLoading: ticketsLoading } = trpc.supportTickets.adminGetAll.useQuery({
     status: ticketStatusFilter,
   });
-  const tickets = ticketsData?.data || [];
+  const tickets = Array.isArray(ticketsData?.data) ? ticketsData.data : [];
   
   const { data: ticketMessagesData, refetch: refetchTicketMessages } = trpc.supportTickets.getMessages.useQuery(
     { ticketId: selectedTicket || 0 },
     { enabled: !!selectedTicket }
   );
-  const ticketMessages = ticketMessagesData?.data || [];
+  const ticketMessages = Array.isArray(ticketMessagesData?.data) ? ticketMessagesData.data : [];
 
   // Load fee configuration when it becomes available
   useEffect(() => {
@@ -844,8 +848,8 @@ export default function AdminDashboard() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      if (!applications) return;
-                      const filteredApps = applications.filter((app: any) => {
+                      if (!applicationsList) return;
+                      const filteredApps = applicationsList.filter((app: any) => {
                         const matchesSearch = searchTerm === "" || 
                           app.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           app.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -914,7 +918,7 @@ export default function AdminDashboard() {
                           for (const appId of selectedApps) {
                             try {
                               // Find the application to get requested amount
-                              const app = applications?.find((a: any) => a.id === appId);
+                              const app = applicationsList?.find((a: any) => a.id === appId);
                               if (app) {
                                 await approveMutation.mutateAsync({ 
                                   id: appId, 
@@ -981,7 +985,7 @@ export default function AdminDashboard() {
               ) : (
                 (() => {
                   // Filter applications
-                  const filteredApps = applications.filter((app: any) => {
+                  const filteredApps = applicationsList.filter((app: any) => {
                     const matchesSearch = searchTerm === "" || 
                       app.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                       app.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1195,7 +1199,7 @@ export default function AdminDashboard() {
                   </CardContent>
                 </Card>
               ) : (
-                disbursements.map((disburse: any) => (
+                disbursementsList.map((disburse: any) => (
                   <Card key={disburse.id} className="hover:shadow-lg transition">
                     <CardHeader>
                       <div className="flex items-start justify-between">
@@ -1647,7 +1651,7 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {applications && applications.slice(0, 20).map((app: any) => (
+                  {applicationsList && applicationsList.slice(0, 20).map((app: any) => (
                     <div key={app.id} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg">
                       <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
                         <FileText className="w-4 h-4 text-blue-600" />

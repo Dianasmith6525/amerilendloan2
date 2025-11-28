@@ -71,10 +71,10 @@ export default function PayFee() {
     enabled: isAuthenticated,
   });
 
-  // Filter loans that need fee payment
-  const feePendingLoans = loans?.filter(
+  // Filter loans that need fee payment - ensure loans is an array
+  const feePendingLoans = Array.isArray(loans) ? loans.filter(
     (loan) => loan.status === "approved" || loan.status === "fee_pending"
-  ) || [];
+  ) : [];
 
   const [selectedLoan, setSelectedLoan] = useState<number | null>(null);
   const selectedLoanData = feePendingLoans.find((loan) => loan.id === selectedLoan);
