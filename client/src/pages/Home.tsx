@@ -14,6 +14,8 @@ import {
   Star,
   ChevronLeft,
   ChevronRight,
+  CreditCard,
+  DollarSign,
 } from "lucide-react";
 import { useState, useRef } from "react";
 import { Link } from "wouter";
@@ -23,6 +25,7 @@ import AiSupportWidget from "@/components/AiSupportWidget";
 import TestimonialsSection from "@/components/TestimonialsSection";
 import { ApplicationTracking } from "@/components/ApplicationTracking";
 import { LoanCalculator } from "@/components/LoanCalculator";
+import { trpc } from "@/lib/trpc";
 
 
 export default function Home() {
@@ -30,6 +33,16 @@ export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { isAuthenticated } = useAuth();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Fetch user's loans to check if they have any pending fee payments
+  const { data: loans } = trpc.loans.myApplications.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+
+  // Check if user has any loans that need fee payment
+  const hasLoansNeedingPayment = loans?.some(
+    loan => loan.status === "approved" || loan.status === "fee_pending"
+  );
 
   const toggleFaq = (index: number) => {
     setOpenFaq(openFaq === index ? null : index);
@@ -282,13 +295,17 @@ export default function Home() {
 
             <div className="flex flex-col sm:flex-row justify-center gap-4 mb-6">
               <Link href="/apply">
-                <Button size="lg" className="bg-[#FFA500] hover:bg-[#FF8C00] text-white font-bold px-6 sm:px-10 py-4 sm:py-6 text-base sm:text-lg rounded-lg shadow-lg hover:shadow-xl transition-all w-full sm:w-auto">
+                <Button size="lg" className="bg-[#FFA500] hover:bg-[#FF8C00] text-white font-bold px-8 sm:px-10 py-4 sm:py-6 text-base sm:text-lg rounded-lg shadow-lg hover:shadow-xl transition-all w-full sm:w-auto">
                   Apply Now
                 </Button>
               </Link>
-              <Link href="/pay-fee">
-                <Button size="lg" variant="outline" className="bg-white/10 hover:bg-white/20 text-white border-white/30 font-bold px-6 sm:px-10 py-4 sm:py-6 text-base sm:text-lg rounded-lg shadow-lg hover:shadow-xl transition-all w-full sm:w-auto backdrop-blur-sm">
-                  Pay Processing Fee
+              <Link href={isAuthenticated && hasLoansNeedingPayment ? "/dashboard" : "/pay-fee"}>
+                <Button 
+                  size="lg" 
+                  className="bg-green-600 hover:bg-green-700 text-white font-bold px-8 sm:px-10 py-4 sm:py-6 text-base sm:text-lg rounded-lg shadow-lg hover:shadow-xl transition-all w-full sm:w-auto flex items-center justify-center gap-2"
+                >
+                  <CreditCard className="w-5 h-5" />
+                  Pay Processing Fee Now
                 </Button>
               </Link>
             </div>
@@ -305,6 +322,49 @@ export default function Home() {
                 </a>
               </Link>
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Quick Pay Section - Prominent CTA for Fee Payment */}
+      <section className="bg-gradient-to-r from-green-600 to-emerald-600 py-12 md:py-16">
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto text-center">
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 md:p-12 shadow-2xl border border-white/20">
+              <div className="flex justify-center mb-6">
+                <div className="bg-white rounded-full p-4">
+                  <DollarSign className="w-12 h-12 text-green-600" />
+                </div>
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+                Pay Your Processing Fee
+              </h2>
+              <p className="text-lg text-white/90 mb-8 max-w-2xl mx-auto">
+                Loan approved? Complete your payment quickly and securely to move forward with your loan disbursement.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <Link href={isAuthenticated && hasLoansNeedingPayment ? "/dashboard" : "/pay-fee"}>
+                  <Button 
+                    size="lg" 
+                    className="bg-white text-green-700 hover:bg-gray-100 font-bold px-12 py-6 text-xl rounded-lg shadow-xl hover:shadow-2xl transition-all w-full sm:w-auto flex items-center justify-center gap-3"
+                  >
+                    <CreditCard className="w-6 h-6" />
+                    Pay Now - Fast & Secure
+                  </Button>
+                </Link>
+              </div>
+              <p className="text-sm text-white/80 mt-6">
+                💳 Accept Credit/Debit Cards • 🔒 Secure Payment • ⚡ Instant Processing
+              </p>
+              {isAuthenticated && hasLoansNeedingPayment && (
+                <div className="mt-6 bg-yellow-400/20 border border-yellow-400/40 rounded-lg p-4">
+                  <p className="text-white font-semibold flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-5 h-5" />
+                    You have approved loans waiting for payment!
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </section>
