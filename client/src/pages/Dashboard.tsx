@@ -147,20 +147,20 @@ export default function Dashboard() {
   
   const ticketMessages = ticketMessagesData?.data || [];
   
-  const messages = ticketMessages.map((msg: any) => ({
+  const messages = Array.isArray(ticketMessages) ? ticketMessages.map((msg: any) => ({
     id: msg.id,
     sender: msg.isFromAdmin ? "Support Team" : (msg.userName || "You"),
     message: msg.message,
     timestamp: new Date(msg.createdAt),
     isAdmin: msg.isFromAdmin,
     attachmentUrl: msg.attachmentUrl,
-  }));
+  })) : [];
   // Fetch real payment history
   const { data: paymentsData = [], isLoading: paymentsLoading } = trpc.payments.getHistory.useQuery(undefined, {
     enabled: isAuthenticated,
   });
   
-  const payments = paymentsData.map((p: any) => ({
+  const payments = Array.isArray(paymentsData) ? paymentsData.map((p: any) => ({
     id: p.id,
     loanId: p.loanApplicationId,
     date: new Date(p.createdAt),
@@ -172,7 +172,7 @@ export default function Dashboard() {
       : `${p.cryptoCurrency || "Crypto"}`,
     createdAt: p.createdAt,
     method: p.paymentMethod,
-  }));
+  })) : [];
 
   // Filter loans based on search and filters
   const filteredLoans = loans?.filter((loan) => {
