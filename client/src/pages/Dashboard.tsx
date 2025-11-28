@@ -83,6 +83,7 @@ export default function Dashboard() {
   // Mobile responsive state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("applications");
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   
   // Search and filter state
   const [searchTerm, setSearchTerm] = useState("");
@@ -208,6 +209,9 @@ export default function Dashboard() {
   if (!isAuthenticated || user?.role === "admin") {
     return null;
   }
+  
+  // Debug logging
+  console.log("Dashboard Data:", { loans, payments: paymentsData, supportTickets: supportTicketsData });
 
   // Filter loans based on search and filters
   const filteredLoans = loans?.filter((loan) => {
