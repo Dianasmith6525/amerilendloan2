@@ -57,6 +57,13 @@
       "when": 1764118350620,
       "tag": "0007_gifted_venom",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1764375497960,
+      "tag": "0008_mysterious_stingray",
+      "breakpoints": true
     }
   ]
 }

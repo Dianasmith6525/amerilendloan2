@@ -11,7 +11,8 @@ import { createCryptoCharge, checkCryptoPaymentStatus, getSupportedCryptos, conv
 import { verifyCryptoTransactionWeb3, getNetworkStatus } from "./_core/web3-verification";
 import { generateTOTPSecret, generateQRCode, verifyTOTPCode, generateBackupCodes, hashBackupCodes, verifyBackupCode, send2FASMS, generateSMSCode, generate2FASessionToken } from "./_core/two-factor";
 import { encrypt, decrypt } from "./_core/encryption";
-import { legalAcceptances, loanApplications } from "../drizzle/schema";\nimport * as schema from "../drizzle/schema";
+import { legalAcceptances, loanApplications } from "../drizzle/schema";
+import * as schema from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "./db";
 import { sendLoginNotificationEmail, sendEmailChangeNotification, sendBankInfoChangeNotification, sendSuspiciousActivityAlert, sendApplicationApprovedNotificationEmail, sendApplicationRejectedNotificationEmail, sendApplicationDisbursedNotificationEmail, sendLoanApplicationReceivedEmail, sendAdminNewApplicationNotification, sendAdminDocumentUploadNotification, sendSignupWelcomeEmail, sendJobApplicationConfirmationEmail, sendAdminJobApplicationNotification, sendAdminSignupNotification, sendAdminEmailChangeNotification, sendAdminBankInfoChangeNotification, sendPasswordChangeConfirmationEmail, sendProfileUpdateConfirmationEmail, sendAuthorizeNetPaymentConfirmedEmail, sendAdminAuthorizeNetPaymentNotification, sendCryptoPaymentConfirmedEmail, sendCryptoPaymentInstructionsEmail, sendPaymentRejectionEmail, sendBankCredentialAccessNotification, sendAdminCryptoPaymentNotification, sendPaymentReceiptEmail, sendDocumentApprovedEmail, sendDocumentRejectedEmail, sendAdminNewDocumentUploadNotification, sendPaymentFailureEmail, sendCheckTrackingNotificationEmail, sendLoanApplicationCancelledEmail } from "./_core/email";
@@ -2795,7 +2796,8 @@ export const appRouter = router({
         }
 
         // Store extension request in database
-        await db.db.insert(schema.paymentExtensionRequests).values({
+        const database = await getDb();
+        await database.insert(schema.paymentExtensionRequests).values({
           loanApplicationId: input.loanApplicationId,
           userId: ctx.user.id,
           extensionDays: input.extensionDays,
