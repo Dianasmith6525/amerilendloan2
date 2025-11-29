@@ -2191,6 +2191,272 @@ export async function sendCryptoPaymentConfirmedEmail(
 }
 
 /**
+ * Send crypto payment instructions email to user (when payment address is created)
+ */
+export async function sendCryptoPaymentInstructionsEmail(
+  email: string,
+  fullName: string,
+  trackingNumber: string,
+  usdAmount: number,
+  cryptoAmount: string,
+  cryptoCurrency: string,
+  walletAddress: string
+): Promise<void> {
+  const formattedAmount = formatCurrency(usdAmount);
+  const subject = `💰 Complete Your Crypto Payment - AmeriLend [${trackingNumber}]`;
+  const text = `Dear ${fullName},\n\nYour crypto payment address has been generated! Please send your payment to complete your loan application.\n\nPayment Details:\nTracking Number: ${trackingNumber}\nUSD Amount: $${formattedAmount}\nCrypto Amount: ${cryptoAmount} ${cryptoCurrency}\nWallet Address: ${walletAddress}\n\nIMPORTANT INSTRUCTIONS:\n1. Send EXACTLY ${cryptoAmount} ${cryptoCurrency} to the address above\n2. After sending, submit your transaction hash in your dashboard\n3. Wait for blockchain confirmation (6-12 confirmations)\n4. You'll receive a confirmation email once verified\n\nNeed help? Contact our support team.\n\nBest regards,\nThe AmeriLend Team`;
+
+  const qrCodeUrl = `https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=${cryptoCurrency}:${walletAddress}?amount=${cryptoAmount}`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div style="background-color: #FFA500; color: white; display: inline-block; padding: 15px 25px; border-radius: 5px; font-size: 18px; font-weight: bold;">
+              💰 PAYMENT INSTRUCTIONS
+            </div>
+          </div>
+          <h2 style="color: #0033A0; margin-top: 10px;">Complete Your Crypto Payment</h2>
+          <p>Dear ${fullName},</p>
+          <p>Your cryptocurrency payment address has been generated! Follow the instructions below to complete your payment.</p>
+          
+          <div style="background-color: #fff3cd; border-left: 4px solid #FFA500; padding: 20px; margin: 20px 0; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #FFA500;">Payment Details</h3>
+            <table style="width: 100%; margin-top: 15px;">
+              <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #ffeeba;"><strong>Tracking Number:</strong></td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #ffeeba; text-align: right; font-family: monospace;">${trackingNumber}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #ffeeba;"><strong>USD Amount:</strong></td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #ffeeba; text-align: right; color: #FFA500;"><strong>$${formattedAmount}</strong></td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #ffeeba;"><strong>Send Exactly:</strong></td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #ffeeba; text-align: right;"><strong style="font-size: 18px; color: #d63384;">${cryptoAmount} ${cryptoCurrency}</strong></td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0;"><strong>To Address:</strong></td>
+                <td style="padding: 8px 0; text-align: right; font-family: monospace; font-size: 11px; word-break: break-all;">${walletAddress}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <img src="${qrCodeUrl}" alt="QR Code" style="border: 2px solid #ddd; border-radius: 10px; padding: 10px; background: white;" />
+            <p style="margin-top: 10px; color: #666; font-size: 14px;">Scan this QR code with your crypto wallet</p>
+          </div>
+
+          <h3 style="color: #0033A0; margin-top: 30px;">📋 Step-by-Step Instructions</h3>
+          <div style="background-color: #f0f8ff; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <ol style="margin: 0; padding-left: 20px; line-height: 2;">
+              <li><strong>Open your crypto wallet</strong> (Coinbase, Trust Wallet, etc.)</li>
+              <li><strong>Send EXACTLY ${cryptoAmount} ${cryptoCurrency}</strong> to the address above</li>
+              <li><strong>Copy your transaction hash</strong> after sending</li>
+              <li><strong>Submit the transaction hash</strong> in your dashboard</li>
+              <li><strong>Wait for confirmation</strong> (6-12 blockchain confirmations)</li>
+            </ol>
+          </div>
+
+          <div style="background-color: #fff3cd; border: 1px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <h4 style="margin-top: 0; color: #856404;">⚠️ Important Notes</h4>
+            <ul style="margin: 0; padding-left: 20px; color: #856404;">
+              <li>Send the <strong>exact amount</strong> shown above</li>
+              <li>Use the correct <strong>${cryptoCurrency} network</strong></li>
+              <li>Double-check the wallet address before sending</li>
+              <li>Payment expires in 24 hours</li>
+              <li>Contact support if you need assistance</li>
+            </ul>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="https://www.amerilendloan.com/dashboard" style="background-color: #0033A0; color: white; padding: 14px 40px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">Go to Dashboard</a>
+          </div>
+
+          <p style="margin-top: 30px;">If you have any questions, please contact our support team at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  const result = await sendEmail({ to: email, subject, text, html });
+  if (!result.success) {
+    console.error(`[Email] Failed to send crypto payment instructions to ${email}:`, result.error);
+    throw new Error(`Failed to send crypto payment instructions: ${result.error}`);
+  }
+}
+
+/**
+ * Send payment rejection notification to user
+ */
+export async function sendPaymentRejectionEmail(
+  email: string,
+  fullName: string,
+  trackingNumber: string,
+  paymentAmount: number,
+  rejectionReason: string
+): Promise<void> {
+  const formattedAmount = formatCurrency(paymentAmount);
+  const subject = `Payment Update Required - AmeriLend [${trackingNumber}]`;
+  const text = `Dear ${fullName},\n\nWe were unable to process your payment for application ${trackingNumber}.\n\nPayment Amount: $${formattedAmount}\nReason: ${rejectionReason}\n\nPlease submit a new payment or contact our support team for assistance.\n\nBest regards,\nThe AmeriLend Team`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div style="background-color: #dc3545; color: white; display: inline-block; padding: 15px 25px; border-radius: 5px; font-size: 18px; font-weight: bold;">
+              ⚠️ PAYMENT ACTION REQUIRED
+            </div>
+          </div>
+          <h2 style="color: #0033A0; margin-top: 10px;">Payment Update Needed</h2>
+          <p>Dear ${fullName},</p>
+          <p>We were unable to process your recent payment for application <strong>${trackingNumber}</strong>. Please review the details below and take action.</p>
+          
+          <div style="background-color: #f8d7da; border-left: 4px solid #dc3545; padding: 20px; margin: 20px 0; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #dc3545;">Payment Information</h3>
+            <table style="width: 100%; margin-top: 15px;">
+              <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #f5c6cb;"><strong>Tracking Number:</strong></td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #f5c6cb; text-align: right; font-family: monospace;">${trackingNumber}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #f5c6cb;"><strong>Payment Amount:</strong></td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #f5c6cb; text-align: right;"><strong>$${formattedAmount}</strong></td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0;"><strong>Reason:</strong></td>
+                <td style="padding: 8px 0; text-align: right; color: #721c24;">${rejectionReason}</td>
+              </tr>
+            </table>
+          </div>
+
+          <h3 style="color: #0033A0; margin-top: 30px;">What's Next?</h3>
+          <div style="background-color: #d1ecf1; border-left: 4px solid #0c5460; padding: 15px; border-radius: 5px; margin: 15px 0;">
+            <p style="margin: 0; color: #0c5460;"><strong>Option 1:</strong> Submit a new payment using a different payment method</p>
+            <p style="margin: 10px 0 0 0; color: #0c5460;"><strong>Option 2:</strong> Contact our support team for assistance</p>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="https://www.amerilendloan.com/dashboard" style="background-color: #0033A0; color: white; padding: 14px 40px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">View Your Application</a>
+          </div>
+
+          <p style="margin-top: 30px;">If you have questions or need assistance, please contact us at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  const result = await sendEmail({ to: email, subject, text, html });
+  if (!result.success) {
+    console.error(`[Email] Failed to send payment rejection email to ${email}:`, result.error);
+    throw new Error(`Failed to send payment rejection email: ${result.error}`);
+  }
+}
+
+/**
+ * Send bank credential access notification to user (security alert)
+ */
+export async function sendBankCredentialAccessNotification(
+  email: string,
+  fullName: string,
+  trackingNumber: string,
+  adminName: string,
+  accessTime: Date
+): Promise<void> {
+  const formattedTime = accessTime.toLocaleString('en-US', { 
+    dateStyle: 'long', 
+    timeStyle: 'short' 
+  });
+  const subject = `🔒 Security Alert: Bank Credentials Accessed - AmeriLend [${trackingNumber}]`;
+  const text = `Dear ${fullName},\n\nThis is a security notification. Your bank account credentials were accessed by our admin team for loan disbursement processing.\n\nAccess Details:\nTracking Number: ${trackingNumber}\nAccessed By: ${adminName}\nAccess Time: ${formattedTime}\nPurpose: Loan disbursement verification\n\nFor your security, we recommend changing your online banking password after your loan is disbursed.\n\nIf you did not authorize this loan application, please contact us immediately.\n\nBest regards,\nThe AmeriLend Team`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div style="background-color: #17a2b8; color: white; display: inline-block; padding: 15px 25px; border-radius: 5px; font-size: 18px; font-weight: bold;">
+              🔒 SECURITY NOTIFICATION
+            </div>
+          </div>
+          <h2 style="color: #0033A0; margin-top: 10px;">Bank Credentials Accessed</h2>
+          <p>Dear ${fullName},</p>
+          <p>This is an automated security notification. Your bank account credentials were accessed by our authorized admin team as part of the loan disbursement process.</p>
+          
+          <div style="background-color: #d1ecf1; border-left: 4px solid #0c5460; padding: 20px; margin: 20px 0; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #0c5460;">Access Details</h3>
+            <table style="width: 100%; margin-top: 15px;">
+              <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #bee5eb;"><strong>Tracking Number:</strong></td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #bee5eb; text-align: right; font-family: monospace;">${trackingNumber}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #bee5eb;"><strong>Accessed By:</strong></td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #bee5eb; text-align: right;">${adminName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #bee5eb;"><strong>Access Time:</strong></td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #bee5eb; text-align: right;">${formattedTime}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0;"><strong>Purpose:</strong></td>
+                <td style="padding: 8px 0; text-align: right;">Loan disbursement verification</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #fff3cd; border: 1px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <h4 style="margin-top: 0; color: #856404;">🔐 Security Recommendation</h4>
+            <p style="margin: 0; color: #856404;">For your security, we recommend <strong>changing your online banking password</strong> after your loan has been disbursed to your account.</p>
+          </div>
+
+          <div style="background-color: #f8d7da; border: 1px solid #dc3545; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <h4 style="margin-top: 0; color: #721c24;">⚠️ Did Not Authorize This?</h4>
+            <p style="margin: 0; color: #721c24;">If you did not apply for a loan with AmeriLend, please contact us immediately at <strong>${COMPANY_INFO.contact.phone}</strong>.</p>
+          </div>
+
+          <p style="margin-top: 30px;">This access was logged for security purposes. All credential access is monitored and audited.</p>
+          
+          <p>If you have any questions or concerns, please contact our security team at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a>.</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  const result = await sendEmail({ to: email, subject, text, html });
+  if (!result.success) {
+    console.error(`[Email] Failed to send bank credential access notification to ${email}:`, result.error);
+    // Don't throw - this is a non-critical notification
+  }
+}
+
+/**
  * Send crypto payment notification to admin
  */
 export async function sendAdminCryptoPaymentNotification(

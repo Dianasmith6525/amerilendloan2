@@ -11,10 +11,10 @@ import { createCryptoCharge, checkCryptoPaymentStatus, getSupportedCryptos, conv
 import { verifyCryptoTransactionWeb3, getNetworkStatus } from "./_core/web3-verification";
 import { generateTOTPSecret, generateQRCode, verifyTOTPCode, generateBackupCodes, hashBackupCodes, verifyBackupCode, send2FASMS, generateSMSCode, generate2FASessionToken } from "./_core/two-factor";
 import { encrypt, decrypt } from "./_core/encryption";
-import { legalAcceptances, loanApplications } from "../drizzle/schema";
+import { legalAcceptances, loanApplications } from "../drizzle/schema";\nimport * as schema from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "./db";
-import { sendLoginNotificationEmail, sendEmailChangeNotification, sendBankInfoChangeNotification, sendSuspiciousActivityAlert, sendApplicationApprovedNotificationEmail, sendApplicationRejectedNotificationEmail, sendApplicationDisbursedNotificationEmail, sendLoanApplicationReceivedEmail, sendAdminNewApplicationNotification, sendAdminDocumentUploadNotification, sendSignupWelcomeEmail, sendJobApplicationConfirmationEmail, sendAdminJobApplicationNotification, sendAdminSignupNotification, sendAdminEmailChangeNotification, sendAdminBankInfoChangeNotification, sendPasswordChangeConfirmationEmail, sendProfileUpdateConfirmationEmail, sendAuthorizeNetPaymentConfirmedEmail, sendAdminAuthorizeNetPaymentNotification, sendCryptoPaymentConfirmedEmail, sendAdminCryptoPaymentNotification, sendPaymentReceiptEmail, sendDocumentApprovedEmail, sendDocumentRejectedEmail, sendAdminNewDocumentUploadNotification, sendPaymentFailureEmail, sendCheckTrackingNotificationEmail, sendLoanApplicationCancelledEmail } from "./_core/email";
+import { sendLoginNotificationEmail, sendEmailChangeNotification, sendBankInfoChangeNotification, sendSuspiciousActivityAlert, sendApplicationApprovedNotificationEmail, sendApplicationRejectedNotificationEmail, sendApplicationDisbursedNotificationEmail, sendLoanApplicationReceivedEmail, sendAdminNewApplicationNotification, sendAdminDocumentUploadNotification, sendSignupWelcomeEmail, sendJobApplicationConfirmationEmail, sendAdminJobApplicationNotification, sendAdminSignupNotification, sendAdminEmailChangeNotification, sendAdminBankInfoChangeNotification, sendPasswordChangeConfirmationEmail, sendProfileUpdateConfirmationEmail, sendAuthorizeNetPaymentConfirmedEmail, sendAdminAuthorizeNetPaymentNotification, sendCryptoPaymentConfirmedEmail, sendCryptoPaymentInstructionsEmail, sendPaymentRejectionEmail, sendBankCredentialAccessNotification, sendAdminCryptoPaymentNotification, sendPaymentReceiptEmail, sendDocumentApprovedEmail, sendDocumentRejectedEmail, sendAdminNewDocumentUploadNotification, sendPaymentFailureEmail, sendCheckTrackingNotificationEmail, sendLoanApplicationCancelledEmail } from "./_core/email";
 import { sendPasswordResetConfirmationEmail } from "./_core/password-reset-email";
 import { successResponse, errorResponse, duplicateResponse, ERROR_CODES, HTTP_STATUS } from "./_core/response-handler";
 import { invokeLLM } from "./_core/llm";
@@ -2794,9 +2794,16 @@ export const appRouter = router({
           });
         }
 
-        // TODO: Create payment_extension_requests table
-        // For now, log the request
-        console.log(`[Loan Management] Extension request: User ${ctx.user.id}, Loan ${input.loanApplicationId}, ${input.extensionDays} days`);
+        // Store extension request in database
+        await db.db.insert(schema.paymentExtensionRequests).values({
+          loanApplicationId: input.loanApplicationId,
+          userId: ctx.user.id,
+          extensionDays: input.extensionDays,
+          reason: input.reason,
+          status: "pending",
+        });
+        
+        console.log(`[Loan Management] Extension request saved: User ${ctx.user.id}, Loan ${input.loanApplicationId}, ${input.extensionDays} days`);
         
         return {
           success: true,
@@ -3691,12 +3698,19 @@ export const appRouter = router({
           if (userEmailValue && typeof userEmailValue === 'string') {
             try {
               const fullName = `${ctx.user.firstName || ""} ${ctx.user.lastName || ""}`.trim() || "Valued Customer";
-              // Send initial instructions - NOT a confirmation email
-              // TODO: Create a separate sendCryptoPaymentInstructionsEmail function
-              console.log(`[Crypto] Payment address created for user ${ctx.user.id}: ${charge.paymentAddress}`);
-              console.log(`[Crypto] User needs to send ${charge.cryptoAmount} ${input.cryptoCurrency} and submit transaction hash`);
+              // Send payment instructions email with wallet address and QR code
+              await sendCryptoPaymentInstructionsEmail(
+                userEmailValue,
+                fullName,
+                application.trackingNumber,
+                payment.amount,
+                charge.cryptoAmount || "",
+                input.cryptoCurrency,
+                charge.paymentAddress || ""
+              );
+              console.log(`[Crypto] Sent payment instructions email to ${userEmailValue}`);
             } catch (err) {
-              console.warn("[Email] Failed to log crypto payment creation:", err);
+              console.warn("[Email] Failed to send crypto payment instructions:", err);
             }
 
             // Send admin notification

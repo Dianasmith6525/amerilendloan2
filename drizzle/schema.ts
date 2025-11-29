@@ -1225,6 +1225,21 @@ export const auditLog = pgTable("audit_log", {
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
+// Payment Extension Requests
+export const paymentExtensionRequests = pgTable("payment_extension_requests", {
+  id: serial("id").primaryKey(),
+  loanApplicationId: integer("loan_application_id").references(() => loanApplications.id).notNull(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  extensionDays: integer("extension_days").notNull(), // 7-30 days
+  reason: text("reason").notNull(),
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // 'pending', 'approved', 'rejected'
+  adminNotes: text("admin_notes"),
+  reviewedBy: integer("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Document metadata table for enhanced document management (Priority 3)
 export const loanDocuments = pgTable("loan_documents", {
   id: serial("id").primaryKey(),
