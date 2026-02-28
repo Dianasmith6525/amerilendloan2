@@ -515,11 +515,11 @@ export default function AdminPaymentVerification() {
                         <span className="text-gray-600">Last 4:</span>
                         <span className="font-medium">****{selectedPayment.cardLast4 || "N/A"}</span>
                       </div>
-                      {selectedPayment.authorizenetTransactionId && (
+                      {selectedPayment.paymentIntentId && (
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Transaction ID:</span>
                           <span className="font-medium text-xs">
-                            {selectedPayment.authorizenetTransactionId}
+                            {selectedPayment.paymentIntentId}
                           </span>
                         </div>
                       )}

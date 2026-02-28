@@ -260,7 +260,7 @@ export const payments = pgTable("payments", {
   paymentProvider: paymentProviderEnum("paymentProvider").default("stripe").notNull(),
   paymentMethod: paymentMethodEnum("paymentMethod").default("card").notNull(),
   
-  // Card payment details (Authorize.net or Stripe)
+  // Card payment details (Stripe)
   paymentIntentId: varchar("paymentIntentId", { length: 255 }), // Payment intent/transaction ID
   paymentMethodId: varchar("paymentMethodId", { length: 255 }), // Payment method ID
   cardLast4: varchar("cardLast4", { length: 4 }), // Last 4 digits of card
@@ -1135,7 +1135,7 @@ export const systemConfig = pgTable("system_config", {
 
 export const apiKeys = pgTable("api_keys", {
   id: serial("id").primaryKey(),
-  provider: varchar("provider", { length: 50 }).notNull(), // 'authorizenet', 'sendgrid', 'twilio', 'coinbase'
+  provider: varchar("provider", { length: 50 }).notNull(), // 'stripe', 'sendgrid', 'twilio', 'coinbase'
   keyName: varchar("key_name", { length: 100 }).notNull(),
   encryptedValue: text("encrypted_value").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
@@ -1194,9 +1194,9 @@ export const autoPaySettings = pgTable("auto_pay_settings", {
   isEnabled: boolean("is_enabled").default(false).notNull(),
   paymentMethod: varchar("payment_method", { length: 50 }).notNull(), // 'bank_account', 'card'
   
-  // Authorize.net Customer Profile IDs for stored payment methods
-  customerProfileId: varchar("customer_profile_id", { length: 255 }), // Authorize.net Customer Profile ID
-  paymentProfileId: varchar("payment_profile_id", { length: 255 }), // Authorize.net Payment Profile ID
+  // Stripe Customer / Payment Method IDs for stored payment methods
+  customerProfileId: varchar("customer_profile_id", { length: 255 }), // Stripe Customer ID
+  paymentProfileId: varchar("payment_profile_id", { length: 255 }), // Stripe Payment Method ID
   
   bankAccountId: varchar("bank_account_id", { length: 255 }), // Plaid account ID or similar
   cardLast4: varchar("card_last4", { length: 4 }),

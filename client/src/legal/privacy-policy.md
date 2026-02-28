@@ -109,7 +109,7 @@ We may share your information with:
 ### Service Providers
 
 We engage third-party companies to perform services on our behalf, including:
-- Payment processors (Authorize.net, Coinbase Commerce)
+- Payment processors (Stripe, Coinbase Commerce)
 - Cloud hosting providers
 - Email service providers
 - Customer support platforms

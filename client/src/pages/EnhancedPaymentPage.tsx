@@ -73,7 +73,7 @@ export default function EnhancedPaymentPage() {
         });
         toast.success("Crypto payment address generated");
       } else if (data.success && data.transactionId) {
-        // Card payment already completed by backend (Authorize.Net charges inline)
+        // Card payment already completed by backend (Stripe charges inline)
         setAnimationStatus("success");
         setTimeout(() => {
           setPaymentVerification({

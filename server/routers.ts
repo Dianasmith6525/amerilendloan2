@@ -4600,7 +4600,7 @@ export const appRouter = router({
     // Get masked API keys for a provider
     getByProvider: protectedProcedure
       .input(z.object({
-        provider: z.enum(['authorizenet', 'sendgrid', 'twilio', 'coinbase']),
+        provider: z.enum(['stripe', 'sendgrid', 'twilio', 'coinbase']),
       }))
       .query(async ({ ctx, input }) => {
         if (ctx.user.role !== "admin") {
@@ -4614,7 +4614,7 @@ export const appRouter = router({
     // Save API key (encrypted)
     save: protectedProcedure
       .input(z.object({
-        provider: z.enum(['authorizenet', 'sendgrid', 'twilio', 'coinbase']),
+        provider: z.enum(['stripe', 'sendgrid', 'twilio', 'coinbase']),
         keyName: z.string().min(1).max(100),
         value: z.string().min(1),
       }))

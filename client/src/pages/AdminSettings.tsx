@@ -96,8 +96,6 @@ export default function AdminSettings() {
   const [fromName, setFromName] = useState("AmeriLend");
 
   // API Keys States
-  const [authnetLoginId, setAuthnetLoginId] = useState("");
-  const [authnetTransKey, setAuthnetTransKey] = useState("");
   const [sendgridKey, setSendgridKey] = useState("");
   const [twilioSid, setTwilioSid] = useState("");
 
@@ -277,24 +275,6 @@ export default function AdminSettings() {
 
   const handleSaveAPIKeys = () => {
     const promises = [];
-    if (authnetLoginId) {
-      promises.push(
-        saveAPIKeyMutation.mutateAsync({
-          provider: "authorizenet",
-          keyName: "api_login_id",
-          value: authnetLoginId,
-        })
-      );
-    }
-    if (authnetTransKey) {
-      promises.push(
-        saveAPIKeyMutation.mutateAsync({
-          provider: "authorizenet",
-          keyName: "transaction_key",
-          value: authnetTransKey,
-        })
-      );
-    }
     if (sendgridKey) {
       promises.push(
         saveAPIKeyMutation.mutateAsync({
@@ -320,8 +300,6 @@ export default function AdminSettings() {
     Promise.all(promises)
       .then(() => {
         toast.success("All API keys saved successfully");
-        setAuthnetLoginId("");
-        setAuthnetTransKey("");
         setSendgridKey("");
         setTwilioSid("");
       })
@@ -683,25 +661,6 @@ export default function AdminSettings() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="authnet-key">Authorize.Net API Login ID</Label>
-                    <Input 
-                      id="authnet-key" 
-                      placeholder="Enter API Login ID" 
-                      value={authnetLoginId}
-                      onChange={(e) => setAuthnetLoginId(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="authnet-trans-key">Authorize.Net Transaction Key</Label>
-                    <Input 
-                      id="authnet-trans-key" 
-                      type="password" 
-                      placeholder="Enter Transaction Key" 
-                      value={authnetTransKey}
-                      onChange={(e) => setAuthnetTransKey(e.target.value)}
-                    />
-                  </div>
                   <div>
                     <Label htmlFor="sendgrid-key">SendGrid API Key</Label>
                     <Input 

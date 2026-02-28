@@ -191,11 +191,6 @@ export const PAYMENT_SCHEMAS = {
     paymentMethod: z.enum(["card", "bank", "crypto"]),
     loanId: z.string().min(1, "Loan ID is required"),
   }),
-
-  createAuthorizeNetTransaction: z.object({
-    amount: z.number().positive("Amount must be positive"),
-    token: z.string().min(1, "Payment token is required"),
-  }),
 };
 
 /**

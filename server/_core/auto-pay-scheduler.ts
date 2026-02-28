@@ -181,13 +181,13 @@ async function processIndividualAutoPay(setting: any) {
     loan.trackingNumber,
     setting.amount || 0,
     'card',
-    null,
-    null,
+    undefined,
+    undefined,
     chargeResult.paymentIntentId || ''
   );
 
   if (payment) {
-    console.log(`[Auto-Pay Scheduler] ✅ Successfully processed auto-pay ${setting.id}, payment ID: ${payment.id}, transaction: ${chargeResult.transactionId}`);
+    console.log(`[Auto-Pay Scheduler] ✅ Successfully processed auto-pay ${setting.id}, payment ID: ${payment.id}, transaction: ${chargeResult.paymentIntentId}`);
   }
 }
 

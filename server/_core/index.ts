@@ -144,7 +144,7 @@ async function startServer() {
     // Content Security Policy
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; img-src 'self' data: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://js.authorize.net https://jstest.authorize.net; connect-src 'self' https:;"
+      "default-src 'self'; img-src 'self' data: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://js.stripe.com; frame-src 'self' https://js.stripe.com https://hooks.stripe.com; connect-src 'self' https: https://api.stripe.com;"
     );
     
     // XSS Protection
