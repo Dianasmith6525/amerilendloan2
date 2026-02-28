@@ -42,6 +42,7 @@ const envSchema = z.object({
   // Stripe
   STRIPE_SECRET_KEY: z.string().optional().default(""),
   STRIPE_PUBLISHABLE_KEY: z.string().optional().default(""),
+  STRIPE_WEBHOOK_SECRET: z.string().optional().default(""),
 
   // Admin
   ADMIN_EMAIL: z.string().optional().default("admin@amerilendloan.com"),
@@ -93,6 +94,7 @@ export const ENV = {
   microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? "",
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
   stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY ?? "",
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
   adminEmail: process.env.ADMIN_EMAIL ?? "admin@amerilendloan.com",
 };
 

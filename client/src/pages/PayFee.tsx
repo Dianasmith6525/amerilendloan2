@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
-import { CreditCard, Wallet, ArrowLeft, CheckCircle2, XCircle, Loader2, DollarSign } from "lucide-react";
+import { CreditCard, Wallet, ArrowLeft, CheckCircle2, XCircle, Loader2, DollarSign, Zap } from "lucide-react";
 import { toast } from "sonner";
+import StripePaymentForm from "@/components/StripePaymentForm";
 
 // Declare Accept.js types
 declare global {
@@ -23,7 +24,7 @@ export default function PayFee() {
   const [, setLocation] = useLocation();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
 
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "crypto">("card");
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "stripe" | "crypto">("card");
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
 
@@ -293,11 +294,15 @@ export default function PayFee() {
                   <CardDescription>Choose how you want to pay</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "card" | "crypto")}>
-                    <TabsList className="grid w-full grid-cols-2">
+                  <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "card" | "stripe" | "crypto")}>
+                    <TabsList className="grid w-full grid-cols-3">
                       <TabsTrigger value="card">
                         <CreditCard className="h-4 w-4 mr-2" />
-                        Credit/Debit Card
+                        Card (Authorize.net)
+                      </TabsTrigger>
+                      <TabsTrigger value="stripe">
+                        <Zap className="h-4 w-4 mr-2" />
+                        Stripe
                       </TabsTrigger>
                       <TabsTrigger value="crypto">
                         <Wallet className="h-4 w-4 mr-2" />
@@ -381,6 +386,27 @@ export default function PayFee() {
                           </>
                         )}
                       </Button>
+                    </TabsContent>
+
+                    {/* Stripe Payment */}
+                    <TabsContent value="stripe" className="mt-6">
+                      {selectedLoan && selectedLoanData && (
+                        <StripePaymentForm
+                          loanApplicationId={selectedLoan}
+                          amount={selectedLoanData.processingFeeAmount || 0}
+                          onSuccess={(data) => {
+                            setPaymentSuccess(true);
+                            toast.success("Payment Successful!", {
+                              description: `Transaction ${data.transactionId} confirmed. Your loan will be disbursed shortly.`,
+                            });
+                            setTimeout(() => setLocation("/dashboard"), 3000);
+                          }}
+                          onError={(error) => {
+                            toast.error("Payment Failed", { description: error });
+                          }}
+                          onProcessing={setIsProcessing}
+                        />
+                      )}
                     </TabsContent>
 
                     {/* Crypto Payment */}

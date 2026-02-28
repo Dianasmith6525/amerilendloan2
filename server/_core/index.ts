@@ -212,6 +212,66 @@ async function startServer() {
   app.get("/health/liveness", livenessCheck);
   app.get("/metrics", metricsEndpoint);
 
+  // Stripe webhook endpoint (must use raw body parser for signature verification)
+  app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      console.warn("[Stripe Webhook] STRIPE_WEBHOOK_SECRET not configured");
+      return res.status(400).json({ error: "Webhook not configured" });
+    }
+
+    try {
+      const Stripe = (await import("stripe")).default;
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
+        apiVersion: "2025-11-17.clover",
+      });
+
+      const event = stripe.webhooks.constructEvent(req.body, sig as string, webhookSecret);
+
+      if (event.type === "payment_intent.succeeded") {
+        const paymentIntent = event.data.object as any;
+        const paymentId = paymentIntent.metadata?.paymentId;
+        const loanApplicationId = paymentIntent.metadata?.loanApplicationId;
+
+        if (paymentId) {
+          const db = await import("../db");
+          const existingPayment = await db.getPaymentById(Number(paymentId));
+
+          if (existingPayment && existingPayment.status !== "succeeded") {
+            await db.updatePaymentStatus(Number(paymentId), "succeeded", {
+              paymentIntentId: paymentIntent.id,
+              completedAt: new Date(),
+            });
+
+            if (loanApplicationId) {
+              await db.updateLoanApplicationStatus(Number(loanApplicationId), "fee_paid");
+            }
+
+            console.log(`[Stripe Webhook] Payment ${paymentId} confirmed via webhook`);
+          }
+        }
+      } else if (event.type === "payment_intent.payment_failed") {
+        const paymentIntent = event.data.object as any;
+        const paymentId = paymentIntent.metadata?.paymentId;
+
+        if (paymentId) {
+          const db = await import("../db");
+          await db.updatePaymentStatus(Number(paymentId), "failed", {
+            failureReason: paymentIntent.last_payment_error?.message || "Payment failed",
+          });
+          console.log(`[Stripe Webhook] Payment ${paymentId} failed via webhook`);
+        }
+      }
+
+      res.json({ received: true });
+    } catch (err: any) {
+      console.error("[Stripe Webhook] Error:", err.message);
+      res.status(400).json({ error: `Webhook error: ${err.message}` });
+    }
+  });
+
   // Configure multer for file uploads
   const upload = multer({
     storage: multer.memoryStorage(),

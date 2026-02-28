@@ -6,13 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { APP_LOGO, APP_TITLE } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle2, Loader2, CreditCard, Bitcoin, Wallet, Copy, Check } from "lucide-react";
+import { CheckCircle2, Loader2, CreditCard, Bitcoin, Wallet, Copy, Check, Zap } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { SkeletonPaymentCard, SkeletonDetailSection } from "@/components/SkeletonCard";
 import { SecuritySeal, TrustIndicators } from "@/components/SecuritySeal";
+import StripePaymentForm from "@/components/StripePaymentForm";
 
 // Declare Accept.js types
 declare global {
@@ -30,7 +31,7 @@ export default function PaymentPage() {
   const [, params] = useRoute("/payment/:id");
   const applicationId = params?.id ? parseInt(params.id) : null;
   const [paymentComplete, setPaymentComplete] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "crypto">("card");
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "stripe" | "crypto">("card");
   const [processing, setProcessing] = useState(false);
   
   // Card payment fields
@@ -447,15 +448,19 @@ export default function PaymentPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "card" | "crypto")}>
-                <TabsList className="grid w-full grid-cols-2 mb-6">
+              <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "card" | "stripe" | "crypto")}>
+                <TabsList className="grid w-full grid-cols-3 mb-6">
                   <TabsTrigger value="card">
                     <CreditCard className="mr-2 h-4 w-4" />
-                    Credit/Debit Card
+                    Card
+                  </TabsTrigger>
+                  <TabsTrigger value="stripe">
+                    <Zap className="mr-2 h-4 w-4" />
+                    Stripe
                   </TabsTrigger>
                   <TabsTrigger value="crypto">
                     <Bitcoin className="mr-2 h-4 w-4" />
-                    Cryptocurrency
+                    Crypto
                   </TabsTrigger>
                 </TabsList>
 
@@ -588,6 +593,30 @@ export default function PaymentPage() {
                       )}
                     </Button>
                   </div>
+                </TabsContent>
+
+                {/* Stripe Payment */}
+                <TabsContent value="stripe" className="space-y-4">
+                  <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-indigo-900">
+                      <strong>Stripe Checkout:</strong> Pay securely with Stripe. Supports all major cards, Apple Pay, and Google Pay.
+                    </p>
+                  </div>
+
+                  {applicationId && application && (
+                    <StripePaymentForm
+                      loanApplicationId={applicationId}
+                      amount={application.processingFeeAmount || 0}
+                      onSuccess={() => {
+                        setPaymentComplete(true);
+                        toast.success("Payment successful!");
+                      }}
+                      onError={(error) => {
+                        toast.error(error || "Payment failed - please try again");
+                      }}
+                      onProcessing={setProcessing}
+                    />
+                  )}
                 </TabsContent>
 
                 <TabsContent value="crypto" className="space-y-4">

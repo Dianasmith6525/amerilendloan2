@@ -5072,6 +5072,139 @@ export const appRouter = router({
       };
     }),
 
+    // Confirm a Stripe payment after client-side confirmation via Stripe.js
+    confirmStripePaymentIntent: protectedProcedure
+      .input(z.object({
+        paymentIntentId: z.string(),
+        paymentId: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getStripePaymentIntent } = await import("./_core/stripe");
+
+        const payment = await db.getPaymentById(input.paymentId);
+        if (!payment) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Payment not found" });
+        }
+        if (payment.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const intent = await getStripePaymentIntent(input.paymentIntentId);
+        if (!intent) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Stripe payment intent not found" });
+        }
+
+        if (intent.status === "succeeded") {
+          // Extract card details from the payment method
+          let cardLast4: string | undefined;
+          let cardBrand: string | undefined;
+
+          if (intent.payment_method && typeof intent.payment_method !== "string") {
+            cardLast4 = intent.payment_method.card?.last4;
+            cardBrand = intent.payment_method.card?.brand;
+          } else if (typeof intent.payment_method === "string") {
+            try {
+              const { stripeClient } = await import("./_core/stripe");
+              if (stripeClient) {
+                const pm = await stripeClient.paymentMethods.retrieve(intent.payment_method);
+                cardLast4 = pm.card?.last4;
+                cardBrand = pm.card?.brand;
+              }
+            } catch (e) {
+              console.warn("[Stripe] Could not retrieve payment method details:", e);
+            }
+          }
+
+          // Update payment record
+          await db.updatePaymentStatus(payment.id, "succeeded", {
+            paymentIntentId: intent.id,
+            cardLast4,
+            cardBrand,
+            completedAt: new Date(),
+          });
+
+          // Update loan status to fee_paid
+          await db.updateLoanApplicationStatus(payment.loanApplicationId, "fee_paid");
+
+          // Send confirmation emails
+          const userEmailValue = ctx.user.email;
+          if (userEmailValue && typeof userEmailValue === "string") {
+            const application = await db.getLoanApplicationById(payment.loanApplicationId);
+            const fullName = `${ctx.user.firstName || ""} ${ctx.user.lastName || ""}`.trim() || "Valued Customer";
+            
+            try {
+              await sendPaymentReceiptEmail(
+                userEmailValue,
+                fullName,
+                application?.trackingNumber || "",
+                payment.amount,
+                "card",
+                cardLast4 || "****",
+                cardBrand || "Stripe",
+                intent.id
+              );
+            } catch (err) {
+              console.warn("[Email] Failed to send Stripe payment receipt:", err);
+            }
+          }
+
+          // Check and complete referral program
+          try {
+            const { isReferralEligible } = await import("./_core/referrals");
+            const database = await getDb();
+            if (database) {
+              const pendingReferrals = await database
+                .select()
+                .from(referralProgram)
+                .where(and(
+                  eq(referralProgram.referredUserId, ctx.user.id),
+                  eq(referralProgram.status, "pending")
+                ))
+                .limit(1);
+              
+              if (pendingReferrals.length > 0) {
+                const application = await db.getLoanApplicationById(payment.loanApplicationId);
+                const isEligible = isReferralEligible({
+                  referredUserId: ctx.user.id,
+                  loanAmount: application?.requestedAmount || 0,
+                  paymentCompleted: true,
+                });
+                
+                if (isEligible) {
+                  await db.completeReferral(pendingReferrals[0].id);
+                }
+              }
+            }
+          } catch (referralError) {
+            console.error("[Referral] Failed to process referral:", referralError);
+          }
+
+          return {
+            success: true,
+            transactionId: intent.id,
+            cardLast4,
+            cardBrand,
+            message: "Payment confirmed successfully",
+          };
+        } else if (intent.status === "requires_action" || intent.status === "requires_confirmation") {
+          return {
+            success: false,
+            requiresAction: true,
+            error: "Payment requires additional authentication",
+          };
+        } else {
+          await db.updatePaymentStatus(payment.id, "failed", {
+            failureReason: `Stripe payment status: ${intent.status}`,
+          });
+          await db.updateLoanApplicationStatus(payment.loanApplicationId, "fee_pending");
+
+          return {
+            success: false,
+            error: `Payment failed with status: ${intent.status}`,
+          };
+        }
+      }),
+
     // Get supported cryptocurrencies with rates
     getSupportedCryptos: protectedProcedure.query(async () => {
       return getSupportedCryptos();
@@ -5358,6 +5491,70 @@ export const appRouter = router({
           }
 
           return cardResponse;
+        }
+
+        // For card payments with Stripe (no opaqueData means Stripe flow)
+        if (input.paymentMethod === "card" && paymentProvider === "stripe") {
+          const { createStripePaymentIntent } = await import("./_core/stripe");
+          
+          // Create payment record first
+          const payment = await db.createPayment({
+            ...paymentData,
+            paymentProvider: "stripe",
+          });
+          
+          if (!payment) {
+            throw new TRPCError({ 
+              code: "INTERNAL_SERVER_ERROR", 
+              message: "Failed to create payment record" 
+            });
+          }
+
+          const amountDollars = application.processingFeeAmount / 100;
+          const result = await createStripePaymentIntent(amountDollars, "usd", {
+            userId: String(ctx.user.id),
+            loanApplicationId: String(input.loanApplicationId),
+            paymentId: String(payment.id),
+            type: "processing_fee",
+          });
+
+          if (!result.success) {
+            await db.updatePaymentStatus(payment.id, "failed", {
+              failureReason: result.error || "Stripe payment intent creation failed",
+            });
+            await db.updateLoanApplicationStatus(input.loanApplicationId, "fee_pending");
+
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: result.error || "Failed to create Stripe payment",
+            });
+          }
+
+          // Update payment record with Stripe payment intent ID
+          await db.updatePaymentStatus(payment.id, "processing", {
+            paymentIntentId: result.paymentIntentId,
+          });
+
+          const stripeResponse = {
+            success: true,
+            paymentId: payment.id,
+            amount: application.processingFeeAmount,
+            clientSecret: result.clientSecret,
+            paymentIntentId: result.paymentIntentId,
+            requiresClientConfirmation: true,
+            message: "Stripe payment intent created - confirm on client",
+          };
+
+          if (input.idempotencyKey) {
+            await db.storeIdempotencyResult(
+              input.idempotencyKey,
+              payment.id,
+              stripeResponse,
+              "success"
+            ).catch(err => console.warn("[Idempotency] Failed to cache Stripe payment result:", err));
+          }
+
+          return stripeResponse;
         }
 
         // For crypto payments, create charge and get payment address

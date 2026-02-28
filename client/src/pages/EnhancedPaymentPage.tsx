@@ -8,13 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { APP_LOGO, APP_TITLE } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { Loader2, CreditCard, Bitcoin, CheckCircle, Copy, QrCode, Lock, Shield, AlertCircle, Clock, X } from "lucide-react";
+import { Loader2, CreditCard, Bitcoin, CheckCircle, Copy, QrCode, Lock, Shield, AlertCircle, Clock, X, Zap } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { toast } from "sonner";
 import { PaymentAnimationOverlay } from "@/components/PaymentAnimationOverlay";
 import { SupportModal } from "@/components/SupportModal";
 import { SecuritySeal } from "@/components/SecuritySeal";
+import StripePaymentForm from "@/components/StripePaymentForm";
 
 // Declare Accept.js types
 declare global {
@@ -40,7 +41,7 @@ export default function EnhancedPaymentPage() {
   const [, setLocation] = useLocation();
   const applicationId = params?.id ? parseInt(params.id) : null;
 
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "crypto">("card");
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "stripe" | "crypto">("card");
   const [selectedCrypto, setSelectedCrypto] = useState<"BTC" | "ETH" | "USDT" | "USDC">("USDT");
   const [cryptoPaymentData, setCryptoPaymentData] = useState<{
     address: string;
@@ -253,14 +254,15 @@ export default function EnhancedPaymentPage() {
 
     if (paymentMethod === "card") {
       handleCardPayment();
-    } else {
+    } else if (paymentMethod === "crypto") {
       createPaymentMutation.mutate({
         loanApplicationId: applicationId,
-        paymentMethod,
+        paymentMethod: "crypto",
         paymentProvider: "crypto",
         cryptoCurrency: selectedCrypto,
       });
     }
+    // "stripe" is handled by StripePaymentForm component directly
   };
 
   const handleConfirmPayment = () => {
@@ -570,15 +572,19 @@ export default function EnhancedPaymentPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "card" | "crypto")}>
-                    <TabsList className="grid w-full grid-cols-2 text-xs sm:text-sm">
+                  <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "card" | "stripe" | "crypto")}>
+                    <TabsList className="grid w-full grid-cols-3 text-xs sm:text-sm">
                       <TabsTrigger value="card" className="text-xs sm:text-sm">
                         <CreditCard className="mr-2 h-4 w-4" />
-                        Credit/Debit Card
+                        Card
+                      </TabsTrigger>
+                      <TabsTrigger value="stripe" className="text-xs sm:text-sm">
+                        <Zap className="mr-2 h-4 w-4" />
+                        Stripe
                       </TabsTrigger>
                       <TabsTrigger value="crypto">
                         <Bitcoin className="mr-2 h-4 w-4" />
-                        Cryptocurrency
+                        Crypto
                       </TabsTrigger>
                     </TabsList>
 
@@ -700,6 +706,53 @@ export default function EnhancedPaymentPage() {
                         <img src="https://brand.mastercard.com/content/dam/mccom/brandcenter/thumbnails/mastercard_vrt_rev_92px_2x.png" alt="Mastercard" className="h-6 grayscale opacity-60" />
                         <img src="https://www.aexp-static.com/cdaas/one/statics/axp-static-assets/1.8.0/package/dist/img/logos/dls-logo-bluebox-solid.svg" alt="Amex" className="h-6 grayscale opacity-60" />
                       </div>
+                    </TabsContent>
+
+                    {/* Stripe Payment */}
+                    <TabsContent value="stripe" className="space-y-4 mt-6">
+                      <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Zap className="h-5 w-5 text-indigo-600" />
+                          <p className="text-sm text-indigo-900 font-medium">
+                            Secure Payment via Stripe
+                          </p>
+                        </div>
+                        <p className="text-sm text-indigo-800">
+                          Pay securely with Stripe. Supports Visa, Mastercard, American Express, 
+                          Apple Pay, Google Pay, and more.
+                        </p>
+                      </div>
+
+                      {applicationId && application && (
+                        <StripePaymentForm
+                          loanApplicationId={applicationId}
+                          amount={application.processingFeeAmount || 0}
+                          onSuccess={(data) => {
+                            setAnimationStatus("success");
+                            setTimeout(() => {
+                              setPaymentVerification({
+                                status: "confirmed",
+                                method: "card",
+                                transactionId: data.transactionId,
+                                message: "✅ Stripe payment confirmed! Your processing fee has been paid.",
+                              });
+                              toast.success("Payment confirmed! Your loan is ready for disbursement.");
+                            }, 1500);
+                          }}
+                          onError={(error) => {
+                            setAnimationStatus("failed");
+                            setTimeout(() => {
+                              setPaymentVerification({
+                                status: "failed",
+                                method: "card",
+                                message: `❌ Payment failed: ${error}`,
+                              });
+                              toast.error(error);
+                            }, 1500);
+                          }}
+                          onProcessing={setProcessingCard}
+                        />
+                      )}
                     </TabsContent>
 
                     <TabsContent value="crypto" className="space-y-4 mt-6">
