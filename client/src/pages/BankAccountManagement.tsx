@@ -23,8 +23,32 @@ interface BankAccount {
 export function BankAccountManagement() {
   const [showAddAccount, setShowAddAccount] = useState(false);
 
+  // Add account form state
+  const [newAccountName, setNewAccountName] = useState("");
+  const [newBankName, setNewBankName] = useState("");
+  const [newAccountType, setNewAccountType] = useState<"checking" | "savings">("checking");
+  const [newAccountNumber, setNewAccountNumber] = useState("");
+  const [newRoutingNumber, setNewRoutingNumber] = useState("");
+
   // Fetch real bank accounts from backend
   const { data: bankAccounts = [], isLoading, refetch } = trpc.userFeatures.bankAccounts.list.useQuery();
+
+  // Add bank account mutation
+  const addAccountMutation = trpc.userFeatures.bankAccounts.add.useMutation({
+    onSuccess: () => {
+      toast.success("Bank account added successfully");
+      setShowAddAccount(false);
+      setNewAccountName("");
+      setNewBankName("");
+      setNewAccountType("checking");
+      setNewAccountNumber("");
+      setNewRoutingNumber("");
+      refetch();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to add bank account");
+    },
+  });
 
   // Remove bank account mutation
   const removeAccountMutation = trpc.userFeatures.bankAccounts.remove.useMutation({
@@ -36,6 +60,20 @@ export function BankAccountManagement() {
       toast.error(error.message || "Failed to remove bank account");
     },
   });
+
+  const handleAddAccount = () => {
+    if (!newAccountName.trim() || !newBankName.trim() || !newAccountNumber.trim() || !newRoutingNumber.trim()) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    addAccountMutation.mutate({
+      accountHolderName: newAccountName,
+      bankName: newBankName,
+      accountType: newAccountType,
+      accountNumber: newAccountNumber,
+      routingNumber: newRoutingNumber,
+    });
+  };
 
   // Map backend accounts to UI format
   const accounts: BankAccount[] = bankAccounts.map((acc: any) => ({
@@ -110,9 +148,11 @@ export function BankAccountManagement() {
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <label className="text-white text-sm font-medium mb-2 block">Account Nickname</label>
+                  <label className="text-white text-sm font-medium mb-2 block">Account Holder Name</label>
                   <Input
-                    placeholder="e.g., My Checking"
+                    placeholder="Full name on account"
+                    value={newAccountName}
+                    onChange={(e) => setNewAccountName(e.target.value)}
                     className="bg-slate-700 border-slate-600 text-white"
                   />
                 </div>
@@ -120,15 +160,21 @@ export function BankAccountManagement() {
                   <label className="text-white text-sm font-medium mb-2 block">Bank Name</label>
                   <Input
                     placeholder="Your bank name"
+                    value={newBankName}
+                    onChange={(e) => setNewBankName(e.target.value)}
                     className="bg-slate-700 border-slate-600 text-white"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-white text-sm font-medium mb-2 block">Account Type</label>
-                    <select className="w-full bg-slate-700 border border-slate-600 text-white rounded-md px-3 py-2">
-                      <option>Checking</option>
-                      <option>Savings</option>
+                    <select
+                      value={newAccountType}
+                      onChange={(e) => setNewAccountType(e.target.value as "checking" | "savings")}
+                      className="w-full bg-slate-700 border border-slate-600 text-white rounded-md px-3 py-2"
+                    >
+                      <option value="checking">Checking</option>
+                      <option value="savings">Savings</option>
                     </select>
                   </div>
                   <div>
@@ -136,6 +182,8 @@ export function BankAccountManagement() {
                     <Input
                       placeholder="Account number"
                       type="password"
+                      value={newAccountNumber}
+                      onChange={(e) => setNewAccountNumber(e.target.value)}
                       className="bg-slate-700 border-slate-600 text-white"
                     />
                   </div>
@@ -143,8 +191,10 @@ export function BankAccountManagement() {
                 <div>
                   <label className="text-white text-sm font-medium mb-2 block">Routing Number</label>
                   <Input
-                    placeholder="Routing number"
+                    placeholder="9-digit routing number"
                     type="password"
+                    value={newRoutingNumber}
+                    onChange={(e) => setNewRoutingNumber(e.target.value)}
                     className="bg-slate-700 border-slate-600 text-white"
                   />
                 </div>
@@ -155,10 +205,11 @@ export function BankAccountManagement() {
                   </p>
                 </div>
                 <Button
-                  onClick={() => setShowAddAccount(false)}
+                  onClick={handleAddAccount}
                   className="w-full bg-blue-600 hover:bg-blue-700"
+                  disabled={addAccountMutation.isPending}
                 >
-                  Add Account
+                  {addAccountMutation.isPending ? "Adding..." : "Add Account"}
                 </Button>
               </div>
             </DialogContent>
@@ -244,6 +295,8 @@ export function BankAccountManagement() {
                       variant="ghost"
                       size="sm"
                       className="text-red-400 hover:text-red-300 hover:bg-red-600/20"
+                      onClick={() => removeAccountMutation.mutate({ accountId: parseInt(account.id) })}
+                      disabled={removeAccountMutation.isPending}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>

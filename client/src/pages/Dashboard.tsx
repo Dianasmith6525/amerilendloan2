@@ -1262,7 +1262,9 @@ export default function Dashboard() {
                                     <p className="text-sm text-green-800 mb-3">
                                       Your first payment is due 30 days from disbursement. Set up automatic payments to avoid late fees.
                                     </p>
-                                    <Button variant="outline" className="text-sm">
+                                    <Button variant="outline" className="text-sm" onClick={() => {
+                                      document.getElementById('payment-schedule-section')?.scrollIntoView({ behavior: 'smooth' });
+                                    }}>
                                       <Calendar className="w-3 h-3 mr-1" />
                                       View Full Payment Schedule
                                     </Button>
@@ -1326,13 +1328,59 @@ export default function Dashboard() {
                                         </Button>
                                       </a>
                                       {(loan.status === "fee_paid" || loan.status === "disbursed") && (
-                                        <Button variant="outline" size="sm">
+                                        <Button variant="outline" size="sm" onClick={() => {
+                                          const receiptContent = [
+                                            'AMERILEND - PROCESSING FEE RECEIPT',
+                                            '='.repeat(45),
+                                            '',
+                                            `Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+                                            `Loan ID: ${loan.id}`,
+                                            `Borrower: ${user?.name || 'N/A'}`,
+                                            `Loan Amount: ${formatCurrency(loan.approvedAmount || 0)}`,
+                                            `Processing Fee: ${formatCurrency(loan.processingFeeAmount || 0)}`,
+                                            `Status: Paid`,
+                                            '',
+                                            '='.repeat(45),
+                                            'Thank you for your payment.',
+                                            'AmeriLend, LLC | amerilendloan.com',
+                                          ].join('\n');
+                                          const blob = new Blob([receiptContent], { type: 'text/plain' });
+                                          const url = URL.createObjectURL(blob);
+                                          const a = document.createElement('a');
+                                          a.href = url;
+                                          a.download = `processing-fee-receipt-${loan.id}.txt`;
+                                          a.click();
+                                          URL.revokeObjectURL(url);
+                                        }}>
                                           <Download className="w-3 h-3 mr-1" />
                                           Processing Fee Receipt
                                         </Button>
                                       )}
                                       {loan.status === "disbursed" && (
-                                        <Button variant="outline" size="sm">
+                                        <Button variant="outline" size="sm" onClick={() => {
+                                          const confirmContent = [
+                                            'AMERILEND - DISBURSEMENT CONFIRMATION',
+                                            '='.repeat(45),
+                                            '',
+                                            `Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+                                            `Loan ID: ${loan.id}`,
+                                            `Borrower: ${user?.name || 'N/A'}`,
+                                            `Approved Amount: ${formatCurrency(loan.approvedAmount || 0)}`,
+                                            `Disbursement Status: Completed`,
+                                            `Tracking Number: ${(loan as any).trackingNumber || 'N/A'}`,
+                                            '',
+                                            '='.repeat(45),
+                                            'Funds have been transferred to your bank account.',
+                                            'AmeriLend, LLC | amerilendloan.com',
+                                          ].join('\n');
+                                          const blob = new Blob([confirmContent], { type: 'text/plain' });
+                                          const url = URL.createObjectURL(blob);
+                                          const a = document.createElement('a');
+                                          a.href = url;
+                                          a.download = `disbursement-confirmation-${loan.id}.txt`;
+                                          a.click();
+                                          URL.revokeObjectURL(url);
+                                        }}>
                                           <Download className="w-3 h-3 mr-1" />
                                           Disbursement Confirmation
                                         </Button>
@@ -1825,7 +1873,7 @@ export default function Dashboard() {
             )}
 
             {/* Payment Schedule Section */}
-            <Card className="mt-6">
+            <Card className="mt-6" id="payment-schedule-section">
             <CardHeader>
               <CardTitle className="text-2xl text-[#0A2540]">Payment Schedule</CardTitle>
               <CardDescription>View your upcoming loan repayment schedule</CardDescription>
@@ -1973,80 +2021,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Auto-Pay Settings */}
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle className="text-2xl text-[#0A2540]">Auto-Pay Settings</CardTitle>
-              <CardDescription>Set up automatic monthly payments</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loans && loans.filter(l => l.status === "disbursed").length > 0 ? (
-                <div className="space-y-6">
-                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-amber-900">Auto-Pay Coming Soon</p>
-                        <p className="text-xs text-amber-700 mt-1">
-                          Automatic payment functionality will be available in the next update. 
-                          You'll be able to link your bank account and set up recurring payments.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label>Payment Method</Label>
-                        <Select disabled>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select payment method" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="bank">Bank Account</SelectItem>
-                            <SelectItem value="card">Debit Card</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label>Payment Date</Label>
-                        <Select disabled>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select payment date" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="1">1st of month</SelectItem>
-                            <SelectItem value="15">15th of month</SelectItem>
-                            <SelectItem value="30">Last day of month</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-900">Enable Auto-Pay</p>
-                        <p className="text-sm text-gray-500">Automatically pay your monthly loan payment</p>
-                      </div>
-                      <Button disabled variant="outline">
-                        Enable
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <CreditCard className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-600">No active loans</p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Auto-pay will be available once you have an active loan
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+
 
           {/* Help Section */}
           <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
@@ -2115,7 +2090,7 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="border-t border-white/20 pt-6 text-center text-xs text-white/70">
-              <p>© 2025 AmeriLend, LLC. All Rights Reserved.</p>
+              <p>© {new Date().getFullYear()} AmeriLend, LLC. All Rights Reserved.</p>
               <p className="mt-2">Your trusted partner for consumer loans.</p>
             </div>
           </div>

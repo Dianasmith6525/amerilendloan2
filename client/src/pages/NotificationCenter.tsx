@@ -2,11 +2,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bell, CheckCircle, AlertCircle, Info, Trash2, Archive } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { Bell, CheckCircle, AlertCircle, Info, Trash2, Archive, Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { formatDate } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
 
 interface Notification {
   id: string;
@@ -21,9 +21,45 @@ interface Notification {
 export function NotificationCenter() {
   const [filter, setFilter] = useState<"all" | "unread">("all");
 
+  // Notification preferences state
+  const [prefEmail, setPrefEmail] = useState(true);
+  const [prefSms, setPrefSms] = useState(true);
+  const [prefInApp, setPrefInApp] = useState(true);
+
   // Fetch real notifications from backend
   const { data: notificationsData = [], isLoading } = trpc.userFeatures.notifications.list.useQuery({ 
     limit: 50 
+  });
+
+  // Fetch user notification preferences
+  const { data: notifPrefs } = trpc.auth.getNotificationPreferences.useQuery();
+
+  // Sync preferences state when data loads
+  useEffect(() => {
+    if (notifPrefs) {
+      setPrefEmail((notifPrefs as any).emailUpdates ?? true);
+      setPrefSms((notifPrefs as any).sms ?? true);
+      setPrefInApp((notifPrefs as any).loanUpdates ?? true);
+    }
+  }, [notifPrefs]);
+
+  const utils = trpc.useUtils();
+
+  // Mark as read mutation
+  const markAsReadMutation = trpc.userFeatures.notifications.markAsRead.useMutation({
+    onSuccess: () => {
+      utils.userFeatures.notifications.list.invalidate();
+    },
+    onError: () => toast.error("Failed to mark notification as read"),
+  });
+
+  // Save preferences mutation
+  const savePrefsMutation = trpc.auth.updateNotificationPreferences.useMutation({
+    onSuccess: () => {
+      toast.success("Notification preferences saved");
+      utils.auth.getNotificationPreferences.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to save preferences"),
   });
 
   // Map database fields to component interface
@@ -168,20 +204,18 @@ export function NotificationCenter() {
                           </div>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-slate-400 hover:text-slate-300"
-                          >
-                            <Archive className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-slate-400 hover:text-red-400"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {!notification.read && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-slate-400 hover:text-slate-300"
+                              title="Mark as read"
+                              onClick={() => markAsReadMutation.mutate({ notificationId: parseInt(notification.id) })}
+                              disabled={markAsReadMutation.isPending}
+                            >
+                              <Archive className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -214,23 +248,35 @@ export function NotificationCenter() {
                   <p className="font-medium text-white">Email Notifications</p>
                   <p className="text-sm text-slate-400">Receive updates via email</p>
                 </div>
-                <input type="checkbox" defaultChecked className="w-5 h-5" />
+                <input type="checkbox" checked={prefEmail} onChange={(e) => setPrefEmail(e.target.checked)} className="w-5 h-5" />
               </div>
               <div className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg">
                 <div>
                   <p className="font-medium text-white">SMS Notifications</p>
                   <p className="text-sm text-slate-400">Receive critical alerts via SMS</p>
                 </div>
-                <input type="checkbox" defaultChecked className="w-5 h-5" />
+                <input type="checkbox" checked={prefSms} onChange={(e) => setPrefSms(e.target.checked)} className="w-5 h-5" />
               </div>
               <div className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg">
                 <div>
                   <p className="font-medium text-white">In-App Notifications</p>
                   <p className="text-sm text-slate-400">Show notifications in your dashboard</p>
                 </div>
-                <input type="checkbox" defaultChecked className="w-5 h-5" />
+                <input type="checkbox" checked={prefInApp} onChange={(e) => setPrefInApp(e.target.checked)} className="w-5 h-5" />
               </div>
-              <Button className="w-full mt-4">Save Preferences</Button>
+              <Button
+                className="w-full mt-4"
+                onClick={() => savePrefsMutation.mutate({
+                  emailUpdates: prefEmail,
+                  sms: prefSms,
+                  loanUpdates: prefInApp,
+                  promotions: true,
+                })}
+                disabled={savePrefsMutation.isPending}
+              >
+                {savePrefsMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save Preferences
+              </Button>
             </div>
           </CardContent>
         </Card>

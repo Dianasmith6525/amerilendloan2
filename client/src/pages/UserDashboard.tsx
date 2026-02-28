@@ -21,6 +21,10 @@ export function UserDashboard() {
     enabled: !!user,
   });
 
+  const { data: kycStatus } = trpc.userFeatures.kyc.getStatus.useQuery(undefined, {
+    enabled: !!user,
+  });
+
   if (userLoading || loansLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -382,7 +386,13 @@ export function UserDashboard() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <Button 
-                  onClick={() => navigate('/payment')}
+                  onClick={() => {
+                    if (activeLoan) {
+                      navigate(`/payment/${activeLoan.id}`);
+                    } else {
+                      navigate('/dashboard');
+                    }
+                  }}
                   variant="outline"
                   className="w-full justify-start"
                 >
@@ -434,14 +444,24 @@ export function UserDashboard() {
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-slate-600 dark:text-slate-400">KYC Verified</span>
-                  <Badge variant="outline" className="bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
-                    ✓ Verified
+                  <Badge variant="outline" className={`${
+                    (kycStatus as any)?.status === 'approved'
+                      ? 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800'
+                      : (kycStatus as any)?.status === 'pending'
+                        ? 'bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800'
+                        : 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800'
+                  }`}>
+                    {(kycStatus as any)?.status === 'approved' ? '✓ Verified' : (kycStatus as any)?.status === 'pending' ? '⏳ Pending' : '✗ Not Verified'}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-slate-600 dark:text-slate-400">Email Verified</span>
-                  <Badge variant="outline" className="bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
-                    ✓ Verified
+                  <Badge variant="outline" className={`${
+                    (user as any)?.emailVerified
+                      ? 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800'
+                      : 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800'
+                  }`}>
+                    {(user as any)?.emailVerified ? '✓ Verified' : '✗ Not Verified'}
                   </Badge>
                 </div>
                 <div className="border-t border-slate-200 dark:border-slate-700 pt-3 mt-3">
