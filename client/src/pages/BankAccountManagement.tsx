@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 // ──────────────────────────────────────────
 //  Helpers
@@ -67,6 +68,8 @@ const billCategories = [
 // ──────────────────────────────────────────
 export function BankAccountManagement() {
   const [, navigate] = useLocation();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [activeTab, setActiveTab] = useState("accounts");
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [showBalances, setShowBalances] = useState(true);
@@ -238,7 +241,7 @@ export function BankAccountManagement() {
             </Button>
             <Dialog open={showAddAccount} onOpenChange={setShowAddAccount}>
               <DialogTrigger asChild>
-                <Button className="bg-blue-600 hover:bg-blue-700">
+                <Button className="bg-blue-600 hover:bg-blue-700" disabled={isAdmin} title={isAdmin ? "Admin cannot add accounts" : undefined}>
                   <Plus className="w-4 h-4 mr-1" /> Add Account
                 </Button>
               </DialogTrigger>
@@ -373,10 +376,19 @@ export function BankAccountManagement() {
             ) : bankAccounts.length === 0 ? (
               <div className="text-center py-16">
                 <CreditCard className="w-14 h-14 text-slate-500 mx-auto mb-4 opacity-50" />
-                <p className="text-slate-400 mb-4 text-lg">No bank accounts yet</p>
-                <Button onClick={() => setShowAddAccount(true)} className="bg-blue-600 hover:bg-blue-700">
-                  <Plus className="w-4 h-4 mr-2" /> Add Your First Account
-                </Button>
+                {isAdmin ? (
+                  <>
+                    <p className="text-slate-400 mb-2 text-lg">Admin accounts cannot open bank accounts</p>
+                    <p className="text-slate-500 text-sm">Use the <button onClick={() => navigate('/admin/invitations')} className="text-blue-400 underline hover:text-blue-300">Invitation System</button> to invite users who can manage their own accounts.</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-slate-400 mb-4 text-lg">No bank accounts yet</p>
+                    <Button onClick={() => setShowAddAccount(true)} className="bg-blue-600 hover:bg-blue-700">
+                      <Plus className="w-4 h-4 mr-2" /> Add Your First Account
+                    </Button>
+                  </>
+                )}
               </div>
             ) : (
               bankAccounts.map((acc: any) => (
@@ -679,6 +691,18 @@ export function BankAccountManagement() {
                     <label className="text-white text-sm font-medium mb-1 block">Check Number <span className="text-slate-400">(opt)</span></label>
                     <Input placeholder="#1234" value={mdCheckNumber} onChange={(e) => setMdCheckNumber(e.target.value)} className="bg-slate-700 border-slate-600 text-white" />
                   </div>
+                </div>
+
+                {/* Endorsement Instruction */}
+                <div className="bg-amber-500/10 border border-amber-500/40 rounded-lg p-4">
+                  <p className="text-amber-300 text-sm font-semibold mb-1 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    Endorsement Required
+                  </p>
+                  <p className="text-amber-200 text-sm">
+                    Please write on the back of your check: <strong className="text-white">"For Mobile Deposit Only at AmeriLendLoan"</strong>
+                  </p>
+                  <p className="text-amber-200/70 text-xs mt-1">Checks without proper endorsement may be rejected.</p>
                 </div>
 
                 {/* Check Images */}

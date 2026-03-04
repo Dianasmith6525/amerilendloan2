@@ -1060,7 +1060,7 @@ export default function Dashboard() {
                                   {loan.status === "fee_paid" && (
                                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800 hidden md:block">
                                       <p className="font-semibold">Payment Confirmed</p>
-                                      <p>Your loan is being processed.</p>
+                                      <p>Your payment is being verified by our team. Disbursement will follow shortly.</p>
                                     </div>
                                   )}
                                   {loan.status === "disbursed" && (

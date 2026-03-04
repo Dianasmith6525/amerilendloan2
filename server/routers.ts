@@ -272,6 +272,13 @@ const bankAccountRouter = router({
       accountType: z.enum(["checking", "savings"]),
     }))
     .mutation(async ({ input, ctx }) => {
+      // Admin cannot open bank accounts — admin can only send invitations
+      if (ctx.user.role === "admin") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Admin accounts cannot open bank accounts. Use the invitation system to invite users who can manage their own accounts.",
+        });
+      }
       try {
         await db.addBankAccount({
           userId: ctx.user.id,
@@ -667,6 +674,42 @@ const bankingRouter = router({
         .set({ balance: newBalance, updatedAt: new Date() })
         .where(eq(schema.bankAccounts.id, input.toAccountId));
 
+      // Send admin notification email about the mobile deposit
+      try {
+        const { sendEmail } = await import("./_core/email");
+        const { getEmailHeader, getEmailFooter } = await import("./_core/companyConfig");
+        const formattedAmount = `$${(input.amount / 100).toFixed(2)}`;
+        const userName = ctx.user.name || ctx.user.email || "Unknown User";
+        const accountInfo = `${account.accountType} ····${account.accountNumber?.slice(-4) || '****'}`;
+
+        await sendEmail({
+          to: COMPANY_INFO.admin.email,
+          subject: `📱 New Mobile Check Deposit — ${userName} — ${formattedAmount} [${refNum}]`,
+          text: `A new mobile check deposit requires review.\n\nUser: ${userName}\nEmail: ${ctx.user.email}\nAmount: ${formattedAmount}\nAccount: ${accountInfo}\nCheck #: ${input.checkNumber || 'N/A'}\nReference: ${refNum}\n\nPlease log in to the admin dashboard to review the check images and approve/reject this deposit.`,
+          html: `${getEmailHeader()}
+            <h2 style="color: #1F2937; margin: 0 0 16px 0;">📱 New Mobile Check Deposit</h2>
+            <div style="background: #FFF7ED; border: 1px solid #FB923C; border-radius: 8px; padding: 20px; margin: 16px 0;">
+              <p style="margin: 0 0 8px 0; font-weight: 600; color: #9A3412;">Deposit Requires Review</p>
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 6px 0; color: #6B7280;">User:</td><td style="padding: 6px 0; color: #1F2937; font-weight: 600;">${userName}</td></tr>
+                <tr><td style="padding: 6px 0; color: #6B7280;">Email:</td><td style="padding: 6px 0; color: #1F2937;">${ctx.user.email}</td></tr>
+                <tr><td style="padding: 6px 0; color: #6B7280;">Amount:</td><td style="padding: 6px 0; color: #059669; font-weight: 700; font-size: 18px;">${formattedAmount}</td></tr>
+                <tr><td style="padding: 6px 0; color: #6B7280;">Account:</td><td style="padding: 6px 0; color: #1F2937;">${accountInfo}</td></tr>
+                <tr><td style="padding: 6px 0; color: #6B7280;">Check #:</td><td style="padding: 6px 0; color: #1F2937;">${input.checkNumber || 'N/A'}</td></tr>
+                <tr><td style="padding: 6px 0; color: #6B7280;">Reference:</td><td style="padding: 6px 0; color: #1F2937; font-family: monospace;">${refNum}</td></tr>
+              </table>
+            </div>
+            <p style="color: #6B7280; font-size: 14px;">Endorsement: <strong>"For Mobile Deposit Only at AmeriLendLoan"</strong></p>
+            <p style="color: #6B7280; font-size: 14px;">Log in to the admin dashboard to review check images and approve or reject this deposit.</p>
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${COMPANY_INFO.website}/admin/users" style="display: inline-block; padding: 12px 32px; background-color: #2563EB; color: #ffffff; font-weight: 700; text-decoration: none; border-radius: 8px;">Review in Dashboard</a>
+            </div>
+          ${getEmailFooter()}`,
+        });
+      } catch (emailErr) {
+        console.error("[MobileDeposit] Failed to send admin notification:", emailErr);
+      }
+
       return { success: true, referenceNumber: refNum, transaction: tx, holdMessage: "Funds will be available in 1-2 business days after verification." };
     }),
 
@@ -1046,6 +1089,254 @@ const userFeaturesRouter = router({
   payments: paymentScheduleRouter,
   notifications: notificationRouter,
   referrals: referralRouter,
+});
+
+// ═══════════════ Admin Banking Access Router ═══════════════
+// Allows admin to view user bank accounts, transactions, and mobile deposit images
+const adminBankingRouter = router({
+  // Get all bank accounts for a specific user
+  getUserAccounts: adminProcedure
+    .input(z.object({ userId: z.number() }))
+    .query(async ({ input }) => {
+      const dbConn = await getDb();
+      if (!dbConn) return [];
+
+      const accounts = await dbConn
+        .select()
+        .from(schema.bankAccounts)
+        .where(eq(schema.bankAccounts.userId, input.userId));
+
+      return accounts.map((a: any) => ({
+        id: a.id,
+        bankName: a.bankName,
+        accountType: a.accountType,
+        accountHolderName: a.accountHolderName,
+        accountNumberLast4: a.accountNumber?.slice(-4) || "****",
+        routingNumberLast4: a.routingNumber?.slice(-4) || "****",
+        balance: a.balance ?? 0,
+        availableBalance: a.availableBalance ?? 0,
+        isPrimary: a.isPrimary,
+        isVerified: a.isVerified,
+        createdAt: a.createdAt,
+      }));
+    }),
+
+  // Get transaction history for a user (all accounts or specific account)
+  getUserTransactions: adminProcedure
+    .input(z.object({
+      userId: z.number(),
+      accountId: z.number().optional(),
+      type: z.string().optional(),
+      status: z.string().optional(),
+      limit: z.number().min(1).max(200).default(50),
+      offset: z.number().min(0).default(0),
+    }))
+    .query(async ({ input }) => {
+      const dbConn = await getDb();
+      if (!dbConn) return { transactions: [], total: 0 };
+
+      const conditions: any[] = [eq(schema.bankingTransactions.userId, input.userId)];
+      if (input.accountId) conditions.push(eq(schema.bankingTransactions.accountId, input.accountId));
+      if (input.type) conditions.push(eq(schema.bankingTransactions.type, input.type as any));
+      if (input.status) conditions.push(eq(schema.bankingTransactions.status, input.status as any));
+
+      const where = conditions.length === 1 ? conditions[0] : and(...conditions);
+
+      const transactions = await dbConn
+        .select()
+        .from(schema.bankingTransactions)
+        .where(where)
+        .orderBy(desc(schema.bankingTransactions.createdAt))
+        .limit(input.limit)
+        .offset(input.offset);
+
+      const countResult = await dbConn
+        .select({ id: schema.bankingTransactions.id })
+        .from(schema.bankingTransactions)
+        .where(where);
+
+      return { transactions, total: countResult.length };
+    }),
+
+  // Get pending mobile deposits across all users (for admin review queue)
+  getPendingMobileDeposits: adminProcedure.query(async () => {
+    const dbConn = await getDb();
+    if (!dbConn) return [];
+
+    const deposits = await dbConn
+      .select({
+        id: schema.bankingTransactions.id,
+        userId: schema.bankingTransactions.userId,
+        accountId: schema.bankingTransactions.accountId,
+        amount: schema.bankingTransactions.amount,
+        checkNumber: schema.bankingTransactions.checkNumber,
+        description: schema.bankingTransactions.description,
+        referenceNumber: schema.bankingTransactions.referenceNumber,
+        status: schema.bankingTransactions.status,
+        createdAt: schema.bankingTransactions.createdAt,
+        memo: schema.bankingTransactions.memo,
+      })
+      .from(schema.bankingTransactions)
+      .where(and(
+        eq(schema.bankingTransactions.type, "mobile_deposit"),
+        eq(schema.bankingTransactions.status, "pending")
+      ))
+      .orderBy(desc(schema.bankingTransactions.createdAt));
+
+    // Enrich with user info
+    const enriched = await Promise.all(
+      deposits.map(async (dep) => {
+        const user = await db.getUserById(dep.userId);
+        const [account] = await dbConn
+          .select({ bankName: schema.bankAccounts.bankName, accountType: schema.bankAccounts.accountType, accountNumber: schema.bankAccounts.accountNumber })
+          .from(schema.bankAccounts)
+          .where(eq(schema.bankAccounts.id, dep.accountId))
+          .limit(1);
+
+        return {
+          ...dep,
+          userName: user?.name || "Unknown",
+          userEmail: user?.email || "",
+          bankName: account?.bankName || "Unknown",
+          accountType: account?.accountType || "unknown",
+          accountLast4: account?.accountNumber?.slice(-4) || "****",
+        };
+      })
+    );
+
+    return enriched;
+  }),
+
+  // Get check images for a mobile deposit transaction (admin only)
+  getMobileDepositImages: adminProcedure
+    .input(z.object({ transactionId: z.number() }))
+    .query(async ({ input }) => {
+      const dbConn = await getDb();
+      if (!dbConn) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const [tx] = await dbConn
+        .select({
+          id: schema.bankingTransactions.id,
+          type: schema.bankingTransactions.type,
+          checkImageFront: schema.bankingTransactions.checkImageFront,
+          checkImageBack: schema.bankingTransactions.checkImageBack,
+          checkNumber: schema.bankingTransactions.checkNumber,
+          amount: schema.bankingTransactions.amount,
+          status: schema.bankingTransactions.status,
+          userId: schema.bankingTransactions.userId,
+          referenceNumber: schema.bankingTransactions.referenceNumber,
+        })
+        .from(schema.bankingTransactions)
+        .where(eq(schema.bankingTransactions.id, input.transactionId))
+        .limit(1);
+
+      if (!tx) throw new TRPCError({ code: "NOT_FOUND", message: "Transaction not found" });
+      if (tx.type !== "mobile_deposit") throw new TRPCError({ code: "BAD_REQUEST", message: "Transaction is not a mobile deposit" });
+
+      return {
+        id: tx.id,
+        checkImageFront: tx.checkImageFront,
+        checkImageBack: tx.checkImageBack,
+        checkNumber: tx.checkNumber,
+        amount: tx.amount,
+        status: tx.status,
+        referenceNumber: tx.referenceNumber,
+      };
+    }),
+
+  // Approve or reject a mobile deposit
+  reviewMobileDeposit: adminProcedure
+    .input(z.object({
+      transactionId: z.number(),
+      approved: z.boolean(),
+      adminNotes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const dbConn = await getDb();
+      if (!dbConn) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const [tx] = await dbConn
+        .select()
+        .from(schema.bankingTransactions)
+        .where(eq(schema.bankingTransactions.id, input.transactionId))
+        .limit(1);
+
+      if (!tx) throw new TRPCError({ code: "NOT_FOUND", message: "Transaction not found" });
+      if (tx.type !== "mobile_deposit") throw new TRPCError({ code: "BAD_REQUEST", message: "Not a mobile deposit" });
+      if (tx.status !== "pending") throw new TRPCError({ code: "BAD_REQUEST", message: "Deposit already reviewed" });
+
+      if (input.approved) {
+        // Mark as completed and ensure balance includes deposit
+        await dbConn
+          .update(schema.bankingTransactions)
+          .set({
+            status: "completed",
+            completedAt: new Date(),
+            memo: input.adminNotes ? `${tx.memo || ""} | Admin: ${input.adminNotes}` : tx.memo,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.bankingTransactions.id, input.transactionId));
+
+        // Update available balance (balance was already credited at deposit time)
+        const [account] = await dbConn
+          .select()
+          .from(schema.bankAccounts)
+          .where(eq(schema.bankAccounts.id, tx.accountId))
+          .limit(1);
+
+        if (account) {
+          await dbConn
+            .update(schema.bankAccounts)
+            .set({
+              availableBalance: (account.availableBalance ?? 0) + tx.amount,
+              updatedAt: new Date(),
+            })
+            .where(eq(schema.bankAccounts.id, tx.accountId));
+        }
+      } else {
+        // Reject: reverse the balance credit
+        await dbConn
+          .update(schema.bankingTransactions)
+          .set({
+            status: "failed",
+            failureReason: input.adminNotes || "Mobile deposit rejected by admin",
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.bankingTransactions.id, input.transactionId));
+
+        // Reverse balance
+        const [account] = await dbConn
+          .select()
+          .from(schema.bankAccounts)
+          .where(eq(schema.bankAccounts.id, tx.accountId))
+          .limit(1);
+
+        if (account) {
+          await dbConn
+            .update(schema.bankAccounts)
+            .set({
+              balance: account.balance - tx.amount,
+              updatedAt: new Date(),
+            })
+            .where(eq(schema.bankAccounts.id, tx.accountId));
+        }
+      }
+
+      // Create audit log
+      try {
+        await db.createAdminAuditLog({
+          adminId: ctx.user.id,
+          action: input.approved ? "mobile_deposit_approved" : "mobile_deposit_rejected",
+          resourceType: "mobile_deposit",
+          resourceId: tx.id,
+          details: `Mobile deposit ${tx.referenceNumber} for $${(tx.amount / 100).toFixed(2)} ${input.approved ? "approved" : "rejected"} (user ID: ${tx.userId})${input.adminNotes ? ": " + input.adminNotes : ""}`,
+        });
+      } catch (e) {
+        console.error("Failed to create audit log:", e);
+      }
+
+      return { success: true, status: input.approved ? "completed" : "failed" };
+    }),
 });
 
 // Admin Crypto Wallet Settings Router
@@ -4648,6 +4939,11 @@ export const appRouter = router({
           throw new TRPCError({ code: "NOT_FOUND" });
         }
 
+        // Status guard — only pending or under_review applications can be approved
+        if (application.status !== "pending" && application.status !== "under_review") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `Cannot approve application with status '${application.status}'. Must be 'pending' or 'under_review'.` });
+        }
+
         // Calculate processing fee
         const feeConfig = await db.getActiveFeeConfiguration();
         let processingFeeAmount: number;
@@ -4701,6 +4997,11 @@ export const appRouter = router({
         const application = await db.getLoanApplicationById(input.id);
         if (!application) {
           throw new TRPCError({ code: "NOT_FOUND" });
+        }
+
+        // Status guard — cannot reject already-disbursed or cancelled applications
+        if (application.status === "disbursed" || application.status === "cancelled") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `Cannot reject application with status '${application.status}'.` });
         }
 
         await db.updateLoanApplicationStatus(input.id, "rejected", {
@@ -7662,6 +7963,7 @@ export const appRouter = router({
                   requestedAmount: app.requestedAmount,
                   approvedAmount: app.approvedAmount,
                   loanType: app.loanType,
+                  loanAccountNumber: (app as any).loanAccountNumber || null,
                   createdAt: app.createdAt,
                 }));
                 
@@ -9164,6 +9466,9 @@ Format as JSON with array of applications including their recommendation.`;
   // Admin Crypto Wallet Settings
   adminCryptoWallet: adminCryptoWalletRouter,
 
+  // Admin Banking Access (view user accounts, transactions, mobile deposits)
+  adminBanking: adminBankingRouter,
+
   // Support Tickets Router
   supportTickets: router({
     // Create a new support ticket (user)
@@ -10480,30 +10785,40 @@ function getNextSteps(status: string): string[] {
       "Check your email for updates",
       "Verify all submitted information is accurate"
     ],
-    "in-review": [
+    "under_review": [
       "Our team is actively reviewing your application",
       "You may be contacted for additional information",
       "Decision will be communicated within 24-48 hours"
     ],
     "approved": [
       "Congratulations! Your loan has been approved",
-      "Log in to your dashboard to view disbursement options",
-      "Choose your preferred funding method"
+      "Pay the processing fee to proceed to disbursement",
+      "Log in to your dashboard to make the payment"
+    ],
+    "fee_pending": [
+      "Your processing fee payment is being processed",
+      "Check your dashboard for payment status updates",
+      "Contact support if your payment hasn't been confirmed"
+    ],
+    "fee_paid": [
+      "Your fee payment has been received",
+      "Admin is verifying your payment",
+      "Disbursement will be initiated after verification"
     ],
     "rejected": [
       "Your application was not approved at this time",
       "Check your email for details on why",
-      "Contact us at (800) 990-9130 to discuss options"
+      "Contact us at (945) 212-1609 to discuss options"
     ],
-    "funded": [
+    "disbursed": [
       "Your loan has been funded!",
-      "The money is on its way to your account",
-      "View payment schedule in your dashboard"
+      "Check your account for the deposited funds",
+      "View your payment schedule in your dashboard"
     ],
-    "completed": [
-      "Your loan has been fully repaid",
-      "Thank you for using AmeriLend",
-      "You may be eligible for additional credit"
+    "cancelled": [
+      "Your application has been cancelled",
+      "Contact support if this was unexpected",
+      "You can submit a new application anytime"
     ],
   };
 

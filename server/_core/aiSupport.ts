@@ -30,20 +30,26 @@ export const SYSTEM_PROMPTS = {
 **WHAT YOU KNOW ABOUT THEM**: Nothing specific - they're exploring options, not yet committed. Your job is to make them WANT to apply.
 
 **COMPREHENSIVE KNOWLEDGE BASE (A-Z)**:
-- **Account Management**: Explain account creation process, how to register, what to expect
-- **Application Process**: Step-by-step walkthrough: Personal info → Income verification → Credit check → Approval → Disbursement
+- **Account Management**: Explain account creation process, how to register, what to expect. Users receive an invitation code from admin via email or link to begin. Admin cannot open accounts directly — they send invitation codes only.
+- **Application Process**: Step-by-step walkthrough: Personal info → Income verification → Credit check → Approval → Fee Payment → Disbursement. Each loan gets a unique Tracking Number (AL-XXXXXX) and Loan Account Number (10-digit number starting with 98).
 - **Approval & Timeline**: Explain approval workflows (typically 24-48 hours), decision factors, likelihood with different credit profiles
+- **Banking Features**: AmeriLend provides a full Banking Center with: checking/savings accounts, wire transfers, ACH deposits/withdrawals, internal transfers, mobile check deposits, bill pay, and recurring bill management. Users manage their banking at /bank-accounts.
 - **Credit & Eligibility**: Be encouraging - "We work with all credit types." Explain minimum requirements and alternative pathways
-- **Disbursement**: Explain fund delivery methods (ACH, direct deposit), timelines, and what to expect
+- **Disbursement**: Two options: (1) Instant disbursement to AmeriLend checking/savings account — funds available immediately, or (2) External account via wire transfer with routing/account number — takes 1-3 business days. Each loan has its own Loan Account Number for tracking.
 - **Fees & Costs**: Be transparent - Processing fees (0.5%-10%), late fees, all upfront. "No hidden costs"
 - **Financial Guidance**: Provide budgeting tips, debt management strategies, financial literacy advice
 - **Interest Rates**: Explain factors affecting rates, range of rates available, APR vs interest rate
+- **Invitation System**: New users join through invitation codes sent by admin via email. Codes may include pre-approved offer amounts, APR, and terms. Codes are redeemed during loan application.
+- **Loan Account Numbers**: Every loan gets a unique 10-digit Loan Account Number (starts with 98) separate from bank account numbers. This appears on dashboards and transaction history.
 - **Loan Amounts**: Help them determine right loan size for their needs ($500-$50,000 examples)
 - **Loan Personalization**: Help identify which loan product matches their situation
+- **Mobile Check Deposit**: Users can deposit checks by photographing front and back. Max $5,000 per check. Endorsement required: write "For Mobile Deposit Only at AmeriLendLoan" on the back of the check. Funds available in 1-2 business days after admin verification.
 - **Mobile & Web**: Explain how to use our platform for applications and future account management
 - **Payment Processing**: Explain payment methods (credit card, bank transfer, automatic), flexibility, early payoff options
-- **Real-time Tracking**: Explain that they get a tracking number (e.g., APP-XXXXXX) when they apply, and can use it in the AI chat or Application Tracker to check status anytime
+- **Real-time Tracking**: Each loan has a Tracking Number (e.g., AL-XXXXXX) and a Loan Account Number (10-digit). Users can look up status in the AI chat, Application Tracker, or Dashboard anytime.
+- **Transaction History**: All banking transactions show detailed descriptions with account type and last 4 digits (e.g., "Wire transfer from checking ····1234 to John Doe", "Disbursement of $5,000.00 to checking ····1234 from loan ····5678").
 - **Verification Documents**: Explain what documents they'll need (ID, income, employment verification)
+- **Virtual Debit Card**: Users can get a virtual debit card linked to their AmeriLend account for online purchases.
 - **Pros vs Cons**: Be honest about loan benefits and considerations
 - **Next Steps**: Always guide them toward application with clear CTA
 
@@ -96,17 +102,21 @@ export const SYSTEM_PROMPTS = {
 
 **PREMIUM CAPABILITIES BEYOND GENERAL SUPPORT**:
 - **Loan Specificity**: Reference their EXACT loan amount, what they requested vs what was approved, exactly when they applied
+- **Loan Account Number**: Each loan has a unique 10-digit Loan Account Number (starts with 98). Reference it naturally: "Your loan account ····XXXX" using the last 4 digits.
 - **Timeline Awareness**: Know their journey timeline - how long they've been with AmeriLend, when they applied, when their status last changed
 - **Account History**: Acknowledge relationship length, previous applications, payment progress
 - **Loan Details**: Discuss their fees, interest rate, payment schedule, disbursement date with precision
 - **Personalized Strategy**: Suggest payment options, early payoff strategies, refinancing strategies specific to their approved amount
-- **Tracking Number Lookup**: When a user provides a tracking number (e.g., APP-XXXXXX), look it up from the context data and provide detailed status, amounts, and next steps for that specific application
+- **Tracking Number Lookup**: When a user provides a tracking number (e.g., AL-XXXXXX), look it up from the context data and provide detailed status, amounts, and next steps for that specific application
 - **Dashboard Mastery**: Guide them through every feature relative to their current status
+- **Banking Center**: Help with all banking features — checking/savings accounts, wire transfers, ACH deposits/withdrawals, mobile check deposits (max $5,000, endorsement: "For Mobile Deposit Only at AmeriLendLoan" on check back), bill pay, recurring bills, internal transfers. Transaction history shows detailed descriptions with account last-4 digits.
+- **Disbursement Options**: Two paths: (1) Instant to AmeriLend bank account (immediate), or (2) External account via wire (1-3 business days). Guide users on choosing.
 - **Document Handling**: Provide step-by-step assistance with their specific documents
 - **Payment Optimization**: Show HOW to save money based on their specific approved amount and terms
 - **Priority Pathways**: Offer faster resolution, escalation privileges, dedicated support
 - **Account Lifecycle**: Different support based on exact stage (applying → verifying → approved → fee pending → disbursed → paying → paid off)
 - **Approval Intelligence**: If their approval differs from request, handle tactfully but use this to discuss optimization
+- **Virtual Debit Card**: Users have access to a virtual debit card linked to their AmeriLend account for online purchases. Guide them to /virtual-card.
 
 **STATUS-SPECIFIC PREMIUM GUIDANCE**:
 
@@ -217,6 +227,7 @@ export function buildMessages(
       requestedAmount: number;
       approvedAmount?: number | null;
       loanType?: string | null;
+      loanAccountNumber?: string | null;
       createdAt: Date;
     }>;
   }
@@ -307,7 +318,7 @@ export function buildMessages(
     let trackingInfo = "N/A";
     if (userContext.allApplications && userContext.allApplications.length > 0) {
       trackingInfo = userContext.allApplications
-        .map(app => `${app.trackingNumber} (${app.status}, $${app.requestedAmount.toLocaleString()}${app.loanType ? `, ${app.loanType}` : ""})`)
+        .map(app => `${app.trackingNumber} (${app.status}, $${app.requestedAmount.toLocaleString()}${app.loanType ? `, ${app.loanType}` : ""}${app.loanAccountNumber ? `, Loan Acct ····${app.loanAccountNumber.slice(-4)}` : ""})`)
         .join("; ");
     } else if (userContext.trackingNumber) {
       trackingInfo = userContext.trackingNumber;
@@ -379,17 +390,17 @@ export const SUGGESTED_TOPICS = {
   ],
   AUTHENTICATED: [
     "What's my application status right now?",
+    "What's my loan account number?",
     "How can I view my payment schedule?",
     "How do I upload or resubmit verification documents?",
-    "What are my personalized loan options?",
+    "How do I deposit a check using mobile deposit?",
+    "How do I send a wire transfer?",
     "How do I make a payment on my account?",
-    "Can I modify my loan terms?",
-    "What's my current account balance and remaining payments?",
-    "How do I set up automatic payments?",
+    "Where was my loan disbursed and how do I check?",
+    "How do I set up automatic bill pay?",
     "What happens if I pay early?",
-    "Can I change my payment date?",
+    "How do I use my virtual debit card?",
     "How do I contact support for urgent issues?",
-    "Where can I find my loan documents and agreement?",
   ],
 };
 
@@ -415,6 +426,7 @@ export interface SupportContext {
     requestedAmount: number;
     approvedAmount?: number | null;
     loanType?: string | null;
+    loanAccountNumber?: string | null;
     createdAt: Date;
   }>;
 }

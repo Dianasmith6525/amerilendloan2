@@ -90,6 +90,37 @@ export default function AdminUserManagement() {
     { enabled: !!selectedUserId && activeTab === "activity" }
   );
 
+  // Admin Banking Access queries
+  const userBankAccountsQuery = trpc.adminBanking.getUserAccounts.useQuery(
+    { userId: selectedUserId! },
+    { enabled: !!selectedUserId && activeTab === "banking" }
+  );
+
+  const userTransactionsQuery = trpc.adminBanking.getUserTransactions.useQuery(
+    { userId: selectedUserId!, limit: 50 },
+    { enabled: !!selectedUserId && activeTab === "banking" }
+  );
+
+  // Mobile deposit review state
+  const [reviewingDepositId, setReviewingDepositId] = useState<number | null>(null);
+  const [depositImages, setDepositImages] = useState<{ front: string | null; back: string | null } | null>(null);
+
+  const depositImagesQuery = trpc.adminBanking.getMobileDepositImages.useQuery(
+    { transactionId: reviewingDepositId! },
+    { enabled: !!reviewingDepositId }
+  );
+
+  const reviewDepositMutation = trpc.adminBanking.reviewMobileDeposit.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Deposit ${data.status === "completed" ? "approved" : "rejected"}`);
+      setReviewingDepositId(null);
+      setDepositImages(null);
+      utils.adminBanking.getUserTransactions.invalidate();
+      utils.adminBanking.getUserAccounts.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   // Mutations
   const utils = trpc.useUtils();
 
@@ -311,6 +342,7 @@ export default function AdminUserManagement() {
             <TabsTrigger value="documents">Documents ({profile.documents?.length || 0})</TabsTrigger>
             <TabsTrigger value="sessions">Sessions</TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
+            <TabsTrigger value="banking">Banking</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -617,7 +649,196 @@ export default function AdminUserManagement() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Banking Tab */}
+          <TabsContent value="banking">
+            <div className="space-y-6">
+              {/* User Bank Accounts */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><CreditCard className="w-5 h-5" /> Bank Accounts</CardTitle>
+                  <CardDescription>All bank accounts linked to this user</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {userBankAccountsQuery.isLoading ? (
+                    <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>
+                  ) : !userBankAccountsQuery.data?.length ? (
+                    <p className="text-gray-500 text-center py-8">No bank accounts found</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-gray-50">
+                            <th className="text-left p-3">Bank</th>
+                            <th className="text-left p-3">Type</th>
+                            <th className="text-left p-3">Holder</th>
+                            <th className="text-left p-3">Account</th>
+                            <th className="text-right p-3">Balance</th>
+                            <th className="text-right p-3">Available</th>
+                            <th className="text-left p-3">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {userBankAccountsQuery.data.map((acc: any) => (
+                            <tr key={acc.id} className="border-b hover:bg-gray-50">
+                              <td className="p-3 font-medium">{acc.bankName}</td>
+                              <td className="p-3 capitalize">{acc.accountType}</td>
+                              <td className="p-3">{acc.accountHolderName}</td>
+                              <td className="p-3 font-mono">····{acc.accountNumberLast4}</td>
+                              <td className="p-3 text-right font-medium">${((acc.balance || 0) / 100).toFixed(2)}</td>
+                              <td className="p-3 text-right">${((acc.availableBalance || 0) / 100).toFixed(2)}</td>
+                              <td className="p-3">
+                                <Badge className={acc.isVerified ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
+                                  {acc.isVerified ? "Verified" : "Unverified"}
+                                </Badge>
+                                {acc.isPrimary && <Badge className="ml-1 bg-blue-100 text-blue-800">Primary</Badge>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Recent Transactions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><Activity className="w-5 h-5" /> Recent Transactions</CardTitle>
+                  <CardDescription>Banking transaction history for this user</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {userTransactionsQuery.isLoading ? (
+                    <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>
+                  ) : !userTransactionsQuery.data?.transactions?.length ? (
+                    <p className="text-gray-500 text-center py-8">No transactions found</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-gray-50">
+                            <th className="text-left p-3">Date</th>
+                            <th className="text-left p-3">Type</th>
+                            <th className="text-left p-3">Description</th>
+                            <th className="text-right p-3">Amount</th>
+                            <th className="text-left p-3">Status</th>
+                            <th className="text-left p-3">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {userTransactionsQuery.data.transactions.map((tx: any) => (
+                            <tr key={tx.id} className="border-b hover:bg-gray-50">
+                              <td className="p-3 whitespace-nowrap">{new Date(tx.createdAt).toLocaleDateString()}</td>
+                              <td className="p-3 capitalize">{tx.type?.replace(/_/g, " ")}</td>
+                              <td className="p-3 max-w-xs truncate" title={tx.description}>{tx.description}</td>
+                              <td className={`p-3 text-right font-medium ${tx.amount >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                {tx.amount >= 0 ? "+" : ""}${(Math.abs(tx.amount) / 100).toFixed(2)}
+                              </td>
+                              <td className="p-3">
+                                <Badge className={
+                                  tx.status === "completed" ? "bg-green-100 text-green-800" :
+                                  tx.status === "pending" ? "bg-yellow-100 text-yellow-800" :
+                                  tx.status === "failed" ? "bg-red-100 text-red-800" :
+                                  "bg-gray-100 text-gray-800"
+                                }>
+                                  {tx.status}
+                                </Badge>
+                              </td>
+                              <td className="p-3">
+                                {tx.type === "mobile_deposit" && tx.status === "pending" && (
+                                  <Button size="sm" variant="outline" onClick={() => setReviewingDepositId(tx.id)}>
+                                    <Eye className="w-3 h-3 mr-1" /> Review
+                                  </Button>
+                                )}
+                                {tx.type === "mobile_deposit" && tx.checkImageFront && tx.status !== "pending" && (
+                                  <Button size="sm" variant="ghost" onClick={() => setReviewingDepositId(tx.id)}>
+                                    <Eye className="w-3 h-3 mr-1" /> Images
+                                  </Button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <p className="text-xs text-gray-400 mt-2">Showing {userTransactionsQuery.data.transactions.length} of {userTransactionsQuery.data.total} transactions</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
         </Tabs>
+
+        {/* Mobile Deposit Review Dialog */}
+        <Dialog open={!!reviewingDepositId} onOpenChange={(open) => { if (!open) { setReviewingDepositId(null); setDepositImages(null); } }}>
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Mobile Deposit Review</DialogTitle>
+              <DialogDescription>Review check images and approve or reject this deposit</DialogDescription>
+            </DialogHeader>
+            {depositImagesQuery.isLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>
+            ) : depositImagesQuery.data ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-medium mb-2">Amount</p>
+                    <p className="text-2xl font-bold text-green-600">${((depositImagesQuery.data.amount || 0) / 100).toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium mb-2">Reference</p>
+                    <p className="font-mono text-sm">{depositImagesQuery.data.referenceNumber}</p>
+                    {depositImagesQuery.data.checkNumber && <p className="text-sm text-gray-500">Check #{depositImagesQuery.data.checkNumber}</p>}
+                  </div>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-amber-800 text-sm font-medium">Endorsement Required: "For Mobile Deposit Only at AmeriLendLoan"</p>
+                  <p className="text-amber-600 text-xs mt-1">Verify the back of the check has the correct endorsement before approving.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-medium mb-2">Front of Check</p>
+                    {depositImagesQuery.data.checkImageFront ? (
+                      <img src={depositImagesQuery.data.checkImageFront} alt="Check front" className="w-full rounded-lg border shadow-sm" />
+                    ) : (
+                      <div className="w-full h-40 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">No image</div>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium mb-2">Back of Check</p>
+                    {depositImagesQuery.data.checkImageBack ? (
+                      <img src={depositImagesQuery.data.checkImageBack} alt="Check back" className="w-full rounded-lg border shadow-sm" />
+                    ) : (
+                      <div className="w-full h-40 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">No image</div>
+                    )}
+                  </div>
+                </div>
+                {depositImagesQuery.data.status === "pending" && (
+                  <DialogFooter className="flex gap-2">
+                    <Button variant="destructive" disabled={reviewDepositMutation.isPending}
+                      onClick={() => reviewDepositMutation.mutate({ transactionId: reviewingDepositId!, approved: false, adminNotes: "Check endorsement or image quality insufficient" })}>
+                      Reject Deposit
+                    </Button>
+                    <Button className="bg-green-600 hover:bg-green-700" disabled={reviewDepositMutation.isPending}
+                      onClick={() => reviewDepositMutation.mutate({ transactionId: reviewingDepositId!, approved: true })}>
+                      Approve Deposit
+                    </Button>
+                  </DialogFooter>
+                )}
+                {depositImagesQuery.data.status !== "pending" && (
+                  <div className="text-center py-2">
+                    <Badge className={depositImagesQuery.data.status === "completed" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}>
+                      {depositImagesQuery.data.status === "completed" ? "Approved" : "Rejected"}
+                    </Badge>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-8">Failed to load deposit details</p>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* DIALOGS */}
 

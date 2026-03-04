@@ -49,8 +49,14 @@ export default function PaymentPage() {
 
   const createPaymentMutation = trpc.payments.createIntent.useMutation({
     onSuccess: (data) => {
-      setPaymentComplete(true);
-      toast.success("Payment successful!");
+      // For crypto payments, the intent just generates an address — payment is still pending
+      if ((data as any)?.pending || (data as any)?.status === "pending") {
+        toast.success("Payment address generated — send crypto to complete payment.");
+        setProcessing(false);
+      } else {
+        setPaymentComplete(true);
+        toast.success("Payment successful!");
+      }
     },
     onError: (error) => {
       toast.error(error.message || "Payment failed - please try again");

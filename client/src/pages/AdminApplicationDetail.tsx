@@ -316,9 +316,6 @@ export default function AdminApplicationDetail() {
 
               {application.status === "fee_pending" && (
                 <>
-                  <Button size="sm" className="bg-purple-600 hover:bg-purple-700" onClick={() => setFeeVerificationDialog(true)}>
-                    <DollarSign className="mr-1 h-4 w-4" /> Verify Fee
-                  </Button>
                   <Button size="sm" variant="outline" onClick={() => sendFeeReminderMutation.mutate({ id: applicationId! })}>
                     <Bell className="mr-1 h-4 w-4" /> Fee Reminder
                   </Button>
@@ -326,9 +323,14 @@ export default function AdminApplicationDetail() {
               )}
 
               {application.status === "fee_paid" && (
-                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setDisbursementDialog(true)}>
-                  <Banknote className="mr-1 h-4 w-4" /> Disburse
-                </Button>
+                <>
+                  <Button size="sm" className="bg-purple-600 hover:bg-purple-700" onClick={() => setFeeVerificationDialog(true)}>
+                    <DollarSign className="mr-1 h-4 w-4" /> Verify Fee
+                  </Button>
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setDisbursementDialog(true)}>
+                    <Banknote className="mr-1 h-4 w-4" /> Disburse
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -1140,12 +1142,21 @@ export default function AdminApplicationDetail() {
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFeeVerificationDialog(false)}>Cancel</Button>
-            <Button className="bg-purple-600 hover:bg-purple-700" onClick={handleVerifyFeePayment} disabled={verifyFeePaymentMutation.isPending}>
-              {verifyFeePaymentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DollarSign className="mr-2 h-4 w-4" />}
-              Verify Fee
+          <DialogFooter className="flex justify-between sm:justify-between">
+            <Button variant="destructive" onClick={() => {
+              if (!applicationId) return;
+              verifyFeePaymentMutation.mutate({ id: applicationId, verified: false, adminNotes: feeVerificationNotes || "Payment rejected by admin" });
+            }} disabled={verifyFeePaymentMutation.isPending}>
+              {verifyFeePaymentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+              Reject Fee
             </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setFeeVerificationDialog(false)}>Cancel</Button>
+              <Button className="bg-purple-600 hover:bg-purple-700" onClick={handleVerifyFeePayment} disabled={verifyFeePaymentMutation.isPending}>
+                {verifyFeePaymentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DollarSign className="mr-2 h-4 w-4" />}
+                Verify & Approve
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
