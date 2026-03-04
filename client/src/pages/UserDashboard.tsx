@@ -6,9 +6,11 @@ import { AlertCircle, CreditCard, DollarSign, Calendar, TrendingUp } from 'lucid
 import { useLocation } from 'wouter';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { QuickPaymentButton } from '@/components/QuickPaymentButton';
+import { toast } from 'sonner';
 
 export function UserDashboard() {
   const [, navigate] = useLocation();
+  const utils = trpc.useUtils();
   const { data: user, isLoading: userLoading } = trpc.auth.me.useQuery(undefined, {
     enabled: true,
   });
@@ -124,7 +126,8 @@ export function UserDashboard() {
                     applicationId={loanWithPendingFee.id}
                     processingFeeAmount={processingFee}
                     onPaymentComplete={() => {
-                      // Optionally navigate or show success
+                      utils.loans.myLoans.invalidate();
+                      toast.success("Payment completed successfully!");
                     }}
                   />
                 </div>
@@ -306,6 +309,15 @@ export function UserDashboard() {
                   {(activeLoan.disbursementAccountHolderName || activeLoan.disbursementAccountNumberMasked) && (
                     <div className="mt-3 p-3 bg-blue-100/50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
                       <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide mb-2">Disbursement Account</p>
+                      {activeLoan.disbursementAccountType === "amerilend" || activeLoan.disbursementAccountHolderName === "AmeriLend Account" ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">🏦</span>
+                          <div>
+                            <p className="font-medium text-blue-900 dark:text-blue-100">AmeriLend Bank Account</p>
+                            <p className="text-xs text-blue-500 dark:text-blue-400">Instant deposit — funds available immediately</p>
+                          </div>
+                        </div>
+                      ) : (
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         {activeLoan.disbursementAccountHolderName && (
                           <div>
@@ -332,6 +344,7 @@ export function UserDashboard() {
                           </div>
                         )}
                       </div>
+                      )}
                     </div>
                   )}
 

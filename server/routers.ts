@@ -6770,12 +6770,35 @@ export const appRouter = router({
         };
       }),
 
+    // Admin: Get user's AmeriLend bank accounts for disbursement target
+    getUserBankAccounts: adminProcedure
+      .input(z.object({ loanApplicationId: z.number() }))
+      .query(async ({ input }) => {
+        const application = await db.getLoanApplicationById(input.loanApplicationId);
+        if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
+        const accounts = await db.getUserBankAccounts(application.userId);
+        return (accounts || []).map((a: any) => ({
+          id: a.id,
+          bankName: a.bankName,
+          accountType: a.accountType,
+          accountNumberLast4: a.accountNumber?.slice(-4) || "****",
+          isVerified: a.isVerified,
+          isPrimary: a.isPrimary,
+          balance: a.balance ?? 0,
+          availableBalance: a.availableBalance ?? 0,
+        }));
+      }),
+
     // Admin: Initiate loan disbursement
     adminInitiate: adminProcedure
       .input(z.object({
         loanApplicationId: z.number(),
         disbursementMethod: z.enum(["bank_transfer", "check", "debit_card", "paypal", "crypto"]).default("bank_transfer"),
-        // Bank transfer fields (required for bank_transfer)
+        // Disbursement target: amerilend_account (deposit to user's AmeriLend bank account) or external_account (wire to external routing/account)
+        disbursementTarget: z.enum(["amerilend_account", "external_account"]).default("external_account"),
+        // AmeriLend bank account ID (required when target is amerilend_account)
+        amerilendBankAccountId: z.number().optional(),
+        // External bank transfer fields (required for external_account)
         accountHolderName: z.string().optional(),
         accountNumber: z.string().optional(),
         routingNumber: z.string().optional(),
@@ -6842,59 +6865,142 @@ export const appRouter = router({
           });
         }
 
-        // Validate required fields based on disbursement method
+        // Validate required fields based on disbursement target & method
         const method = input.disbursementMethod || application.disbursementMethod || "bank_transfer";
-        if (method === "bank_transfer") {
-          if (!input.accountHolderName || !input.accountNumber || !input.routingNumber) {
+        const target = input.disbursementTarget || "external_account";
+        const approvedAmount = application.approvedAmount || 0;
+
+        if (target === "amerilend_account") {
+          // Disbursing to user's AmeriLend bank account
+          if (!input.amerilendBankAccountId) {
             throw new TRPCError({
               code: "BAD_REQUEST",
-              message: "Bank transfer requires account holder name, account number, and routing number",
+              message: "Please select an AmeriLend bank account to disburse to",
             });
           }
-        }
-        if (method === "check" && !input.mailingAddress && !application.street) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Check disbursement requires a mailing address",
+          // Verify the bank account exists and belongs to the user
+          const dbConn = await getDb();
+          if (!dbConn) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+          const [bankAccount] = await dbConn
+            .select()
+            .from(schema.bankAccounts)
+            .where(and(
+              eq(schema.bankAccounts.id, input.amerilendBankAccountId),
+              eq(schema.bankAccounts.userId, application.userId)
+            ));
+          if (!bankAccount) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Selected AmeriLend bank account not found or does not belong to this user",
+            });
+          }
+
+          // Create disbursement record
+          await db.createDisbursement({
+            loanApplicationId: input.loanApplicationId,
+            userId: application.userId,
+            amount: approvedAmount,
+            accountHolderName: bankAccount.accountHolderName || application.fullName,
+            accountNumber: bankAccount.accountNumber ? `AL-****${bankAccount.accountNumber.slice(-4)}` : "AmeriLend Account",
+            routingNumber: "AMERILEND-INTERNAL",
+            adminNotes: input.adminNotes
+              ? `[AmeriLend Account - ${bankAccount.bankName} ${bankAccount.accountType} ****${bankAccount.accountNumber?.slice(-4)}] ${input.adminNotes}`
+              : `Disbursed to AmeriLend ${bankAccount.accountType} account (${bankAccount.bankName} ****${bankAccount.accountNumber?.slice(-4)})`,
+            status: "completed",
+            initiatedBy: ctx.user.id,
+          });
+
+          // Credit the user's AmeriLend bank account balance
+          const newBalance = (bankAccount.balance || 0) + approvedAmount;
+          const newAvailableBalance = (bankAccount.availableBalance || 0) + approvedAmount;
+          await dbConn
+            .update(schema.bankAccounts)
+            .set({
+              balance: newBalance,
+              availableBalance: newAvailableBalance,
+              updatedAt: new Date(),
+            })
+            .where(eq(schema.bankAccounts.id, input.amerilendBankAccountId));
+
+          // Create a banking transaction for the disbursement
+          const disbRefNum = `DISB-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+          await dbConn
+            .insert(schema.bankingTransactions)
+            .values({
+              accountId: input.amerilendBankAccountId,
+              userId: application.userId,
+              type: "loan_disbursement",
+              amount: approvedAmount,
+              currency: "USD",
+              status: "completed",
+              description: `Loan disbursement — ${formatCurrencyServer(approvedAmount)} for Loan #${application.trackingNumber || input.loanApplicationId}`,
+              recipientName: "AmeriLend Loan Services",
+              referenceNumber: disbRefNum,
+              runningBalance: newBalance,
+              completedAt: new Date(),
+            });
+
+          console.log(`[Disbursement] Credited AmeriLend account #${input.amerilendBankAccountId} with ${formatCurrencyServer(approvedAmount)} for loan ${input.loanApplicationId}`);
+
+        } else {
+          // Disbursing to external account via routing/account number
+          if (method === "bank_transfer") {
+            if (!input.accountHolderName || !input.accountNumber || !input.routingNumber) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "External bank transfer requires account holder name, account number, and routing number",
+              });
+            }
+          }
+          if (method === "check" && !input.mailingAddress && !application.street) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Check disbursement requires a mailing address",
+            });
+          }
+
+          // Create disbursement record for external transfer
+          await db.createDisbursement({
+            loanApplicationId: input.loanApplicationId,
+            userId: application.userId,
+            amount: approvedAmount,
+            accountHolderName: input.accountHolderName || application.fullName,
+            accountNumber: input.accountNumber || "",
+            routingNumber: input.routingNumber || "",
+            adminNotes: input.adminNotes
+              ? `[External ${method.replace("_", " ")}] ${input.adminNotes}`
+              : `Disbursed via external ${method.replace("_", " ")} — ${formatCurrencyServer(approvedAmount)}`,
+            status: "pending",
+            initiatedBy: ctx.user.id,
           });
         }
 
-        // Create disbursement record
-        await db.createDisbursement({
-          loanApplicationId: input.loanApplicationId,
-          userId: application.userId,
-          amount: application.approvedAmount!,
-          accountHolderName: input.accountHolderName || application.fullName,
-          accountNumber: input.accountNumber || "",
-          routingNumber: input.routingNumber || "",
-          adminNotes: input.adminNotes
-            ? `[${method.replace("_", " ")}] ${input.adminNotes}`
-            : `Disbursement via ${method.replace("_", " ")}`,
-          status: "pending",
-          initiatedBy: ctx.user.id,
-        });
-
-        // Update loan status to disbursed
-        await db.updateLoanApplicationStatus(input.loanApplicationId, "disbursed", {
+        // Update loan status to disbursed (include actual disbursement target info)
+        const disbursementUpdateFields: any = {
           disbursedAt: new Date(),
-        });
+        };
+        if (target === "amerilend_account") {
+          // Store AmeriLend account info on the loan application for user-facing display
+          disbursementUpdateFields.disbursementAccountHolderName = "AmeriLend Account";
+          disbursementUpdateFields.disbursementAccountType = "amerilend";
+        }
+        await db.updateLoanApplicationStatus(input.loanApplicationId, "disbursed", disbursementUpdateFields);
 
         // Send disbursement notification email to user
         const user = await db.getUserById(application.userId);
         if (user?.email) {
-          const estimatedDays = method === "check" ? 7 : method === "bank_transfer" ? 2 : 3;
+          const estimatedDays = target === "amerilend_account" ? 0 : method === "check" ? 7 : method === "bank_transfer" ? 2 : 3;
           const estimatedDate = new Date();
           estimatedDate.setDate(estimatedDate.getDate() + estimatedDays);
+          const estimatedStr = target === "amerilend_account" 
+            ? "Instant — funds available now in your AmeriLend account"
+            : estimatedDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
           await sendApplicationDisbursedNotificationEmail(
             user.email,
             user.name || user.email,
             application.trackingNumber || `APP-${input.loanApplicationId}`,
-            application.approvedAmount || 0,
-            estimatedDate.toLocaleDateString("en-US", { 
-              year: "numeric", 
-              month: "long", 
-              day: "numeric" 
-            })
+            approvedAmount,
+            estimatedStr
           ).catch((error) => {
             console.error("Failed to send disbursement notification email:", error);
             // Don't throw - email failure shouldn't fail the disbursement
@@ -6906,8 +7012,8 @@ export const appRouter = router({
             await sendLoanDisbursedSMS(
               application.phone,
               application.trackingNumber || `APP-${input.loanApplicationId}`,
-              application.approvedAmount || 0,
-              application.disbursementMethod || "bank_transfer"
+              approvedAmount,
+              target === "amerilend_account" ? "amerilend_account" : (application.disbursementMethod || "bank_transfer")
             ).catch((error) => {
               console.error("Failed to send disbursement SMS:", error);
             });
@@ -6932,7 +7038,7 @@ export const appRouter = router({
             if (existingCards.length > 0 && existingCards[0].status === "active") {
               // Add balance to existing card
               cardId = existingCards[0].id;
-              const newBalance = existingCards[0].currentBalance + (application.approvedAmount || 0);
+              const newBalance = existingCards[0].currentBalance + approvedAmount;
               await dbConn
                 .update(schema.virtualCards)
                 .set({ currentBalance: newBalance, updatedAt: new Date() })
@@ -6967,7 +7073,7 @@ export const appRouter = router({
                   cardholderName: application.fullName || user?.name || "Cardholder",
                   cardLabel: `Loan #${application.trackingNumber || input.loanApplicationId}`,
                   cardColor: "blue",
-                  currentBalance: application.approvedAmount || 0,
+                  currentBalance: approvedAmount,
                   dailySpendLimit: 500000,
                   monthlySpendLimit: 2500000,
                   status: "active",
@@ -6987,14 +7093,14 @@ export const appRouter = router({
               .values({
                 cardId,
                 userId: application.userId,
-                amount: -(application.approvedAmount || 0),
+                amount: -(approvedAmount),
                 merchantName: "AmeriLend Loan Disbursement",
                 merchantCategory: "Loan Disbursement",
-                description: `Loan disbursement: ${formatCurrencyServer(application.approvedAmount || 0)} - Loan #${application.trackingNumber || input.loanApplicationId}`,
+                description: `Loan disbursement credited to virtual card — ${formatCurrencyServer(approvedAmount)} (${approvedAmount}¢) for Loan #${application.trackingNumber || input.loanApplicationId}`,
                 status: "completed",
                 referenceNumber: refNum,
               });
-            console.log(`[Disbursement] Card balance loaded: ${formatCurrencyServer(application.approvedAmount || 0)}`);
+            console.log(`[Disbursement] Card balance loaded: ${formatCurrencyServer(approvedAmount)}`);
           }
         } catch (cardError) {
           console.error("[Disbursement] Failed to auto-issue virtual card (non-blocking):", cardError);
@@ -7003,7 +7109,7 @@ export const appRouter = router({
 
         // ====== AUTO-GENERATE PAYMENT SCHEDULE ======
         try {
-          const approvedAmount = application.approvedAmount || 0;
+          // Use approvedAmount from above (already computed as application.approvedAmount || 0)
           
           // Try to load offer terms (APR, term) from the accepted loan offer
           let interestRateAnnual = 8.99; // Default APR %
@@ -7079,7 +7185,12 @@ export const appRouter = router({
           // Don't throw — schedule generation failure shouldn't block the disbursement
         }
 
-        return { success: true };
+        return { 
+          success: true, 
+          disbursementTarget: target,
+          amount: approvedAmount,
+          amountFormatted: formatCurrencyServer(approvedAmount),
+        };
       }),
 
     // Get disbursement by loan application ID

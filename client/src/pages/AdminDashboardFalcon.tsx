@@ -61,6 +61,8 @@ export default function AdminDashboardFalcon() {
   const [rejectionReason, setRejectionReason] = useState("");
 
   const [disbursementDialog, setDisbursementDialog] = useState<{ open: boolean; applicationId: number | null }>({ open: false, applicationId: null });
+  const [disbursementTarget, setDisbursementTarget] = useState<"amerilend_account" | "external_account">("amerilend_account");
+  const [selectedAmeriLendAccount, setSelectedAmeriLendAccount] = useState<number | "">("");
   const [accountHolderName, setAccountHolderName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [routingNumber, setRoutingNumber] = useState("");
@@ -113,6 +115,10 @@ export default function AdminDashboardFalcon() {
   const { data: disbursements, isLoading: disbursementsLoading } = trpc.disbursements.adminList.useQuery();
   const { data: stats, isLoading: statsLoading } = trpc.loans.adminStatistics.useQuery();
   const { data: feeConfig } = trpc.feeConfig.getActive.useQuery();
+  const { data: userBankAccounts } = trpc.disbursements.getUserBankAccounts.useQuery(
+    { loanApplicationId: disbursementDialog.applicationId! },
+    { enabled: disbursementDialog.open && !!disbursementDialog.applicationId }
+  );
   const { data: ticketsData, refetch: refetchTickets, isLoading: ticketsLoading } = trpc.supportTickets.adminGetAll.useQuery({ status: ticketStatusFilter });
   const tickets = ticketsData?.data || [];
   const { data: ticketMessagesData, refetch: refetchTicketMessages } = trpc.supportTickets.getMessages.useQuery(
@@ -153,10 +159,16 @@ export default function AdminDashboardFalcon() {
   });
 
   const disburseMutation = trpc.disbursements.adminInitiate.useMutation({
-    onSuccess: () => {
-      toast.success("Disbursement initiated successfully");
+    onSuccess: (result) => {
+      const msg = result.disbursementTarget === "amerilend_account"
+        ? `Disbursement of ${result.amountFormatted} credited to AmeriLend account instantly`
+        : `Disbursement of ${result.amountFormatted} initiated to external account`;
+      toast.success(msg);
       utils.loans.adminList.invalidate();
+      utils.disbursements.adminList.invalidate();
       setDisbursementDialog({ open: false, applicationId: null });
+      setDisbursementTarget("amerilend_account");
+      setSelectedAmeriLendAccount("");
       setAccountHolderName("");
       setAccountNumber("");
       setRoutingNumber("");
@@ -263,17 +275,31 @@ export default function AdminDashboardFalcon() {
 
   const handleDisburse = () => {
     if (!disbursementDialog.applicationId) return;
-    if (!accountHolderName || !accountNumber || !routingNumber) {
-      toast.error("Please fill in all bank account details");
-      return;
+    if (disbursementTarget === "amerilend_account") {
+      if (!selectedAmeriLendAccount) {
+        toast.error("Please select an AmeriLend bank account");
+        return;
+      }
+      disburseMutation.mutate({
+        loanApplicationId: disbursementDialog.applicationId,
+        disbursementTarget: "amerilend_account",
+        amerilendBankAccountId: selectedAmeriLendAccount as number,
+        adminNotes: disbursementNotes || undefined,
+      });
+    } else {
+      if (!accountHolderName || !accountNumber || !routingNumber) {
+        toast.error("Please fill in all bank account details");
+        return;
+      }
+      disburseMutation.mutate({
+        loanApplicationId: disbursementDialog.applicationId,
+        disbursementTarget: "external_account",
+        accountHolderName,
+        accountNumber,
+        routingNumber,
+        adminNotes: disbursementNotes || undefined,
+      });
     }
-    disburseMutation.mutate({
-      loanApplicationId: disbursementDialog.applicationId,
-      accountHolderName,
-      accountNumber,
-      routingNumber,
-      adminNotes: disbursementNotes || undefined,
-    });
   };
 
   const handleUpdateTracking = () => {
@@ -1515,45 +1541,135 @@ export default function AdminDashboardFalcon() {
 
       {/* Disbursement Dialog */}
       <Dialog open={disbursementDialog.open} onOpenChange={(open) => !open && setDisbursementDialog({ open: false, applicationId: null })}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Initiate Disbursement</DialogTitle>
-            <DialogDescription>Enter bank account details for check disbursement</DialogDescription>
+            <DialogDescription>Choose where to send the approved loan funds</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Disbursement Target Selection */}
             <div>
-              <Label>Account Holder Name</Label>
-              <Input
-                value={accountHolderName}
-                onChange={(e) => setAccountHolderName(e.target.value)}
-                placeholder="Full name on account"
-              />
+              <Label className="mb-2 block">Disbursement Target</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDisbursementTarget("amerilend_account")}
+                  className={`p-3 rounded-lg border-2 text-left transition-all ${
+                    disbursementTarget === "amerilend_account"
+                      ? "border-green-500 bg-green-50 ring-1 ring-green-200"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <div className="font-semibold text-sm flex items-center gap-1">
+                    🏦 AmeriLend Account
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Instant deposit to user's linked bank account</p>
+                  <Badge className="mt-1 bg-green-100 text-green-800 text-[10px]">Recommended</Badge>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDisbursementTarget("external_account")}
+                  className={`p-3 rounded-lg border-2 text-left transition-all ${
+                    disbursementTarget === "external_account"
+                      ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <div className="font-semibold text-sm flex items-center gap-1">
+                    🔗 External Account
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Wire via routing & account number (1-2 days)</p>
+                </button>
+              </div>
             </div>
-            <div>
-              <Label>Account Number</Label>
-              <Input
-                value={accountNumber}
-                onChange={(e) => setAccountNumber(e.target.value)}
-                placeholder="Bank account number"
-              />
-            </div>
-            <div>
-              <Label>Routing Number</Label>
-              <Input
-                value={routingNumber}
-                onChange={(e) => setRoutingNumber(e.target.value)}
-                placeholder="Bank routing number"
-              />
-            </div>
+
+            {/* AmeriLend account selector */}
+            {disbursementTarget === "amerilend_account" && (
+              <div>
+                <Label className="mb-2 block">Select User's Bank Account</Label>
+                {!userBankAccounts || userBankAccounts.length === 0 ? (
+                  <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    This user has no AmeriLend bank accounts. They must add one first, or choose external account.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {userBankAccounts.map((acc: any) => (
+                      <button
+                        key={acc.id}
+                        type="button"
+                        onClick={() => setSelectedAmeriLendAccount(acc.id)}
+                        className={`w-full p-3 rounded-lg border-2 text-left transition-all flex items-center justify-between ${
+                          selectedAmeriLendAccount === acc.id
+                            ? "border-green-500 bg-green-50"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div>
+                          <div className="font-medium text-sm">{acc.bankName} — {acc.accountType}</div>
+                          <div className="text-xs text-gray-500">****{acc.accountNumberLast4} {acc.isPrimary ? "• Primary" : ""}</div>
+                          <div className="text-xs text-gray-400 mt-0.5">
+                            Balance: ${((acc.balance || 0) / 100).toFixed(2)} • Available: ${((acc.availableBalance || 0) / 100).toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {acc.isVerified ? (
+                            <Badge className="bg-green-100 text-green-700 text-[10px]">Verified</Badge>
+                          ) : (
+                            <Badge className="bg-yellow-100 text-yellow-700 text-[10px]">Unverified</Badge>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* External account fields */}
+            {disbursementTarget === "external_account" && (
+              <>
+                <div>
+                  <Label>Account Holder Name</Label>
+                  <Input value={accountHolderName} onChange={(e) => setAccountHolderName(e.target.value)} placeholder="Full name on account" />
+                </div>
+                <div>
+                  <Label>Account Number</Label>
+                  <Input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="Bank account number" />
+                </div>
+                <div>
+                  <Label>Routing Number</Label>
+                  <Input value={routingNumber} onChange={(e) => setRoutingNumber(e.target.value)} placeholder="9-digit routing number" />
+                </div>
+              </>
+            )}
+
             <div>
               <Label>Admin Notes (Optional)</Label>
               <Textarea
                 value={disbursementNotes}
                 onChange={(e) => setDisbursementNotes(e.target.value)}
                 placeholder="Add any notes about this disbursement"
-                rows={3}
+                rows={2}
               />
             </div>
+
+            {/* Loan amount summary */}
+            {disbursementDialog.applicationId && (() => {
+              const app = applications?.find((a: any) => a.id === disbursementDialog.applicationId);
+              if (!app?.approvedAmount) return null;
+              return (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Approved Amount</span>
+                    <span className="font-bold text-green-700">${(app.approvedAmount / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>Amount in cents</span>
+                    <span>{app.approvedAmount.toLocaleString()}¢</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDisbursementDialog({ open: false, applicationId: null })}>
@@ -1561,7 +1677,7 @@ export default function AdminDashboardFalcon() {
             </Button>
             <Button onClick={handleDisburse} disabled={disburseMutation.isPending} className="bg-purple-600 hover:bg-purple-700">
               {disburseMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Initiate Disbursement
+              {disbursementTarget === "amerilend_account" ? "Disburse to AmeriLend" : "Disburse to External"}
             </Button>
           </DialogFooter>
         </DialogContent>

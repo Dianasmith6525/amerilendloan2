@@ -1152,7 +1152,7 @@ export default function Dashboard() {
                                       <div>
                                         <p className="text-sm text-gray-600 mb-1">Disbursement Date</p>
                                         <p className="font-semibold text-gray-800">
-                                          {formatDate(loan.createdAt)}
+                                          {loan.disbursedAt ? formatDate(new Date(loan.disbursedAt)) : formatDate(loan.createdAt)}
                                         </p>
                                       </div>
                                       <div>
@@ -1160,17 +1160,26 @@ export default function Dashboard() {
                                         <p className="font-semibold text-green-600">
                                           {formatCurrency(loan.approvedAmount || 0)}
                                         </p>
+                                        <p className="text-[11px] text-gray-500">
+                                          {(loan.approvedAmount || 0).toLocaleString()} cents
+                                        </p>
                                       </div>
                                       <div>
-                                        <p className="text-sm text-gray-600 mb-1">Bank Account</p>
+                                        <p className="text-sm text-gray-600 mb-1">Disbursement Destination</p>
                                         <p className="font-semibold text-gray-800">
-                                          ****{(loan as any).accountNumber?.slice(-4) || "1234"}
+                                          {(loan as any).disbursementAccountHolderName === "AmeriLend Account" || (loan as any).routingNumber === "AMERILEND-INTERNAL"
+                                            ? "🏦 AmeriLend Bank Account"
+                                            : (loan as any).disbursementAccountHolderName
+                                              ? `${(loan as any).disbursementAccountHolderName}`
+                                              : "Bank Transfer"}
                                         </p>
                                       </div>
                                       <div>
                                         <p className="text-sm text-gray-600 mb-1">Processing Time</p>
                                         <p className="font-semibold text-gray-800">
-                                          1-2 business days
+                                          {(loan as any).disbursementAccountHolderName === "AmeriLend Account" || (loan as any).routingNumber === "AMERILEND-INTERNAL"
+                                            ? "Instant"
+                                            : "1-2 business days"}
                                         </p>
                                       </div>
                                     </div>
@@ -1362,15 +1371,16 @@ export default function Dashboard() {
                                             'AMERILEND - DISBURSEMENT CONFIRMATION',
                                             '='.repeat(45),
                                             '',
-                                            `Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+                                            `Date: ${loan.disbursedAt ? new Date(loan.disbursedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`,
                                             `Loan ID: ${loan.id}`,
                                             `Borrower: ${user?.name || 'N/A'}`,
                                             `Approved Amount: ${formatCurrency(loan.approvedAmount || 0)}`,
+                                            `Amount in Cents: ${(loan.approvedAmount || 0).toLocaleString()}`,
                                             `Disbursement Status: Completed`,
                                             `Tracking Number: ${(loan as any).trackingNumber || 'N/A'}`,
                                             '',
                                             '='.repeat(45),
-                                            'Funds have been transferred to your bank account.',
+                                            'Funds have been disbursed to your designated account.',
                                             'AmeriLend, LLC | amerilendloan.com',
                                           ].join('\n');
                                           const blob = new Blob([confirmContent], { type: 'text/plain' });
