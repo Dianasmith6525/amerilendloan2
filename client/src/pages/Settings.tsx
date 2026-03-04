@@ -1099,7 +1099,7 @@ export default function Settings() {
             </div>
           </div>
           <div className="border-t border-white/20 pt-6 text-center text-xs text-white/70">
-            <p>© 2025 AmeriLend, LLC. All Rights Reserved.</p>
+            <p>© {new Date().getFullYear()} AmeriLend, LLC. All Rights Reserved.</p>
             <p className="mt-2">Your trusted partner for consumer loans.</p>
           </div>
         </div>

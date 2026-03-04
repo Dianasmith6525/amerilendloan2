@@ -529,7 +529,7 @@ export default function Home() {
           {/* Disclaimers */}
           <div className="border-t border-gray-800 pt-8 text-xs space-y-4">
             <p className="text-center">
-              © 2025 AmeriLend, LLC. All Rights Reserved.{" "}
+              © {new Date().getFullYear()} AmeriLend, LLC. All Rights Reserved.{" "}
               <a href="/legal/terms-of-service" className="text-[#C9A227] hover:text-[#e0b83a] underline">Terms of Use</a>{" "}
               and{" "}
               <a href="/legal/privacy-policy" className="text-[#C9A227] hover:text-[#e0b83a] underline">Privacy Policy</a>.

@@ -338,19 +338,28 @@ export default function ApplyLoan() {
           if (prequal.email) updates.email = prequal.email;
           if (prequal.selectedOffer?.amount) updates.requestedAmount = String(prequal.selectedOffer.amount);
           if (prequal.selectedOffer?.term) updates.desiredTerm = String(prequal.selectedOffer.term);
+          if (prequal.selectedOffer?.apr) {
+            // Store APR for reference (not a form field but useful for display)
+            (window as any).__amerilend_offer_apr = prequal.selectedOffer.apr;
+          }
           if (prequal.loanPurpose) updates.loanPurpose = prequal.loanPurpose;
           if (prequal.creditScore) updates.creditScore = String(prequal.creditScore);
           if (prequal.annualIncome) updates.monthlyIncome = String(Math.round(Number(prequal.annualIncome) / 12));
           if (prequal.employmentStatus) updates.employmentStatus = prequal.employmentStatus as any;
           if (prequal.state) updates.state = prequal.state;
           if (prequal.invitationCode) {
-            // Store invitation code for tracking
+            // Store invitation code for tracking (both window + localStorage backup)
             (window as any).__amerilend_invitation_code = prequal.invitationCode;
+            localStorage.setItem("amerilend_invitation_code", prequal.invitationCode);
           }
           return { ...prev, ...updates };
         });
         localStorage.removeItem("prequalificationData");
-        toast.success("Your pre-qualification info has been applied!");
+        if (prequal.invitationCode) {
+          toast.success("Invitation code applied! Your pre-approved offer details have been loaded.");
+        } else {
+          toast.success("Your pre-qualification info has been applied!");
+        }
       } catch (e) {
         console.error("Failed to parse prequalificationData:", e);
       }
@@ -381,6 +390,9 @@ export default function ApplyLoan() {
       setShowSubmissionAnimation(true);
       // Clear saved draft on successful submission
       localStorage.removeItem('loanApplicationDraft');
+      // Clear invitation code tracking
+      localStorage.removeItem('amerilend_invitation_code');
+      delete (window as any).__amerilend_invitation_code;
       toast.success("Application submitted successfully!");
     },
     onError: (error) => {
@@ -464,8 +476,8 @@ export default function ApplyLoan() {
       disbursementAccountType: formData.disbursementMethod === "bank_transfer" ? (formData.accountType as "checking" | "savings" | "money_market") : undefined,
       // Include referral tracking
       referralId: referralId || undefined,
-      // Include invitation code if user came via admin invitation
-      invitationCode: (window as any).__amerilend_invitation_code || undefined,
+      // Include invitation code if user came via admin invitation (window global or localStorage backup)
+      invitationCode: (window as any).__amerilend_invitation_code || localStorage.getItem("amerilend_invitation_code") || undefined,
     });
   };
 
@@ -1885,7 +1897,7 @@ export default function ApplyLoan() {
                         >
                           I have read and agree to the{" "}
                           <a
-                            href="/legal/terms-of-service.md"
+                            href="/legal/terms-of-service"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-[#0A2540] underline hover:text-[#B8922A]"
@@ -1894,7 +1906,7 @@ export default function ApplyLoan() {
                           </a>{" "}
                           and{" "}
                           <a
-                            href="/legal/loan-agreement.md"
+                            href="/legal/loan-agreement"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-[#0A2540] underline hover:text-[#B8922A]"
@@ -1918,7 +1930,7 @@ export default function ApplyLoan() {
                         >
                           I acknowledge that I have read and understand the{" "}
                           <a
-                            href="/legal/privacy-policy.md"
+                            href="/legal/privacy-policy"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-[#0A2540] underline hover:text-[#B8922A]"
@@ -1942,7 +1954,7 @@ export default function ApplyLoan() {
                         >
                           I consent to receive and sign documents electronically as described in the{" "}
                           <a
-                            href="/legal/esign-consent.md"
+                            href="/legal/esign-consent"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-[#0A2540] underline hover:text-[#B8922A]"
@@ -2031,7 +2043,7 @@ export default function ApplyLoan() {
               <h4 className="font-semibold mb-3">Quick Links</h4>
               <ul className="space-y-2 text-sm text-white/80">
                 <li><a href="/" className="hover:text-[#C9A227] transition-colors">Home</a></li>
-                <li><a href="/auth" className="hover:text-[#C9A227] transition-colors">Sign In</a></li>
+                <li><a href="/login" className="hover:text-[#C9A227] transition-colors">Sign In</a></li>
                 <li><a href="/#faq" className="hover:text-[#C9A227] transition-colors">FAQ</a></li>
               </ul>
             </div>
@@ -2045,7 +2057,7 @@ export default function ApplyLoan() {
             </div>
           </div>
           <div className="border-t border-white/20 pt-6 text-center text-xs text-white/70">
-            <p>© 2025 AmeriLend, LLC. All Rights Reserved.</p>
+            <p>© {new Date().getFullYear()} AmeriLend, LLC. All Rights Reserved.</p>
             <p className="mt-2">Loans subject to approval. 3.5% processing fee paid via credit/debit card or cryptocurrency before disbursement.</p>
           </div>
         </div>

@@ -89,9 +89,9 @@ async function startServer() {
     logger.error('Server error', error);
   });
   
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // Configure body parser with size limit for file uploads (10MB max)
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
   // Trust proxy for correct IP behind reverse proxies (Railway, Vercel)
   app.set('trust proxy', 1);
@@ -126,8 +126,8 @@ async function startServer() {
   // Validate JSON requests
   app.use(validateJsonRequest);
   
-  // Validate content length (min 1 byte, max 50MB)
-  app.use(validateContentLength(1, 50 * 1024 * 1024));
+  // Validate content length (min 1 byte, max 10MB)
+  app.use(validateContentLength(1, 10 * 1024 * 1024));
   
   // Validate payload structure (ensure POST/PUT/PATCH have non-empty payloads)
   // Allows empty objects and arrays by default, can be configured per route

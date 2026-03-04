@@ -11,6 +11,7 @@ import loanAgreementRaw from "@/legal/loan-agreement.md?raw";
 import privacyPolicyRaw from "@/legal/privacy-policy.md?raw";
 import termsOfServiceRaw from "@/legal/terms-of-service.md?raw";
 import esignConsentRaw from "@/legal/esign-consent.md?raw";
+import truthInLendingRaw from "@/legal/truth-in-lending.md?raw";
 
 interface MarkdownFile {
   content: string;
@@ -38,6 +39,11 @@ const legalDocuments: Record<string, MarkdownFile> = {
     title: "E-Signature Consent",
     description: "Your consent to use electronic signatures for legal documents",
     content: esignConsentRaw,
+  },
+  "truth-in-lending": {
+    title: "Truth in Lending Disclosure",
+    description: "Federal Truth in Lending Act disclosure with loan terms, APR, and fee information",
+    content: truthInLendingRaw,
   },
 };
 
@@ -310,7 +316,7 @@ export default function LegalDocuments() {
         {/* Footer */}
         <div className="mt-12 text-center bg-gradient-to-r from-[#0033A0]/10 to-[#FFA500]/10 p-6 rounded-lg">
           <p className="text-sm text-gray-600 font-semibold">
-            © 2025 AmeriLend. All rights reserved. This document is confidential
+            © {new Date().getFullYear()} AmeriLend. All rights reserved. This document is confidential
             and for authorized use only.
           </p>
           <p className="text-xs mt-2 text-gray-500">

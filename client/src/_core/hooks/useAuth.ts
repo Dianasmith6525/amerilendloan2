@@ -65,10 +65,6 @@ export function useAuth(options?: UseAuthOptions) {
   }, [logoutMutation, utils]);
 
   const state = useMemo(() => {
-    localStorage.setItem(
-      "manus-runtime-user-info",
-      JSON.stringify(meQuery.data)
-    );
     // Treat as loading when no user yet AND a (re)fetch is in-flight.
     // This prevents the brief "not authenticated" flash between login and cache refresh.
     const isResolving =

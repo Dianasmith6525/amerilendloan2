@@ -112,10 +112,12 @@ export async function getDb() {
       const dbUrl = process.env.DATABASE_URL;
       const isLocalDb = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
       const sslEnabled = !isLocalDb;
-      console.log(`[Database] SSL mode: ${sslEnabled ? 'ENABLED' : 'DISABLED (local)'}`);
+      // Allow overriding SSL verification via env var for legacy/self-signed certs
+      const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false';
+      console.log(`[Database] SSL mode: ${sslEnabled ? `ENABLED (verify=${rejectUnauthorized})` : 'DISABLED (local)'}`);
       
       _client = postgres(process.env.DATABASE_URL, {
-        ssl: sslEnabled ? { rejectUnauthorized: false } : false,
+        ssl: sslEnabled ? { rejectUnauthorized } : false,
         idle_timeout: 30, // 30 seconds
         max_lifetime: 60 * 60, // 1 hour
         connect_timeout: 10, // 10 seconds

@@ -144,14 +144,19 @@ export default function Profile() {
               <div className="space-y-2">
                 <Label htmlFor="email">Email Address</Label>
                 {isEditing ? (
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    className="border-gray-300"
-                  />
+                  <div>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={formData.email}
+                      disabled
+                      className="border-gray-300 bg-gray-100 text-gray-500 cursor-not-allowed"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Email address cannot be changed here. Please contact support to update your email.
+                    </p>
+                  </div>
                 ) : (
                   <div className="px-3 py-2 bg-gray-50 rounded-md border border-gray-200">
                     <p className="text-gray-800">{formData.email || "Not provided"}</p>
@@ -246,7 +251,7 @@ export default function Profile() {
             </div>
           </div>
           <div className="border-t border-white/20 pt-6 text-center text-xs text-white/70">
-            <p>© 2025 AmeriLend, LLC. All Rights Reserved.</p>
+            <p>© {new Date().getFullYear()} AmeriLend, LLC. All Rights Reserved.</p>
             <p className="mt-2">Your trusted partner for consumer loans.</p>
           </div>
         </div>

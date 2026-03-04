@@ -2056,7 +2056,7 @@ const invitationCodesRouter = router({
               expiresAt,
             });
             emailSent = true;
-            console.log(`[Invitations] ✅ Email sent to ${input.recipientEmail} with code ${code}`);
+            console.log(`[Invitations] ✅ Email sent to ${input.recipientEmail} with code ${code.slice(0, 3)}***`);
           }
         } catch (emailErr: any) {
           emailError = emailErr?.message || "Unknown email error";
@@ -2911,7 +2911,12 @@ export const appRouter = router({
   
   // Authentication router
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(opts => {
+      if (!opts.ctx.user) return null;
+      // Strip sensitive fields before sending to client
+      const { passwordHash, twoFactorSecret, twoFactorBackupCodes, ssn, bankAccountNumber, bankRoutingNumber, ...safeUser } = opts.ctx.user;
+      return safeUser;
+    }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       
@@ -4574,7 +4579,7 @@ export const appRouter = router({
                     updatedAt: new Date(),
                   })
                   .where(eq(schema.invitationCodes.code, input.invitationCode.trim().toUpperCase()));
-                console.log(`[Application Submit] Invitation code ${input.invitationCode} redeemed for user ${userId}`);
+                console.log(`[Application Submit] Invitation code ***${input.invitationCode.slice(-3)} redeemed for user ${userId}`);
               }
             } catch (redeemErr) {
               console.error("[Application Submit] Failed to redeem invitation code:", redeemErr);

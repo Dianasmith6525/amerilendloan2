@@ -14,7 +14,11 @@ import { sendApplicationRejectedNotificationEmail } from "./email";
 const TOKEN_EXPIRY_MS = 72 * 60 * 60 * 1000; // 72 hours
 
 function getSecret(): string {
-  return ENV.cookieSecret || "amerilend-admin-action-fallback-key";
+  const secret = ENV.cookieSecret;
+  if (!secret) {
+    throw new Error("JWT_SECRET / cookieSecret must be configured for admin email action tokens");
+  }
+  return secret;
 }
 
 /**
