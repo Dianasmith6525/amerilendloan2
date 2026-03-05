@@ -166,9 +166,15 @@ async function startServer() {
   // Apply upload limiter to upload endpoints
   app.use("/api/upload", uploadLimiter);
   
-  // Health check endpoints (Priority 5)
-  app.get("/health", healthCheck);
-  app.get("/api/health", healthCheck);
+  // Simple health check for Railway/container orchestration (always 200 if process is alive)
+  app.get("/health", (_req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString(), uptime: Math.floor(process.uptime()) });
+  });
+  app.get("/api/health", (_req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString(), uptime: Math.floor(process.uptime()) });
+  });
+  // Detailed health check (includes DB/Redis status, may return 503)
+  app.get("/health/detailed", healthCheck);
   app.get("/health/readiness", readinessCheck);
   app.get("/health/liveness", livenessCheck);
   app.get("/metrics", metricsEndpoint);
