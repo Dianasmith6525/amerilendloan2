@@ -104,6 +104,8 @@ async function startServer() {
       'http://localhost:5173',
       process.env.VITE_APP_URL,
       process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : '',
+      'https://amerilendloan.com',
+      'https://www.amerilendloan.com',
     ].filter(Boolean);
     if (origin && allowedOrigins.includes(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);

@@ -3,6 +3,9 @@
   "outputDirectory": "dist/public",
   "installCommand": "npm install --legacy-peer-deps",
   "rewrites": [
+    { "source": "/api/:path*", "destination": "https://amerilendloan-production.up.railway.app/api/:path*" },
+    { "source": "/health/:path*", "destination": "https://amerilendloan-production.up.railway.app/health/:path*" },
+    { "source": "/health", "destination": "https://amerilendloan-production.up.railway.app/health" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
