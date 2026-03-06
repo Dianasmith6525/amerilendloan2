@@ -21,6 +21,10 @@ import {
 
 let reminderInterval: NodeJS.Timeout | null = null;
 
+// Tracking constants
+const REMINDER_COOLDOWN_MS = 72 * 60 * 60 * 1000; // 72 hours between same-type reminders
+const MAX_REMINDERS_PER_TYPE = 2; // Stop after 2 reminders per type per entity
+
 /**
  * Helper: Check if a user has email reminders enabled
  */
@@ -31,6 +35,25 @@ async function isEmailReminderEnabled(userId: number): Promise<boolean> {
     return prefs?.emailEnabled !== false;
   } catch {
     return true; // Default to enabled if we can't read prefs
+  }
+}
+
+/**
+ * Helper: Check if we should send a reminder (not sent recently + under max count)
+ */
+async function shouldSendReminder(userId: number, reminderType: string, entityId: number | null): Promise<boolean> {
+  try {
+    // Check lifetime count first
+    const count = await db.getEmailReminderCount(userId, reminderType, entityId);
+    if (count >= MAX_REMINDERS_PER_TYPE) return false;
+
+    // Check cooldown
+    const recent = await db.getRecentEmailReminder(userId, reminderType, entityId, REMINDER_COOLDOWN_MS);
+    if (recent) return false;
+
+    return true;
+  } catch {
+    return false; // Don't send on error
   }
 }
 
@@ -57,6 +80,8 @@ async function checkIncompleteApplications() {
         if (user && user.email) {
           // Respect user's email notification preferences
           if (!(await isEmailReminderEnabled(app.userId))) continue;
+          // Check tracking: cooldown + max count
+          if (!(await shouldSendReminder(app.userId, 'incomplete_application', app.id))) continue;
           const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Customer';
           
           try {
@@ -69,6 +94,7 @@ async function checkIncompleteApplications() {
               app.trackingNumber || `APP-${app.id}`
             );
             if (result && result.success) {
+              await db.logEmailReminder(app.userId, 'incomplete_application', app.id);
               console.log(`[Reminder] ✅ Sent incomplete application reminder to ${user.email} for app ${app.id}`);
             } else {
               console.error(`[Reminder] ❌ Failed to send incomplete app reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
@@ -93,7 +119,7 @@ async function checkUnpaidFees() {
     
     const allApplications = await db.getAllLoanApplications();
     const now = new Date();
-    const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+    const twentyFourHoursAgoFee = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     for (const app of allApplications) {
       // Only check approved or fee_pending applications
@@ -109,12 +135,14 @@ async function checkUnpaidFees() {
       if (!feePayment) {
         const approvedAt = app.approvedAt ? new Date(app.approvedAt) : new Date(app.updatedAt);
         
-        // Send reminder if approved 6+ hours ago and no fee payment
-        if (approvedAt < sixHoursAgo) {
+        // Send reminder if approved 24+ hours ago and no fee payment
+        if (approvedAt < twentyFourHoursAgoFee) {
           const user = await db.getUserById(app.userId);
           if (user && user.email) {
             // Respect user's email notification preferences
             if (!(await isEmailReminderEnabled(app.userId))) continue;
+            // Check tracking: cooldown + max count
+            if (!(await shouldSendReminder(app.userId, 'unpaid_fee', app.id))) continue;
             const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Customer';
             
             try {
@@ -127,6 +155,7 @@ async function checkUnpaidFees() {
                 app.trackingNumber || `APP-${app.id}`
               );
               if (result && result.success) {
+                await db.logEmailReminder(app.userId, 'unpaid_fee', app.id);
                 console.log(`[Reminder] ✅ Sent unpaid fee reminder to ${user.email} for app ${app.id}`);
               } else {
                 console.error(`[Reminder] ❌ Failed to send unpaid fee reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
@@ -178,6 +207,8 @@ async function checkPendingDisbursements() {
             if (user && user.email) {
               // Respect user's email notification preferences
               if (!(await isEmailReminderEnabled(app.userId))) continue;
+              // Check tracking: cooldown + max count
+              if (!(await shouldSendReminder(app.userId, 'pending_disbursement', app.id))) continue;
               const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Customer';
               
               try {
@@ -189,6 +220,7 @@ async function checkPendingDisbursements() {
                   app.trackingNumber || `APP-${app.id}`
                 );
                 if (result && result.success) {
+                  await db.logEmailReminder(app.userId, 'pending_disbursement', app.id);
                   console.log(`[Reminder] ✅ Sent pending disbursement reminder to ${user.email} for app ${app.id}`);
                 } else {
                   console.error(`[Reminder] ❌ Failed to send disbursement reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
@@ -241,6 +273,8 @@ async function checkIncompleteDocuments() {
           if (user && user.email) {
             // Respect user's email notification preferences
             if (!(await isEmailReminderEnabled(app.userId))) continue;
+            // Check tracking: cooldown + max count
+            if (!(await shouldSendReminder(app.userId, 'incomplete_documents', app.id))) continue;
             const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Customer';
             
             const missingDocs = [];
@@ -255,6 +289,7 @@ async function checkIncompleteDocuments() {
                 app.trackingNumber || `APP-${app.id}`
               );
               if (result && result.success) {
+                await db.logEmailReminder(app.userId, 'incomplete_documents', app.id);
                 console.log(`[Reminder] ✅ Sent incomplete documents reminder to ${user.email} for app ${app.id}`);
               } else {
                 console.error(`[Reminder] ❌ Failed to send incomplete docs reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
@@ -303,6 +338,8 @@ async function checkInactiveUsers() {
         if (user.email) {
           // Respect user's email notification preferences
           if (!(await isEmailReminderEnabled(user.id))) continue;
+          // Check tracking: cooldown + max count (no entityId for inactive user)
+          if (!(await shouldSendReminder(user.id, 'inactive_user', null))) continue;
           const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Customer';
           
           try {
@@ -311,6 +348,7 @@ async function checkInactiveUsers() {
               fullName
             );
             if (result && result.success) {
+              await db.logEmailReminder(user.id, 'inactive_user', null);
               console.log(`[Reminder] ✅ Sent inactive user reminder to ${user.email}`);
             } else {
               console.error(`[Reminder] ❌ Failed to send inactive user reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
@@ -430,18 +468,19 @@ async function runAllReminderChecks() {
 
 /**
  * Initialize the reminder scheduler
- * Runs every 6 hours
+ * Runs once every 24 hours (after a 1-hour startup delay to avoid bursts on redeploy)
  */
 export function initializeReminderScheduler() {
   console.log('[Reminder Scheduler] Initializing automated reminder scheduler...');
   
-  // Run immediately on startup
-  runAllReminderChecks();
+  // Delay the first run by 1 hour so server restarts don't spam emails
+  setTimeout(() => {
+    runAllReminderChecks();
+    // Then repeat every 24 hours
+    reminderInterval = setInterval(runAllReminderChecks, 24 * 60 * 60 * 1000);
+  }, 60 * 60 * 1000);
   
-  // Then run every 6 hours (6 * 60 * 60 * 1000 ms)
-  reminderInterval = setInterval(runAllReminderChecks, 6 * 60 * 60 * 1000);
-  
-  console.log('[Reminder Scheduler] Reminder scheduler initialized (runs every 6 hours)');
+  console.log('[Reminder Scheduler] Reminder scheduler initialized (runs once every 24 hours, first run in 1 hour)');
 }
 
 /**
