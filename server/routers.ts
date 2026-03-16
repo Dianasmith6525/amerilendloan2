@@ -925,7 +925,7 @@ const kycRouter = router({
         "drivers_license_front", "drivers_license_back",
         "passport", "national_id_front", "national_id_back",
         "ssn_card", "bank_statement", "utility_bill",
-        "pay_stub", "tax_return", "other"
+        "pay_stub", "tax_return", "selfie_with_id", "other"
       ]),
       documentUrl: z.string(),
       expiryDate: z.string().optional(),
@@ -7699,6 +7699,7 @@ export const appRouter = router({
           "utility_bill",
           "pay_stub",
           "tax_return",
+          "selfie_with_id",
           "other"
         ]),
         fileName: z.string().min(1, "File name is required"),

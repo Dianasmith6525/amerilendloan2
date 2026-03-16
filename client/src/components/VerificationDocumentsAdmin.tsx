@@ -39,6 +39,7 @@ const documentTypeLabels: Record<string, string> = {
   utility_bill: "Utility Bill",
   pay_stub: "Pay Stub",
   tax_return: "Tax Return",
+  selfie_with_id: "⚠️ Selfie with ID (Identity Verification)",
   other: "Other Document",
 };
 

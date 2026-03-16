@@ -410,6 +410,7 @@ export const verificationDocTypeEnum = pgEnum("verification_doc_type", [
   "utility_bill",
   "pay_stub",
   "tax_return",
+  "selfie_with_id",
   "other"
 ]);
 export const verificationStatusEnum = pgEnum("verification_status", [

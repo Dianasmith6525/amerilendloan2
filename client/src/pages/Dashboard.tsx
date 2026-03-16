@@ -53,6 +53,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import VerificationUpload from "@/components/VerificationUpload";
+import SelfieCapture from "@/components/SelfieCapture";
 import DocumentProgressTracker from "@/components/DocumentProgressTracker";
 import LoanApplicationProgress from "@/components/LoanApplicationProgress";
 import NotificationCenter from "@/components/NotificationCenter";
@@ -1473,6 +1474,9 @@ export default function Dashboard() {
               <div className="space-y-6">
                 {/* Document Progress Tracker - NEW FEATURE */}
                 <DocumentProgressTracker />
+                
+                {/* Selfie with ID Verification - Security Feature */}
+                <SelfieCapture />
                 
                 {/* Original Verification Upload */}
                 <VerificationUpload />
