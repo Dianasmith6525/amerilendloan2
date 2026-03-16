@@ -18,10 +18,10 @@ export function serveStatic(app: Express) {
   // fall through to index.html if the file doesn't exist (SPA routing)
   // BUT exclude /api/* and /auth/* routes - they should 404 if not handled
   app.use("*", (req: Request, res: Response, next: NextFunction) => {
-    const path = req.originalUrl || req.path;
+    const reqPath = req.originalUrl || req.path;
     
     // Don't serve index.html for API or auth routes - let them 404
-    if (path.startsWith('/api/') || path.startsWith('/auth/')) {
+    if (reqPath.startsWith('/api/') || reqPath.startsWith('/auth/')) {
       return next();
     }
     
