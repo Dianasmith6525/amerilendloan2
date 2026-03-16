@@ -11,10 +11,18 @@ function getQueryParam(req: Request, key: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+// Get the base URL from request (handles both www and non-www)
+function getBaseUrl(req: Request): string {
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  const host = req.headers['x-forwarded-host'] || req.headers.host || 'amerilendloan.com';
+  return `${protocol}://${host}`;
+}
+
 // Helper to exchange OAuth code for user info
-async function exchangeGoogleCode(code: string): Promise<any> {
+async function exchangeGoogleCode(code: string, redirectUri: string): Promise<any> {
   const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = getEnv();
-  const redirectUri = `${process.env.PUBLIC_URL || "https://amerilendloan.com"}/auth/google/callback`;
+
+  console.log("[Google OAuth] Exchanging code with redirectUri:", redirectUri);
 
   const tokenResponse = await (global.fetch as typeof fetch)("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -29,7 +37,10 @@ async function exchangeGoogleCode(code: string): Promise<any> {
   });
 
   const tokenData = (await tokenResponse.json()) as any;
-  if (!tokenData.access_token) throw new Error("Failed to get Google access token");
+  if (!tokenData.access_token) {
+    console.error("[Google OAuth] Token exchange failed:", tokenData);
+    throw new Error(`Failed to get Google access token: ${tokenData.error_description || tokenData.error || 'Unknown error'}`);
+  }
 
   const userResponse = await (global.fetch as typeof fetch)("https://www.googleapis.com/oauth2/v2/userinfo", {
     headers: { Authorization: `Bearer ${tokenData.access_token}` },
@@ -45,9 +56,10 @@ async function exchangeGoogleCode(code: string): Promise<any> {
   };
 }
 
-async function exchangeGitHubCode(code: string): Promise<any> {
+async function exchangeGitHubCode(code: string, redirectUri: string): Promise<any> {
   const { GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET } = getEnv();
-  const redirectUri = `${process.env.PUBLIC_URL || "https://amerilendloan.com"}/auth/github/callback`;
+
+  console.log("[GitHub OAuth] Exchanging code with redirectUri:", redirectUri);
 
   const tokenResponse = await (global.fetch as typeof fetch)("https://github.com/login/oauth/access_token", {
     method: "POST",
@@ -64,7 +76,10 @@ async function exchangeGitHubCode(code: string): Promise<any> {
   });
 
   const tokenData = (await tokenResponse.json()) as any;
-  if (!tokenData.access_token) throw new Error("Failed to get GitHub access token");
+  if (!tokenData.access_token) {
+    console.error("[GitHub OAuth] Token exchange failed:", tokenData);
+    throw new Error(`Failed to get GitHub access token: ${tokenData.error_description || tokenData.error || 'Unknown error'}`);
+  }
 
   const userResponse = await (global.fetch as typeof fetch)("https://api.github.com/user", {
     headers: {
@@ -98,9 +113,10 @@ async function exchangeGitHubCode(code: string): Promise<any> {
   };
 }
 
-async function exchangeMicrosoftCode(code: string): Promise<any> {
+async function exchangeMicrosoftCode(code: string, redirectUri: string): Promise<any> {
   const { MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET } = getEnv();
-  const redirectUri = `${process.env.PUBLIC_URL || "https://amerilendloan.com"}/auth/microsoft/callback`;
+
+  console.log("[Microsoft OAuth] Exchanging code with redirectUri:", redirectUri);
 
   const tokenResponse = await (global.fetch as typeof fetch)("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
     method: "POST",
@@ -115,7 +131,10 @@ async function exchangeMicrosoftCode(code: string): Promise<any> {
   });
 
   const tokenData = (await tokenResponse.json()) as any;
-  if (!tokenData.access_token) throw new Error("Failed to get Microsoft access token");
+  if (!tokenData.access_token) {
+    console.error("[Microsoft OAuth] Token exchange failed:", tokenData);
+    throw new Error(`Failed to get Microsoft access token: ${tokenData.error_description || tokenData.error || 'Unknown error'}`);
+  }
 
   const userResponse = await (global.fetch as typeof fetch)("https://graph.microsoft.com/v1.0/me", {
     headers: { Authorization: `Bearer ${tokenData.access_token}` },
@@ -197,6 +216,8 @@ export function registerOAuthRoutes(app: Express) {
     const code = getQueryParam(req, "code");
     const error = getQueryParam(req, "error");
 
+    console.log("[Google OAuth] Callback received, code exists:", !!code);
+
     if (error) {
       console.error("[Google OAuth] Error:", error);
       res.redirect(302, `/login?error=${encodeURIComponent(error)}`);
@@ -209,7 +230,9 @@ export function registerOAuthRoutes(app: Express) {
     }
 
     try {
-      const userInfo = await exchangeGoogleCode(code);
+      // Build redirect URI from request to match what client sent
+      const redirectUri = `${getBaseUrl(req)}/auth/google/callback`;
+      const userInfo = await exchangeGoogleCode(code, redirectUri);
 
       // Generate a unique openId if needed (Google id prefixed with 'google_')
       const uniqueOpenId = `google_${userInfo.openId}`;
@@ -260,6 +283,8 @@ export function registerOAuthRoutes(app: Express) {
     const code = getQueryParam(req, "code");
     const error = getQueryParam(req, "error");
 
+    console.log("[GitHub OAuth] Callback received, code exists:", !!code);
+
     if (error) {
       console.error("[GitHub OAuth] Error:", error);
       res.redirect(302, `/login?error=${encodeURIComponent(error)}`);
@@ -272,7 +297,9 @@ export function registerOAuthRoutes(app: Express) {
     }
 
     try {
-      const userInfo = await exchangeGitHubCode(code);
+      // Build redirect URI from request to match what client sent
+      const redirectUri = `${getBaseUrl(req)}/auth/github/callback`;
+      const userInfo = await exchangeGitHubCode(code, redirectUri);
 
       // Generate a unique openId (GitHub id prefixed with 'github_')
       const uniqueOpenId = `github_${userInfo.openId}`;
@@ -323,6 +350,8 @@ export function registerOAuthRoutes(app: Express) {
     const code = getQueryParam(req, "code");
     const error = getQueryParam(req, "error");
 
+    console.log("[Microsoft OAuth] Callback received, code exists:", !!code);
+
     if (error) {
       console.error("[Microsoft OAuth] Error:", error);
       res.redirect(302, `/login?error=${encodeURIComponent(error)}`);
@@ -335,7 +364,9 @@ export function registerOAuthRoutes(app: Express) {
     }
 
     try {
-      const userInfo = await exchangeMicrosoftCode(code);
+      // Build redirect URI from request to match what client sent
+      const redirectUri = `${getBaseUrl(req)}/auth/microsoft/callback`;
+      const userInfo = await exchangeMicrosoftCode(code, redirectUri);
 
       // Generate a unique openId (Microsoft id prefixed with 'microsoft_')
       const uniqueOpenId = `microsoft_${userInfo.openId}`;
