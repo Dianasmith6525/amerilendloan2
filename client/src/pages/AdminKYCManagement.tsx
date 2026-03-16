@@ -122,7 +122,7 @@ export function AdminKYCManagement() {
   };
 
   const getDocumentTypeIcon = (type: string) => {
-    return "📄";
+    return "";
   };
 
   return (

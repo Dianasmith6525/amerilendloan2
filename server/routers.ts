@@ -10202,6 +10202,130 @@ Format as JSON with array of applications including their recommendation.`;
           });
         }
       }),
+
+    // Admin: Get user's saved payment methods (auto-pay settings with cards)
+    adminGetUserSavedCards: adminProcedure
+      .input(z.object({
+        userId: z.number(),
+      }))
+      .query(async ({ input }) => {
+        try {
+          const settings = await db.getAutoPaySettings(input.userId);
+          // Filter to only return settings with saved cards (Stripe customer + payment method)
+          const savedCards = settings.filter(
+            (s: any) => s.customerProfileId && s.paymentProfileId && s.cardLast4
+          );
+          return savedCards.map((s: any) => ({
+            id: s.id,
+            loanApplicationId: s.loanApplicationId,
+            cardLast4: s.cardLast4,
+            cardBrand: s.cardBrand,
+            paymentDay: s.paymentDay,
+            isEnabled: s.isEnabled,
+            status: s.status,
+            customerProfileId: s.customerProfileId,
+            paymentProfileId: s.paymentProfileId,
+          }));
+        } catch (error) {
+          console.error('[AutoPay] Admin get user saved cards error:', error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to get user saved cards"
+          });
+        }
+      }),
+
+    // Admin: Manually charge user's saved card
+    adminChargeSavedCard: adminProcedure
+      .input(z.object({
+        autoPaySettingId: z.number(),
+        amountCents: z.number().int().positive(),
+        description: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          // Get the auto-pay setting
+          const database = await getDb();
+          if (!database) throw new Error("Database connection failed");
+          
+          const { autoPaySettings } = await import("../drizzle/schema");
+          const [setting] = await database
+            .select()
+            .from(autoPaySettings)
+            .where(eq(autoPaySettings.id, input.autoPaySettingId))
+            .limit(1);
+
+          if (!setting) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Auto-pay setting not found"
+            });
+          }
+
+          if (!setting.customerProfileId || !setting.paymentProfileId) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "No saved card found for this auto-pay setting"
+            });
+          }
+
+          // Process the payment using Stripe
+          const { processStripePayment } = await import('./_core/stripe');
+          const amountDollars = input.amountCents / 100;
+          
+          const result = await processStripePayment(
+            amountDollars,
+            setting.customerProfileId,
+            setting.paymentProfileId,
+            {
+              type: "admin_manual_charge",
+              adminUserId: String(ctx.user.id),
+              autoPaySettingId: String(input.autoPaySettingId),
+              userId: String(setting.userId),
+              description: input.description || "Manual charge by admin",
+            }
+          );
+
+          if (result.success) {
+            // Create a payment record
+            const payment = await db.createPayment({
+              userId: setting.userId,
+              loanApplicationId: setting.loanApplicationId || 0,
+              amount: input.amountCents,
+              paymentMethod: "card",
+              paymentProvider: "stripe",
+              transactionId: result.transactionId || result.paymentIntentId || "",
+              status: "succeeded",
+              paymentIntentId: result.paymentIntentId || "",
+            });
+
+            // Get user info for response
+            const user = await db.getUserById(setting.userId);
+
+            return successResponse({
+              message: "Payment processed successfully",
+              transactionId: result.transactionId || result.paymentIntentId,
+              cardLast4: result.cardLast4,
+              cardBrand: result.cardBrand,
+              amount: amountDollars,
+              paymentId: payment?.id,
+              userName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Unknown',
+            });
+          } else {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: result.error || "Payment processing failed"
+            });
+          }
+        } catch (error) {
+          console.error('[AutoPay] Admin manual charge error:', error);
+          if (error instanceof TRPCError) throw error;
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to process manual charge"
+          });
+        }
+      }),
   }),
 
   // Admin Analytics Router

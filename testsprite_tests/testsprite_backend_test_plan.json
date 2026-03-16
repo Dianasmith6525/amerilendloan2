@@ -1,0 +1,47 @@
+[
+  {
+    "id": "TC001",
+    "title": "test_user_authentication_login",
+    "description": "Verify that users can successfully log in using email/password and OTP verification methods at the /login and /otp-login endpoints."
+  },
+  {
+    "id": "TC002",
+    "title": "test_user_authentication_signup",
+    "description": "Verify that new users can successfully sign up using email/password and OTP verification at the /signup endpoint."
+  },
+  {
+    "id": "TC003",
+    "title": "test_loan_application_submission",
+    "description": "Verify that authenticated users can submit a multi-step loan application form successfully at the /apply endpoint."
+  },
+  {
+    "id": "TC004",
+    "title": "test_user_dashboard_access",
+    "description": "Verify that authenticated users can access their dashboard to view loan applications, payments, and account activity at the /dashboard endpoint."
+  },
+  {
+    "id": "TC005",
+    "title": "test_loan_payment_processing",
+    "description": "Verify that authenticated users can make loan payments using credit card or cryptocurrency at the /payment/:id and /pay-fee endpoints."
+  },
+  {
+    "id": "TC006",
+    "title": "test_check_offers_access",
+    "description": "Verify that users can access the pre-qualification tool to check available loan offers without authentication at the /check-offers endpoint."
+  },
+  {
+    "id": "TC007",
+    "title": "test_admin_dashboard_access",
+    "description": "Verify that authenticated admin users can access the administrative overview and analytics at the /admin endpoint."
+  },
+  {
+    "id": "TC008",
+    "title": "test_admin_application_review",
+    "description": "Verify that authenticated admin users can review, approve, and reject loan applications at the /admin/application/:id endpoint."
+  },
+  {
+    "id": "TC009",
+    "title": "test_contact_form_submission",
+    "description": "Verify that users can submit inquiries to customer support via the contact form at the /contact endpoint without authentication."
+  }
+]

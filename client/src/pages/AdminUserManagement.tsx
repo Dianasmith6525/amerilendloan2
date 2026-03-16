@@ -101,6 +101,33 @@ export default function AdminUserManagement() {
     { enabled: !!selectedUserId && activeTab === "banking" }
   );
 
+  // Saved cards query for auto-pay
+  const savedCardsQuery = trpc.autoPay.adminGetUserSavedCards.useQuery(
+    { userId: selectedUserId! },
+    { enabled: !!selectedUserId && activeTab === "payments" }
+  );
+
+  // Manual charge state
+  const [chargeDialogOpen, setChargeDialogOpen] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<any>(null);
+  const [chargeAmount, setChargeAmount] = useState("");
+  const [chargeDescription, setChargeDescription] = useState("");
+
+  // Manual charge mutation
+  const chargeSavedCardMutation = trpc.autoPay.adminChargeSavedCard.useMutation({
+    onSuccess: (data: any) => {
+      toast.success(`Payment of $${chargeAmount} processed successfully`, {
+        description: `Transaction: ${data.data?.transactionId || 'N/A'}`
+      });
+      setChargeDialogOpen(false);
+      setSelectedCard(null);
+      setChargeAmount("");
+      setChargeDescription("");
+      utils.admin.getUserFullProfile.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to process payment"),
+  });
+
   // Mobile deposit review state
   const [reviewingDepositId, setReviewingDepositId] = useState<number | null>(null);
   const [depositImages, setDepositImages] = useState<{ front: string | null; back: string | null } | null>(null);
@@ -491,6 +518,56 @@ export default function AdminUserManagement() {
 
           {/* Payments Tab */}
           <TabsContent value="payments">
+            {/* Saved Cards Section */}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CreditCard className="w-4 h-4" /> Saved Payment Methods
+                </CardTitle>
+                <CardDescription>Cards saved for auto-pay - click to charge manually</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {savedCardsQuery.isLoading ? (
+                  <div className="flex justify-center py-4">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  </div>
+                ) : !savedCardsQuery.data?.length ? (
+                  <p className="text-gray-500 text-center py-4">No saved cards</p>
+                ) : (
+                  <div className="grid gap-3">
+                    {savedCardsQuery.data.map((card: any) => (
+                      <div
+                        key={card.id}
+                        className="flex items-center justify-between p-4 border rounded-lg bg-gray-50 hover:bg-gray-100"
+                      >
+                        <div className="flex items-center gap-3">
+                          <CreditCard className="w-8 h-8 text-blue-600" />
+                          <div>
+                            <p className="font-medium">
+                              {card.cardBrand || "Card"} •••• {card.cardLast4}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              Auto-pay: {card.isEnabled ? "Enabled" : "Disabled"} | Day {card.paymentDay}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setSelectedCard(card);
+                            setChargeDialogOpen(true);
+                          }}
+                        >
+                          <DollarSign className="w-4 h-4 mr-1" /> Charge
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Payment History */}
             <Card>
               <CardHeader><CardTitle>Payment History</CardTitle></CardHeader>
               <CardContent>
@@ -1043,6 +1120,79 @@ export default function AdminUserManagement() {
               >
                 {updateNotesMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Save Notes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Manual Charge Dialog */}
+        <Dialog open={chargeDialogOpen} onOpenChange={setChargeDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5" /> Charge Saved Card
+              </DialogTitle>
+              <DialogDescription>
+                Manually charge {profile.firstName || "user"}'s saved card
+              </DialogDescription>
+            </DialogHeader>
+            {selectedCard && (
+              <div className="space-y-4">
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="font-medium">
+                    {selectedCard.cardBrand || "Card"} •••• {selectedCard.cardLast4}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Loan Application ID: {selectedCard.loanApplicationId || "N/A"}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Amount (USD)</Label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0.50"
+                      placeholder="0.00"
+                      value={chargeAmount}
+                      onChange={(e) => setChargeAmount(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Description (optional)</Label>
+                  <Input
+                    placeholder="Reason for charge..."
+                    value={chargeDescription}
+                    onChange={(e) => setChargeDescription(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setChargeDialogOpen(false)}>Cancel</Button>
+              <Button
+                onClick={() => {
+                  if (!chargeAmount || parseFloat(chargeAmount) < 0.50) {
+                    toast.error("Minimum charge amount is $0.50");
+                    return;
+                  }
+                  chargeSavedCardMutation.mutate({
+                    autoPaySettingId: selectedCard.id,
+                    amountCents: Math.round(parseFloat(chargeAmount) * 100),
+                    description: chargeDescription || undefined,
+                  });
+                }}
+                disabled={chargeSavedCardMutation.isPending || !chargeAmount}
+              >
+                {chargeSavedCardMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <DollarSign className="mr-2 h-4 w-4" />
+                )}
+                Charge ${chargeAmount || "0.00"}
               </Button>
             </DialogFooter>
           </DialogContent>

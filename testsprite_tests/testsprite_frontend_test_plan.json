@@ -1,0 +1,1691 @@
+[
+  {
+    "id": "TC001",
+    "title": "Homepage loads and displays hero marketing content",
+    "description": "Verifies the landing page renders key hero marketing content for first-time visitors.",
+    "category": "Homepage and Navigation",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to \"/\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Hero section\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Marketing copy\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Apply Now\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Get Started\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Primary CTA leads to the loan application start page",
+    "description": "Verifies clicking the main call-to-action takes the user from the homepage to the /apply page.",
+    "category": "Homepage and Navigation",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Apply Now\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/apply\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify page title contains \"Apply\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Loan application\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Check offers successfully from /check-offers and view pre-qualified offers",
+    "description": "Verifies a user can submit valid pre-qualification details on /check-offers and see an offers list showing APR and monthly payment.",
+    "category": "Pre-Qualification Check Offers",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /check-offers"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Jordan\" into the first name input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Taylor\" into the last name input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"jordan.taylor@example.com\" into the email input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"85000\" into the annual income field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"720\" into the estimated credit score field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Check My Offers\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a pre-qualified offers list is visible with APR and monthly payment"
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Check offers successfully from /prequalify alias route and view offers",
+    "description": "Verifies the /prequalify route works as an alias to the pre-qualification form and shows offers after submission.",
+    "category": "Pre-Qualification Check Offers",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /prequalify"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Check My Offers\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Avery\" into the first name input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Nguyen\" into the last name input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"avery.nguyen@example.com\" into the email input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"64000\" into the annual income field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"690\" into the estimated credit score field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Check My Offers\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a pre-qualified offers list is visible with APR and monthly payment"
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Required field validation: missing email blocks submission on /prequalify",
+    "description": "Verifies the form shows a required-field validation message when email is missing.",
+    "category": "Pre-Qualification Check Offers",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /prequalify"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Sam\" into the first name input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Patel\" into the last name input field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Check My Offers\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Email\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error message indicating the email field is required is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Required field validation: submit with all fields blank shows errors",
+    "description": "Verifies submitting the empty form displays required-field validation messages and does not show offers.",
+    "category": "Pre-Qualification Check Offers",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /check-offers"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Check My Offers\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error message indicating the first name field is required is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error message indicating the last name field is required is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error message indicating the email field is required is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Input validation: non-numeric annual income prevents successful submission",
+    "description": "Verifies annual income rejects non-numeric input and shows a visible validation message.",
+    "category": "Pre-Qualification Check Offers",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /check-offers"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Riley\" into the first name input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Chen\" into the last name input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"riley.chen@example.com\" into the email input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"eighty thousand\" into the annual income field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"710\" into the estimated credit score field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Check My Offers\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error message indicating annual income must be a number is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Input validation: credit score outside expected range shows an error",
+    "description": "Verifies an out-of-range credit score displays a validation error and prevents showing offers.",
+    "category": "Pre-Qualification Check Offers",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /check-offers"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Morgan\" into the first name input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Lee\" into the last name input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"morgan.lee@example.com\" into the email input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"90000\" into the annual income field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"999\" into the estimated credit score field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Check My Offers\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error message indicating the credit score is invalid is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Double-submit protection: clicking Check My Offers twice does not duplicate results",
+    "description": "Verifies repeated clicking does not create duplicated offers content and the results area remains stable.",
+    "category": "Pre-Qualification Check Offers",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /check-offers"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Jamie\" into the first name input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Brooks\" into the last name input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"jamie.brooks@example.com\" into the email input field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"78000\" into the annual income field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"730\" into the estimated credit score field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Check My Offers\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Check My Offers\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a pre-qualified offers list is visible with APR and monthly payment"
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Attempt to submit with only personal information and verify validation blocks submission",
+    "description": "Verifies the application cannot be submitted when required steps/fields beyond personal info are incomplete and the user is shown a visible validation message.",
+    "category": "Loan Application",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /apply"
+      },
+      {
+        "type": "action",
+        "description": "Fill personal information (name, email, phone, DOB, SSN)"
+      },
+      {
+        "type": "action",
+        "description": "Click Submit application button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"required\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/apply\""
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Apply page loads and shows loan application form",
+    "description": "Verifies the /apply page renders the loan application form with its first step visible and an input area for the applicant.",
+    "category": "Loan Application",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /apply"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/apply\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Apply\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"loan application form\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"input field\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Changing loan type updates the application state without losing entered information",
+    "description": "Verifies that the user can change the selected loan type during the application and previously entered values remain present.",
+    "category": "Loan Application",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /apply"
+      },
+      {
+        "type": "action",
+        "description": "Select loan type from dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Enter loan amount"
+      },
+      {
+        "type": "action",
+        "description": "Fill personal information (name, email, phone, DOB, SSN)"
+      },
+      {
+        "type": "action",
+        "description": "Select a different loan type from dropdown"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"loan amount\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"personal information\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Invalid loan amount is rejected with a visible message",
+    "description": "Verifies that entering an invalid loan amount prevents progress/submission and shows a visible validation message.",
+    "category": "Loan Application",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /apply"
+      },
+      {
+        "type": "action",
+        "description": "Select loan type from dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Enter loan amount as \"0\""
+      },
+      {
+        "type": "action",
+        "description": "Click Submit application button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"amount\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"invalid\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Payment History page loads and shows heading and sign-in prompt",
+    "description": "Verifies the Payment History page renders the page heading and prompts unauthenticated users to sign in to view their payment records.",
+    "category": "Payment History",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /payment-history"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Payment History\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Sign In\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"sign in button\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Payment History unauthenticated state shows no-payments message",
+    "description": "Verifies that an unauthenticated user on /payment-history sees an appropriate empty state message prompting them to sign in.",
+    "category": "Payment History",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /payment-history"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Payment History\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"No payments yet\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Sign in\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Payment History page shows heading and subtitle text",
+    "description": "Verifies the Payment History page renders the Payment History heading and subtitle visible to unauthenticated users. The export button is only visible after login.",
+    "category": "Payment History",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /payment-history"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Payment History\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"View and manage\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC017",
+    "title": "Payment History sign-in link navigates to login page",
+    "description": "Verifies that clicking the Sign In button on the unauthenticated Payment History page navigates the user to the login page.",
+    "category": "Payment History",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /payment-history"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Sign In\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Sign In\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\" or \"/otp-login\""
+      }
+    ]
+  },
+  {
+    "id": "TC018",
+    "title": "Submit contact form successfully with all required fields",
+    "description": "Verifies a user can submit a contact inquiry and sees a success confirmation message.",
+    "category": "Contact Form",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /contact"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify page title contains \"Contact\""
+      },
+      {
+        "type": "action",
+        "description": "Type \"Alex Johnson\" into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"alex.johnson@example.com\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"General Inquiry\" from the inquiry type dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Type \"I have a question about your loan options and eligibility requirements.\" into the message field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Submit\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Thank you\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC019",
+    "title": "Validation: block submission when message is blank",
+    "description": "Verifies the form shows a validation error when the message field is left empty.",
+    "category": "Contact Form",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /contact"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Taylor Smith\" into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"taylor.smith@example.com\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Support\" from the inquiry type dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Submit\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"message\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"required\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC020",
+    "title": "Validation: block submission when email is missing",
+    "description": "Verifies the form prevents submission and prompts for an email address when it is not provided.",
+    "category": "Contact Form",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /contact"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Jordan Lee\" into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"General Inquiry\" from the inquiry type dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Please contact me regarding repayment schedules.\" into the message field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Submit\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"email\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"required\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC021",
+    "title": "Validation: show error for invalid email format",
+    "description": "Verifies the form flags an improperly formatted email address.",
+    "category": "Contact Form",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /contact"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Morgan Davis\" into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"morgan.davis@\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"General Inquiry\" from the inquiry type dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Testing invalid email validation.\" into the message field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Submit\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"email\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"valid\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC022",
+    "title": "Validation: block submission when name is missing",
+    "description": "Verifies the form prevents submission and prompts for a name when it is not provided.",
+    "category": "Contact Form",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /contact"
+      },
+      {
+        "type": "action",
+        "description": "Type \"casey.parker@example.com\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Support\" from the inquiry type dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Type \"I need help accessing my account.\" into the message field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Submit\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"name\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"required\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC023",
+    "title": "Form UX: successful submission clears form or disables resubmission",
+    "description": "Verifies that after a successful submit, the UI indicates completion and offers the user the option to send another message.",
+    "category": "Contact Form",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /contact"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Riley Chen\" into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"riley.chen@example.com\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Partnership\" from the Subject dropdown (value partnership)"
+      },
+      {
+        "type": "action",
+        "description": "Type \"I am interested in partnership opportunities.\" into the message field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Send Message\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Thank you\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Send Another Message\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC024",
+    "title": "Edge case: message accepts longer text without UI breaking",
+    "description": "Verifies the message field can accept a long inquiry and still submit or validate normally.",
+    "category": "Contact Form",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /contact"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Avery Nguyen\" into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"avery.nguyen@example.com\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"General Inquiry\" from the inquiry type dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Type \"This is a longer inquiry intended to verify that the contact form message field supports substantial content without truncation or UI issues. Please provide details about available loan terms, repayment options, and any fees that may apply. Also include guidance on pre-qualification and required documentation.\" into the message field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Submit\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Thank you\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC025",
+    "title": "Open AI support chat from the Home page and receive an AI response",
+    "description": "Verifies the chat widget can be opened from the landing page, a question can be sent, and an AI response is shown in the conversation.",
+    "category": "AI Support Chat Widget",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click chat bubble icon to open"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"chat widget\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Type \"What are your loan rates?\" into the chat input field"
+      },
+      {
+        "type": "action",
+        "description": "Click send button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"What are your loan rates?\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"AI-generated response message\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC026",
+    "title": "Send a second message in the same chat session and receive another AI response",
+    "description": "Verifies multi-turn chat works without closing the widget and responses continue to appear.",
+    "category": "AI Support Chat Widget",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click chat bubble icon to open"
+      },
+      {
+        "type": "action",
+        "description": "Type \"How long does approval take?\" into the chat input field"
+      },
+      {
+        "type": "action",
+        "description": "Click send button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"AI-generated response message\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Type \"What documents do I need?\" into the chat input field"
+      },
+      {
+        "type": "action",
+        "description": "Click send button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"AI-generated response message\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC027",
+    "title": "Close and reopen the chat widget from the Home page",
+    "description": "Verifies the widget can be dismissed and opened again from the same page without navigation.",
+    "category": "AI Support Chat Widget",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click chat bubble icon to open"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"chat widget\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Close\" on the chat widget"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"chat widget\" is not visible"
+      },
+      {
+        "type": "action",
+        "description": "Click chat bubble icon to open"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"chat widget\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC028",
+    "title": "Attempt to send an empty message",
+    "description": "Verifies the chat prevents sending blank input and shows a validation message or keeps the send action disabled.",
+    "category": "AI Support Chat Widget",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click chat bubble icon to open"
+      },
+      {
+        "type": "action",
+        "description": "Click send button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Message\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"required\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC029",
+    "title": "Send a very long question and verify the UI remains usable",
+    "description": "Verifies the widget accepts a long prompt and still displays the user message and an AI response without breaking the layout.",
+    "category": "AI Support Chat Widget",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click chat bubble icon to open"
+      },
+      {
+        "type": "action",
+        "description": "Type \"I have a detailed question about eligibility, income requirements, credit score ranges, repayment schedules, fees, prepayment penalties, and how co-signers affect my APR. Please explain step by step.\" into the chat input field"
+      },
+      {
+        "type": "action",
+        "description": "Click send button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"I have a detailed question about eligibility\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"AI-generated response message\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC030",
+    "title": "About page loads and allows navigation to How It Works via in-page link",
+    "description": "Verifies the About page renders visible content and a user can navigate to How It Works using a page link.",
+    "category": "Static Pages",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /about"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify page title contains \"About\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"About\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the middle of the page"
+      },
+      {
+        "type": "action",
+        "description": "Click on the link \"How It Works\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/how-it-works\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"How It Works\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC031",
+    "title": "How It Works page shows process description content",
+    "description": "Verifies the How It Works page loads and displays lending process information.",
+    "category": "Static Pages",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /how-it-works"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/how-it-works\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify page title contains \"How\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"How It Works\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the bottom of the page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"process\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC032",
+    "title": "Rates page renders rate information content",
+    "description": "Verifies the Rates page loads and displays rate-related information to the user.",
+    "category": "Static Pages",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /rates"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/rates\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Rates\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the middle of the page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"rate\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC033",
+    "title": "Resources listing page loads and shows a list of resources",
+    "description": "Verifies the Resources page renders and displays a visible list of articles/resources.",
+    "category": "Static Pages",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /resources"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/resources\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Resources\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"article\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the bottom of the page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Load\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC034",
+    "title": "Open a resource article from the Resources listing",
+    "description": "Verifies a user can open an article detail page from the Resources list and see article content.",
+    "category": "Static Pages",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /resources"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"article\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click on the first visible article title in the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/resources/\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"article content\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"heading\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC035",
+    "title": "Non-existent resource slug shows 404 page",
+    "description": "Verifies that navigating to an invalid resources article path results in the 404 not found page.",
+    "category": "Static Pages",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /404"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/404\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"404\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"not found\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC036",
+    "title": "Careers page loads and shows job application section",
+    "description": "Verifies the Careers page renders and exposes a job application area for users.",
+    "category": "Static Pages",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /careers"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/careers\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Careers\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the middle of the page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"application\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC037",
+    "title": "Legal documents page is reachable via a known static route (skip dynamic)",
+    "description": "Verifies that legal content is accessible only via available static routes; dynamic legal routes are not directly navigated in this plan.",
+    "category": "Static Pages",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the bottom of the page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Legal\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Privacy\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC038",
+    "title": "OTP Login page loads and renders phone/email input",
+    "description": "Verifies the /login page renders an authentication form for entering a phone number or email to receive a one-time passcode.",
+    "category": "Authentication",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify page title contains \"Login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"phone or email input\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Send Code\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC039",
+    "title": "OTP Login: submitting blank phone/email shows validation error",
+    "description": "Verifies that clicking Send Code without entering a phone or email shows a required-field validation message.",
+    "category": "Authentication",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /otp-login"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Send Code\" button without entering any input"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error message is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"required\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC040",
+    "title": "OTP Login: entering invalid email format shows validation error",
+    "description": "Verifies the OTP login form rejects a malformed email and shows a format error.",
+    "category": "Authentication",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"notanemail\" into the phone or email input field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Send Code\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error message about valid email or phone is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC041",
+    "title": "Dashboard page redirects unauthenticated users to login",
+    "description": "Verifies that navigating to /dashboard without a session redirects the user to the login or OTP page.",
+    "category": "Dashboard",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\" or \"/otp-login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"login form\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC042",
+    "title": "User Dashboard page redirects unauthenticated users to login",
+    "description": "Verifies that /user-dashboard requires authentication and redirects to the login page when no session exists.",
+    "category": "Dashboard",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /user-dashboard"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\" or \"/otp-login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"login form\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC043",
+    "title": "Profile page redirects unauthenticated users to login",
+    "description": "Verifies that /profile is a protected route and unauthenticated users are redirected to the login page.",
+    "category": "User Account",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /profile"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\" or \"/otp-login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"login form\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC044",
+    "title": "Notifications page redirects unauthenticated users to login",
+    "description": "Verifies the /notifications route requires authentication and redirects to the login page.",
+    "category": "User Account",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /notifications"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\" or \"/otp-login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"login form\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC045",
+    "title": "Support Center page loads and displays support options",
+    "description": "Verifies /support renders a visible support center page with help categories or contact channels.",
+    "category": "Support",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /support"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Support\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"support options or categories\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC046",
+    "title": "Pay Fee page loads and displays fee payment form",
+    "description": "Verifies /pay-fee renders the fee payment interface without an authenticated session (checking the page shell at minimum).",
+    "category": "Payments",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /pay-fee"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Fee\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"payment form\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC047",
+    "title": "Referrals page requires authentication and redirects to login",
+    "description": "Verifies /referrals is a protected page and redirects unauthenticated users to login.",
+    "category": "User Account",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /referrals"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\" or \"/otp-login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"login form\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC048",
+    "title": "Bank Accounts page requires authentication and redirects to login",
+    "description": "Verifies /bank-accounts is a protected route and redirects unauthenticated users to login.",
+    "category": "User Account",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /bank-accounts"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\" or \"/otp-login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"login form\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC049",
+    "title": "Hardship Programs page loads and displays hardship options",
+    "description": "Verifies /hardship renders a page with visible hardship program information or application section.",
+    "category": "User Account",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /hardship"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Hardship\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"hardship program details\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC050",
+    "title": "Financial Tools page loads and shows calculator or tool UI",
+    "description": "Verifies /financial-tools renders relevant financial calculators or tools to the user.",
+    "category": "Financial Tools",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /financial-tools"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Financial\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"calculator or tool\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC051",
+    "title": "Virtual Card page redirects unauthenticated users to login",
+    "description": "Verifies /virtual-card is a protected page that redirects to login when no session is present.",
+    "category": "User Account",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /virtual-card"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\" or \"/otp-login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"login form\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC052",
+    "title": "Settings page redirects unauthenticated users to login",
+    "description": "Verifies /settings is a protected route requiring authentication.",
+    "category": "User Account",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /settings"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\" or \"/otp-login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"login form\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC053",
+    "title": "Admin page redirects non-admin users to login",
+    "description": "Verifies /admin is a protected admin-only route and redirects unauthenticated users to the login page.",
+    "category": "Admin",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /admin"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\" or \"/otp-login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"login form\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC054",
+    "title": "Legal document route renders privacy or terms content",
+    "description": "Verifies /legal/privacy-policy renders readable legal content on screen.",
+    "category": "Static Pages",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /legal/privacy-policy"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Privacy\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"legal document content\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC055",
+    "title": "Legal document route renders terms of service content",
+    "description": "Verifies /legal/terms-of-service renders the terms of service legal document text to the user.",
+    "category": "Static Pages",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /legal/terms-of-service"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Terms\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"legal document content\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC056",
+    "title": "Co-Signers page redirects unauthenticated users to login",
+    "description": "Verifies /co-signers requires authentication and redirects to the login page when no session exists.",
+    "category": "User Account",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /co-signers"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\" or \"/otp-login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"login form\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC057",
+    "title": "Navigation header is visible and links are present on the homepage",
+    "description": "Verifies the site-wide navigation header renders on the homepage with primary navigation links.",
+    "category": "Homepage and Navigation",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"navigation header\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"navigation links\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Apply\" is visible"
+      }
+    ]
+  }
+]

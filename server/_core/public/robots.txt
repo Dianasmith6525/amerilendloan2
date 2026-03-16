@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+Allow: /about
+Allow: /how-it-works
+Allow: /rates
+Allow: /contact
+Allow: /resources
+Allow: /careers
+Allow: /legal/*
+
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /dashboard
+Disallow: /user-dashboard
+Disallow: /profile
+Disallow: /payment*
+Disallow: /api/
+Disallow: /settings
+
+Sitemap: https://amerilendloan.com/sitemap.xml
