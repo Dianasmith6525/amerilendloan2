@@ -22,7 +22,7 @@ import { initializeCronJobs, stopAllCronJobs } from "./cron-jobs";
 import { initSentry, sentryErrorHandler } from "./monitoring";
 import { startBackupScheduler, stopBackupScheduler } from "./database-backup";
 import { healthCheck, readinessCheck, livenessCheck, metricsEndpoint } from "./health-checks";
-import { apiLimiter, authLimiter, paymentLimiter, uploadLimiter } from "./rate-limiting";
+import { apiLimiter, authLimiter, contactLimiter, paymentLimiter, uploadLimiter } from "./rate-limiting";
 import { handleFileUpload, handleFileDownload, upload } from "./upload-handler";
 import { registerAdminEmailActionRoutes } from "./admin-email-actions";
 import { logger } from "./logger";
@@ -167,6 +167,10 @@ async function startServer() {
   
   // Apply upload limiter to upload endpoints
   app.use("/api/upload", uploadLimiter);
+  
+  // Apply strict limiter to contact form endpoints (prevent email spam)
+  app.use("/api/trpc/contact.sendEmail", contactLimiter);
+  app.use("/api/trpc/contact.sendJobApplication", contactLimiter);
   
   // Simple health check for Railway/container orchestration (always 200 if process is alive)
   app.get("/health", (_req, res) => {

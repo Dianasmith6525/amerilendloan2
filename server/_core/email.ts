@@ -28,6 +28,11 @@ function formatCurrency(cents: number): string {
   });
 }
 
+/** Escape HTML special characters to prevent injection in email templates */
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 /**
  * Send email using SendGrid API
  */
@@ -1523,6 +1528,8 @@ export async function sendJobApplicationConfirmationEmail(
   fullName: string,
   position: string
 ): Promise<void> {
+  const safeName = escapeHtml(fullName);
+  const safePosition = escapeHtml(position);
   const subject = "Job Application Received - AmeriLend Careers";
   const text = `Dear ${fullName},\n\nThank you for applying for the ${position} position at AmeriLend!\n\nWe have received your application and it is now being reviewed by our HR team. We appreciate your interest in joining our company.\n\nWhat's Next:\n- Our HR team will review your application carefully\n- If your qualifications match our needs, we will contact you for an interview\n- You can expect to hear from us within 5-7 business days\n\nIn the meantime, if you have any questions, feel free to reach out to us at careers@amerilendloan.com.\n\nBest regards,\nThe AmeriLend Team`;
 
@@ -1532,7 +1539,7 @@ export async function sendJobApplicationConfirmationEmail(
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${subject}</title>
+        <title>${escapeHtml(subject)}</title>
       </head>
       <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
         ${getEmailHeader()}
@@ -1544,12 +1551,12 @@ export async function sendJobApplicationConfirmationEmail(
           </div>
 
           <h2 style="color: #0033A0; margin-top: 10px;">Thank You for Applying!</h2>
-          <p style="font-size: 16px; color: #555;">Dear ${fullName},</p>
-          <p style="font-size: 16px; color: #555;">We're excited to have received your application for the <strong>${position}</strong> position. Thank you for your interest in joining the AmeriLend team!</p>
+          <p style="font-size: 16px; color: #555;">Dear ${safeName},</p>
+          <p style="font-size: 16px; color: #555;">We're excited to have received your application for the <strong>${safePosition}</strong> position. Thank you for your interest in joining the AmeriLend team!</p>
 
           <div style="background-color: white; border-left: 4px solid #0033A0; padding: 20px; margin: 20px 0; border-radius: 5px;">
             <h3 style="margin-top: 0; color: #0033A0;">Position Applied For</h3>
-            <p style="margin: 0; font-size: 18px; font-weight: bold; color: #0033A0;">${position}</p>
+            <p style="margin: 0; font-size: 18px; font-weight: bold; color: #0033A0;">${safePosition}</p>
           </div>
 
           <div style="background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 20px; margin: 20px 0; border-radius: 5px;">
@@ -1593,6 +1600,12 @@ export async function sendAdminJobApplicationNotification(
   coverLetter: string,
   resumeFileName: string
 ): Promise<void> {
+  const safeName = escapeHtml(applicantName);
+  const safeEmail = escapeHtml(applicantEmail);
+  const safePhone = escapeHtml(applicantPhone);
+  const safePosition = escapeHtml(position);
+  const safeCoverLetter = escapeHtml(coverLetter);
+  const safeResume = escapeHtml(resumeFileName);
   const subject = `New Job Application - ${position} [${applicantName}]`;
   const text = `A new job application has been submitted.\n\nApplicant Information:\nName: ${applicantName}\nEmail: ${applicantEmail}\nPhone: ${applicantPhone}\nPosition: ${position}\n\nCover Letter:\n${coverLetter}\n\nResume: ${resumeFileName}\n\nAction Required:\nReview and respond to this application here:\nhttps://amerilendloan.com/admin?view=job_applications`;
 
@@ -1602,7 +1615,7 @@ export async function sendAdminJobApplicationNotification(
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${subject}</title>
+        <title>${escapeHtml(subject)}</title>
       </head>
       <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
         ${getEmailHeader()}
@@ -1621,31 +1634,31 @@ export async function sendAdminJobApplicationNotification(
             <table style="width: 100%; border-collapse: collapse;">
               <tr>
                 <td style="padding: 10px 0; border-bottom: 1px solid #eee; font-weight: bold; color: #0033A0; width: 120px;">Name:</td>
-                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${applicantName}</td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${safeName}</td>
               </tr>
               <tr>
                 <td style="padding: 10px 0; border-bottom: 1px solid #eee; font-weight: bold; color: #0033A0;">Email:</td>
-                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><a href="mailto:${applicantEmail}" style="color: #0033A0;">${applicantEmail}</a></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><a href="mailto:${safeEmail}" style="color: #0033A0;">${safeEmail}</a></td>
               </tr>
               <tr>
                 <td style="padding: 10px 0; border-bottom: 1px solid #eee; font-weight: bold; color: #0033A0;">Phone:</td>
-                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${applicantPhone}</td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${safePhone}</td>
               </tr>
               <tr>
                 <td style="padding: 10px 0; font-weight: bold; color: #0033A0;">Position:</td>
-                <td style="padding: 10px 0;"><strong>${position}</strong></td>
+                <td style="padding: 10px 0;"><strong>${safePosition}</strong></td>
               </tr>
             </table>
           </div>
 
           <div style="background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 20px; margin: 20px 0; border-radius: 5px;">
             <h3 style="margin-top: 0; color: #0033A0;">Cover Letter</h3>
-            <p style="margin: 0; line-height: 1.8; color: #555; white-space: pre-wrap;">${coverLetter}</p>
+            <p style="margin: 0; line-height: 1.8; color: #555; white-space: pre-wrap;">${safeCoverLetter}</p>
           </div>
 
           <div style="background-color: #f0f8ff; border: 1px solid #b3d9ff; padding: 15px; margin: 20px 0; border-radius: 5px;">
             <h4 style="margin-top: 0; color: #0033A0;">📎 Attached Documents</h4>
-            <p style="margin: 0; color: #555;"><strong>Resume:</strong> ${resumeFileName}</p>
+            <p style="margin: 0; color: #555;"><strong>Resume:</strong> ${safeResume}</p>
           </div>
 
           <div style="background-color: #fff9e6; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">

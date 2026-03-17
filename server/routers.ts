@@ -9593,6 +9593,12 @@ Format as JSON with array of applications including their recommendation.`;
       }))
       .mutation(async ({ input }) => {
         try {
+          // Escape HTML to prevent injection in admin email
+          const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+          const safeName = esc(input.name);
+          const safeEmail = esc(input.email);
+          const safeSubject = esc(input.subject);
+          const safeMessage = esc(input.message);
           // Send email to admin
           const emailPayload = {
             to: COMPANY_INFO.admin.email,
@@ -9607,10 +9613,10 @@ Format as JSON with array of applications including their recommendation.`;
                 </head>
                 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
                   <div style="background-color: #f9f9f9; padding: 30px;">
-                    <h2 style="color: #0033A0; margin-top: 0;">${input.subject}</h2>
-                    <p><strong>From:</strong> ${input.name} <a href="mailto:${input.email}" style="color: #0033A0;">&lt;${input.email}&gt;</a></p>
+                    <h2 style="color: #0033A0; margin-top: 0;">${safeSubject}</h2>
+                    <p><strong>From:</strong> ${safeName} <a href="mailto:${safeEmail}" style="color: #0033A0;">&lt;${safeEmail}&gt;</a></p>
                     <div style="background-color: white; padding: 20px; border-left: 4px solid #0033A0; margin: 20px 0;">
-                      <p style="margin: 0; white-space: pre-wrap; line-height: 1.8;">${input.message}</p>
+                      <p style="margin: 0; white-space: pre-wrap; line-height: 1.8;">${safeMessage}</p>
                     </div>
                   </div>
                 </body>

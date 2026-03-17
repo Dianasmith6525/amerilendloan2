@@ -79,6 +79,21 @@ export const uploadLimiter = rateLimit({
   } : {}),
 });
 
+// Contact form limiter (prevent email spam abuse)
+export const contactLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // 5 contact emails per hour per IP
+  message: 'Too many messages sent. Please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  ...(redisClient ? {
+    store: new RedisStore({
+      sendCommand: (...args: string[]) => redisClient!.sendCommand(args),
+      prefix: 'rl:contact:',
+    }),
+  } : {}),
+});
+
 // Admin action limiter (very permissive)
 export const adminLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
