@@ -81,12 +81,16 @@ export async function verifyEthereumTransaction(
     }
 
     const network = NETWORKS.ETH;
-    if (!network.rpcUrl.includes("alchemy") && !network.rpcUrl.includes("infura")) {
+    
+    // Validate that a proper RPC endpoint is configured
+    const hasCustomRpc = !!process.env.ETHEREUM_RPC_URL;
+    const hasAlchemyKey = !!process.env.ALCHEMY_API_KEY;
+    if (!hasCustomRpc && !hasAlchemyKey) {
       return {
         valid: false,
         confirmed: false,
         confirmations: 0,
-        message: "Blockchain RPC not configured",
+        message: "Blockchain RPC not configured. Please set ALCHEMY_API_KEY or ETHEREUM_RPC_URL.",
       };
     }
 

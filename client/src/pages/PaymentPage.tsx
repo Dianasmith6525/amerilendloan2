@@ -6,7 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CheckCircle2, Loader2, Bitcoin, Wallet, Copy, Check, Zap } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -29,6 +29,7 @@ export default function PaymentPage() {
   const [cryptoAddress, setCryptoAddress] = useState("");
   const [cryptoAmount, setCryptoAmount] = useState("");
   const [addressCopied, setAddressCopied] = useState(false);
+  const cryptoIdempotencyKeyRef = useRef(crypto.randomUUID());
 
   const { data: application, isLoading } = trpc.loans.getById.useQuery(
     { id: applicationId! },
@@ -83,6 +84,7 @@ export default function PaymentPage() {
         paymentMethod: "crypto",
         paymentProvider: "crypto",
         cryptoCurrency: selectedCrypto,
+        idempotencyKey: cryptoIdempotencyKeyRef.current,
       });
     } catch (error) {
       console.error("Crypto payment error:", error);

@@ -340,6 +340,60 @@ async function startServer() {
     }
   });
   
+  // Admin document viewing endpoint - resolves fresh download URLs
+  app.get("/api/view-document/:id", async (req, res) => {
+    try {
+      let user;
+      try {
+        user = await sdk.authenticateRequest(req);
+      } catch {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const docId = parseInt(req.params.id, 10);
+      if (isNaN(docId)) {
+        return res.status(400).json({ error: "Invalid document ID" });
+      }
+
+      const db = await import("../db");
+      const document = await db.getVerificationDocumentById(docId);
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      const filePath = document.filePath;
+
+      // If it's a base64 data URL, return it directly
+      if (filePath.startsWith("data:")) {
+        return res.json({ url: filePath });
+      }
+
+      // Try to resolve a fresh download URL from storage
+      if (ENV.forgeApiUrl && ENV.forgeApiKey) {
+        try {
+          // Extract storage key from the original upload path pattern
+          const keyMatch = filePath.match(/verification-documents\/\d+\/[^?#]+/);
+          if (keyMatch) {
+            const { storageGet } = await import("../storage");
+            const { url: freshUrl } = await storageGet(keyMatch[0]);
+            return res.json({ url: freshUrl });
+          }
+        } catch (storageErr) {
+          logger.warn("Failed to resolve fresh storage URL, falling back to stored URL", storageErr);
+        }
+      }
+
+      // Fall back to the stored URL
+      return res.json({ url: filePath });
+    } catch (error) {
+      logger.error("View document error", error);
+      return res.status(500).json({ error: "Failed to load document" });
+    }
+  });
+
   // Document upload endpoint (Priority 3)
   app.post("/api/upload", upload.single('file'), handleFileUpload);
   app.get("/api/download/:id", handleFileDownload);

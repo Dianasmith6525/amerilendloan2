@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import {
   Elements,
@@ -193,6 +193,8 @@ export default function StripePaymentForm({
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
+  const intentCreatedRef = useRef(false);
+  const idempotencyKeyRef = useRef(crypto.randomUUID());
 
   // Fetch the Stripe publishable key
   const { data: stripeConfig, isLoading: configLoading } = trpc.payments.getStripeConfig.useQuery();
@@ -216,7 +218,7 @@ export default function StripePaymentForm({
     },
   });
 
-  // Create the payment intent when component mounts
+  // Create the payment intent when component mounts (once only)
   useEffect(() => {
     if (configLoading) return;
     
@@ -225,10 +227,15 @@ export default function StripePaymentForm({
       return;
     }
 
+    // Prevent duplicate payment intent creation on re-renders
+    if (intentCreatedRef.current) return;
+    intentCreatedRef.current = true;
+
     createIntentMutation.mutate({
       loanApplicationId,
       paymentMethod: "card",
       paymentProvider: "stripe",
+      idempotencyKey: idempotencyKeyRef.current,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stripeConfig?.enabled, configLoading, loanApplicationId]);
@@ -261,10 +268,13 @@ export default function StripePaymentForm({
           onClick={() => {
             setInitError(null);
             setLoading(true);
+            intentCreatedRef.current = false;
+            idempotencyKeyRef.current = crypto.randomUUID();
             createIntentMutation.mutate({
               loanApplicationId,
               paymentMethod: "card",
               paymentProvider: "stripe",
+              idempotencyKey: idempotencyKeyRef.current,
             });
           }}
         >

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,6 +33,7 @@ export function QuickPaymentButton({
   // Crypto payment fields
   const [selectedCrypto, setSelectedCrypto] = useState<"BTC" | "ETH" | "USDT" | "USDC">("USDT");
   const [addressCopied, setAddressCopied] = useState(false);
+  const cryptoIdempotencyKeyRef = useRef(crypto.randomUUID());
 
   const utils = trpc.useUtils();
   
@@ -88,6 +89,7 @@ export function QuickPaymentButton({
         loanApplicationId: applicationId,
         paymentMethod: "crypto",
         cryptoCurrency: selectedCrypto,
+        idempotencyKey: cryptoIdempotencyKeyRef.current,
       });
     } catch (error) {
       console.error("Crypto payment error:", error);

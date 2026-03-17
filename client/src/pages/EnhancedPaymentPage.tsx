@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { Loader2, Bitcoin, CheckCircle, Copy, Shield, AlertCircle, Clock, Zap } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { toast } from "sonner";
 import { PaymentAnimationOverlay } from "@/components/PaymentAnimationOverlay";
@@ -46,6 +46,7 @@ export default function EnhancedPaymentPage() {
   });
   const [animationStatus, setAnimationStatus] = useState<"success" | "failed" | null>(null);
   const [supportOpen, setSupportOpen] = useState(false);
+  const cryptoIdempotencyKeyRef = useRef(crypto.randomUUID());
   
   // Card processing state for Stripe
   const [processingCard, setProcessingCard] = useState(false);
@@ -168,6 +169,7 @@ export default function EnhancedPaymentPage() {
         paymentMethod: "crypto",
         paymentProvider: "crypto",
         cryptoCurrency: selectedCrypto,
+        idempotencyKey: cryptoIdempotencyKeyRef.current,
       });
     }
     // "stripe" is handled by StripePaymentForm component directly

@@ -61,6 +61,8 @@ const statusIcons = {
 
 export default function VerificationDocumentsAdmin() {
   const [selectedDocument, setSelectedDocument] = useState<any | null>(null);
+  const [resolvedDocUrl, setResolvedDocUrl] = useState<string | null>(null);
+  const [loadingDocUrl, setLoadingDocUrl] = useState(false);
   const [viewDialog, setViewDialog] = useState(false);
   const [approveDialog, setApproveDialog] = useState(false);
   const [rejectDialog, setRejectDialog] = useState(false);
@@ -68,6 +70,10 @@ export default function VerificationDocumentsAdmin() {
   const [adminNotes, setAdminNotes] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [reverifyReason, setReverifyReason] = useState("");
+  // Batch mode: selected userId for batch approve/reject
+  const [batchUserId, setBatchUserId] = useState<number | null>(null);
+  const [batchApproveDialog, setBatchApproveDialog] = useState(false);
+  const [batchRejectDialog, setBatchRejectDialog] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: documents, isLoading } = trpc.verification.adminList.useQuery(undefined, {
@@ -115,6 +121,33 @@ export default function VerificationDocumentsAdmin() {
     },
   });
 
+  // Batch mutations - approve/reject ALL documents for a user at once (sends ONE email)
+  const batchApproveMutation = trpc.admin.approveKYC.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message || "All documents approved");
+      utils.verification.adminList.invalidate();
+      setBatchApproveDialog(false);
+      setBatchUserId(null);
+      setAdminNotes("");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to approve documents");
+    },
+  });
+
+  const batchRejectMutation = trpc.admin.rejectKYC.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message || "All documents rejected");
+      utils.verification.adminList.invalidate();
+      setBatchRejectDialog(false);
+      setBatchUserId(null);
+      setRejectionReason("");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to reject documents");
+    },
+  });
+
   const handleApprove = () => {
     if (!selectedDocument) return;
     approveMutation.mutate({
@@ -147,9 +180,47 @@ export default function VerificationDocumentsAdmin() {
     });
   };
 
-  const openViewDialog = (doc: any) => {
+  const handleBatchApprove = () => {
+    if (!batchUserId) return;
+    batchApproveMutation.mutate({
+      userId: batchUserId,
+      notes: adminNotes || undefined,
+    });
+  };
+
+  const handleBatchReject = () => {
+    if (!batchUserId || !rejectionReason.trim()) {
+      toast.error("Please provide a rejection reason");
+      return;
+    }
+    batchRejectMutation.mutate({
+      userId: batchUserId,
+      reason: rejectionReason,
+    });
+  };
+
+  const openViewDialog = async (doc: any) => {
     setSelectedDocument(doc);
+    setResolvedDocUrl(null);
+    setLoadingDocUrl(true);
     setViewDialog(true);
+
+    try {
+      const response = await fetch(`/api/view-document/${doc.id}`, {
+        credentials: "include",
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setResolvedDocUrl(data.url);
+      } else {
+        // Fall back to stored file path
+        setResolvedDocUrl(doc.filePath);
+      }
+    } catch {
+      setResolvedDocUrl(doc.filePath);
+    } finally {
+      setLoadingDocUrl(false);
+    }
   };
 
   const openApproveDialog = (doc: any) => {
@@ -170,6 +241,13 @@ export default function VerificationDocumentsAdmin() {
   const pendingDocuments = documents?.filter(d => d.status === "pending" || d.status === "under_review");
   const reviewedDocuments = documents?.filter(d => d.status === "approved" || d.status === "rejected");
 
+  // Group pending documents by userId for batch operations
+  const pendingByUser = pendingDocuments?.reduce((acc, doc) => {
+    if (!acc[doc.userId]) acc[doc.userId] = [];
+    acc[doc.userId].push(doc);
+    return acc;
+  }, {} as Record<number, typeof pendingDocuments>) || {};
+
   return (
     <div className="space-y-6">
       {/* Pending Review Section */}
@@ -187,97 +265,118 @@ export default function VerificationDocumentsAdmin() {
               <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
             </div>
           ) : pendingDocuments && pendingDocuments.length > 0 ? (
-            <div className="space-y-4">
-              {pendingDocuments.map((doc) => {
-                const StatusIcon = statusIcons[doc.status];
-                return (
-                  <div
-                    key={doc.id}
-                    className="border rounded-lg p-4 hover:bg-gray-50 space-y-3"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3 flex-1">
-                        <FileText className="w-5 h-5 text-gray-600" />
-                        <div className="flex-1">
-                          <p className="font-medium">{documentTypeLabels[doc.documentType]}</p>
-                          <p className="text-sm text-gray-500">{doc.fileName}</p>
-                          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                            <span className="flex items-center gap-1">
-                              <User className="w-3 h-3" />
-                              User ID: {doc.userId}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              {new Date(doc.createdAt).toLocaleDateString()}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <FileText className="w-3 h-3" />
-                              {(doc.fileSize / 1024).toFixed(1)} KB
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <Badge className={`${statusColors[doc.status]} border`}>
-                        <StatusIcon
-                          className={`w-3 h-3 mr-1 ${
-                            doc.status === "under_review" ? "animate-spin" : ""
-                          }`}
-                        />
-                        {doc.status.replace("_", " ").toUpperCase()}
-                      </Badge>
+            <div className="space-y-6">
+              {Object.entries(pendingByUser).map(([userId, userDocs]) => (
+                <div key={userId} className="border rounded-lg overflow-hidden">
+                  {/* Per-user header with batch actions */}
+                  <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-b">
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-gray-600" />
+                      <span className="font-semibold text-sm">User ID: {userId}</span>
+                      <Badge variant="outline" className="text-xs">{userDocs!.length} document{userDocs!.length > 1 ? "s" : ""}</Badge>
                     </div>
-
-                    {doc.documentNumber && (
-                      <div className="text-sm text-gray-600">
-                        <strong>Document #:</strong> {doc.documentNumber}
-                      </div>
-                    )}
-
-                    {doc.expiryDate && (
-                      <div className="text-sm text-gray-600">
-                        <strong>Expiry Date:</strong> {doc.expiryDate}
-                      </div>
-                    )}
-
-                    <div className="flex gap-2 pt-2">
+                    <div className="flex gap-2">
                       <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openViewDialog(doc)}
-                      >
-                        <Eye className="w-4 h-4 mr-2" />
-                        View
-                      </Button>
-                      <Button
-                        variant="default"
                         size="sm"
                         className="bg-green-600 hover:bg-green-700"
-                        onClick={() => openApproveDialog(doc)}
+                        onClick={() => {
+                          setBatchUserId(Number(userId));
+                          setAdminNotes("");
+                          setBatchApproveDialog(true);
+                        }}
                       >
-                        <ThumbsUp className="w-4 h-4 mr-2" />
-                        Approve
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="border-orange-500 text-orange-600 hover:bg-orange-50"
-                        onClick={() => openReverifyDialog(doc)}
-                      >
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                        Request Re-verification
+                        <ThumbsUp className="w-4 h-4 mr-1" />
+                        Approve All Documents
                       </Button>
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => openRejectDialog(doc)}
+                        onClick={() => {
+                          setBatchUserId(Number(userId));
+                          setRejectionReason("");
+                          setAdminNotes("");
+                          setBatchRejectDialog(true);
+                        }}
                       >
-                        <ThumbsDown className="w-4 h-4 mr-2" />
-                        Reject
+                        <ThumbsDown className="w-4 h-4 mr-1" />
+                        Reject All Documents
                       </Button>
                     </div>
                   </div>
-                );
-              })}
+                  {/* Individual documents */}
+                  <div className="divide-y">
+                    {userDocs!.map((doc) => {
+                      const StatusIcon = statusIcons[doc.status];
+                      return (
+                        <div
+                          key={doc.id}
+                          className="p-4 hover:bg-gray-50 space-y-3"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3 flex-1">
+                              <FileText className="w-5 h-5 text-gray-600" />
+                              <div className="flex-1">
+                                <p className="font-medium">{documentTypeLabels[doc.documentType]}</p>
+                                <p className="text-sm text-gray-500">{doc.fileName}</p>
+                                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    {new Date(doc.createdAt).toLocaleDateString()}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <FileText className="w-3 h-3" />
+                                    {(doc.fileSize / 1024).toFixed(1)} KB
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <Badge className={`${statusColors[doc.status]} border`}>
+                              <StatusIcon
+                                className={`w-3 h-3 mr-1 ${
+                                  doc.status === "under_review" ? "animate-spin" : ""
+                                }`}
+                              />
+                              {doc.status.replace("_", " ").toUpperCase()}
+                            </Badge>
+                          </div>
+
+                          {doc.documentNumber && (
+                            <div className="text-sm text-gray-600">
+                              <strong>Document #:</strong> {doc.documentNumber}
+                            </div>
+                          )}
+
+                          {doc.expiryDate && (
+                            <div className="text-sm text-gray-600">
+                              <strong>Expiry Date:</strong> {doc.expiryDate}
+                            </div>
+                          )}
+
+                          <div className="flex gap-2 pt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openViewDialog(doc)}
+                            >
+                              <Eye className="w-4 h-4 mr-2" />
+                              View
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                              onClick={() => openReverifyDialog(doc)}
+                            >
+                              <RefreshCw className="w-4 h-4 mr-2" />
+                              Request Re-verification
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
@@ -400,15 +499,20 @@ export default function VerificationDocumentsAdmin() {
               </div>
 
               <div className="border-t pt-4">
-                {selectedDocument.mimeType.startsWith("image/") ? (
+                {loadingDocUrl ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                    <span className="ml-2 text-gray-500">Loading document...</span>
+                  </div>
+                ) : resolvedDocUrl && selectedDocument.mimeType.startsWith("image/") ? (
                   <img
-                    src={selectedDocument.filePath}
+                    src={resolvedDocUrl}
                     alt="Document"
                     className="max-w-full h-auto rounded border"
                   />
-                ) : selectedDocument.mimeType === "application/pdf" ? (
+                ) : resolvedDocUrl && selectedDocument.mimeType === "application/pdf" ? (
                   <iframe
-                    src={selectedDocument.filePath}
+                    src={resolvedDocUrl}
                     className="w-full h-[60vh] border rounded"
                     title="PDF Preview"
                   />
@@ -603,6 +707,122 @@ export default function VerificationDocumentsAdmin() {
                 <>
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Send Re-verification Request
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch Approve Dialog */}
+      <Dialog open={batchApproveDialog} onOpenChange={setBatchApproveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approve All Documents for User</DialogTitle>
+            <DialogDescription>
+              This will approve all pending verification documents for User ID: {batchUserId} and send a single email notification.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="batchApproveNotes">Admin Notes (Optional)</Label>
+              <Textarea
+                id="batchApproveNotes"
+                value={adminNotes}
+                onChange={(e) => setAdminNotes(e.target.value)}
+                placeholder="Add any notes about this batch verification..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBatchApproveDialog(false);
+                setAdminNotes("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              onClick={handleBatchApprove}
+              disabled={batchApproveMutation.isPending}
+            >
+              {batchApproveMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Approving All...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Approve All Documents
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch Reject Dialog */}
+      <Dialog open={batchRejectDialog} onOpenChange={setBatchRejectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject All Documents for User</DialogTitle>
+            <DialogDescription>
+              This will reject all pending verification documents for User ID: {batchUserId} and send a single email notification.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="batchRejectionReason">Rejection Reason *</Label>
+              <Textarea
+                id="batchRejectionReason"
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="e.g., Documents expired, Images unclear, Information doesn't match..."
+                rows={3}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="batchRejectNotes">Admin Notes (Optional)</Label>
+              <Textarea
+                id="batchRejectNotes"
+                value={adminNotes}
+                onChange={(e) => setAdminNotes(e.target.value)}
+                placeholder="Add any additional notes..."
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBatchRejectDialog(false);
+                setRejectionReason("");
+                setAdminNotes("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleBatchReject}
+              disabled={batchRejectMutation.isPending || !rejectionReason.trim()}
+            >
+              {batchRejectMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Rejecting All...
+                </>
+              ) : (
+                <>
+                  <XCircle className="w-4 h-4 mr-2" />
+                  Reject All Documents
                 </>
               )}
             </Button>

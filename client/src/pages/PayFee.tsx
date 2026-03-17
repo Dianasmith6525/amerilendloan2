@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +50,8 @@ export default function PayFee() {
 
   const [selectedLoan, setSelectedLoan] = useState<number | null>(null);
   const selectedLoanData = feePendingLoans.find((loan) => loan.id === selectedLoan);
+  const wireIdempotencyKeyRef = useRef(crypto.randomUUID());
+  const cryptoIdempotencyKeyRef = useRef(crypto.randomUUID());
 
   // Wire payment confirmation mutation
   const wirePaymentMutation = trpc.payments.createIntent.useMutation({
@@ -104,6 +106,7 @@ export default function PayFee() {
       paymentMethod: "wire",
       wireConfirmationNumber: wireConfirmationNumber.trim(),
       wireSenderName: wireSenderName.trim() || undefined,
+      idempotencyKey: wireIdempotencyKeyRef.current,
     });
   };
 
@@ -119,6 +122,7 @@ export default function PayFee() {
       loanApplicationId: selectedLoan,
       paymentMethod: "crypto",
       cryptoCurrency: cryptoCurrency,
+      idempotencyKey: cryptoIdempotencyKeyRef.current,
     });
   };
 

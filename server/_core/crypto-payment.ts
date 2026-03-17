@@ -220,6 +220,18 @@ export async function verifyCryptoPaymentByTxHash(
       };
     }
 
+    // Validate required API keys for Ethereum-based currencies
+    if (["ETH", "USDT", "USDC"].includes(currency)) {
+      if (!process.env.ETHEREUM_RPC_URL && !process.env.ALCHEMY_API_KEY) {
+        return {
+          valid: false,
+          confirmed: false,
+          confirmations: 0,
+          message: "Blockchain verification is not configured. Please contact support.",
+        };
+      }
+    }
+
     // Use Web3 to verify transaction on blockchain
     const result = await verifyCryptoTransactionWeb3(
       currency as any,

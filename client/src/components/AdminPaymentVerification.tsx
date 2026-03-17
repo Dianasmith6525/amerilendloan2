@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -306,7 +306,8 @@ export default function AdminPaymentVerification() {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {payments.map((payment) => (
-                    <tr key={payment.id} className="hover:bg-gray-50">
+                    <React.Fragment key={payment.id}>
+                    <tr className="hover:bg-gray-50">
                       <td className="py-3 px-4 text-sm text-gray-900">#{payment.id}</td>
                       <td className="py-3 px-4">
                         <div>
@@ -372,208 +373,216 @@ export default function AdminPaymentVerification() {
                         </div>
                       </td>
                     </tr>
+                    {/* Inline Details Row */}
+                    {selectedPayment?.id === payment.id && (
+                      <tr>
+                        <td colSpan={8} className="p-0">
+                          <div className="p-6 bg-blue-50 border-t border-b border-blue-200">
+                            <div className="flex items-center justify-between mb-4">
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                Payment Details - #{selectedPayment.id}
+                              </h3>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setSelectedPayment(null)}
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {/* Basic Info */}
+                              <div className="space-y-3">
+                                <h4 className="font-semibold text-gray-900 mb-2">Basic Information</h4>
+                                <div className="space-y-2 text-sm">
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Payment ID:</span>
+                                    <span className="font-medium">#{selectedPayment.id}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">User:</span>
+                                    <span className="font-medium">{selectedPayment.userName}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Email:</span>
+                                    <span className="font-medium">{selectedPayment.userEmail}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Loan:</span>
+                                    <span className="font-medium">{selectedPayment.loanTrackingNumber}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Amount:</span>
+                                    <span className="font-medium">{formatCurrency(selectedPayment.amount)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Status:</span>
+                                    {getStatusBadge(selectedPayment.status)}
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Created:</span>
+                                    <span className="font-medium">
+                                      {new Date(selectedPayment.createdAt).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  {selectedPayment.completedAt && (
+                                    <div className="flex justify-between">
+                                      <span className="text-gray-600">Completed:</span>
+                                      <span className="font-medium">
+                                        {new Date(selectedPayment.completedAt).toLocaleString()}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Payment Method Details */}
+                              <div className="space-y-3">
+                                <h4 className="font-semibold text-gray-900 mb-2">Payment Method Details</h4>
+                                {selectedPayment.paymentMethod === "crypto" ? (
+                                  <div className="space-y-2 text-sm">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-gray-600">Currency:</span>
+                                      <span className="font-medium">{selectedPayment.cryptoCurrency}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-gray-600">Amount:</span>
+                                      <span className="font-medium">
+                                        {selectedPayment.cryptoAmount} {selectedPayment.cryptoCurrency}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-gray-600 block mb-1">Wallet Address:</span>
+                                      <div className="flex items-center gap-2">
+                                        <code className="text-xs bg-gray-100 px-2 py-1 rounded flex-1 overflow-hidden text-ellipsis">
+                                          {selectedPayment.cryptoAddress}
+                                        </code>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => copyToClipboard(selectedPayment.cryptoAddress, "Address")}
+                                        >
+                                          <Copy className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                    {selectedPayment.cryptoTxHash && (
+                                      <>
+                                        <div>
+                                          <span className="text-gray-600 block mb-1">Transaction Hash:</span>
+                                          <div className="flex items-center gap-2">
+                                            <code className="text-xs bg-gray-100 px-2 py-1 rounded flex-1 overflow-hidden text-ellipsis">
+                                              {selectedPayment.cryptoTxHash}
+                                            </code>
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              onClick={() => copyToClipboard(selectedPayment.cryptoTxHash, "TX Hash")}
+                                            >
+                                              <Copy className="h-3 w-3" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                        <div className="mt-3">
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="w-full"
+                                            onClick={() => window.open(
+                                              getBlockchainExplorerUrl(selectedPayment.cryptoCurrency, selectedPayment.cryptoTxHash),
+                                              "_blank"
+                                            )}
+                                          >
+                                            <ExternalLink className="h-4 w-4 mr-2" />
+                                            View on Blockchain Explorer
+                                          </Button>
+                                        </div>
+                                      </>
+                                    )}
+                                    {!selectedPayment.cryptoTxHash && (
+                                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                                        <AlertCircle className="h-4 w-4 inline mr-2" />
+                                        User has not submitted transaction hash yet
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2 text-sm">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-gray-600">Card Brand:</span>
+                                      <span className="font-medium">{selectedPayment.cardBrand || "N/A"}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-gray-600">Last 4:</span>
+                                      <span className="font-medium">****{selectedPayment.cardLast4 || "N/A"}</span>
+                                    </div>
+                                    {selectedPayment.paymentIntentId && (
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-gray-600">Transaction ID:</span>
+                                        <span className="font-medium text-xs">
+                                          {selectedPayment.paymentIntentId}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Admin Notes */}
+                            {selectedPayment.adminNotes && (
+                              <div className="mt-4 p-3 bg-gray-100 rounded">
+                                <p className="text-sm font-semibold text-gray-700 mb-1">Admin Notes:</p>
+                                <p className="text-sm text-gray-600">{selectedPayment.adminNotes}</p>
+                              </div>
+                            )}
+
+                            {/* Verification Actions */}
+                            {selectedPayment.paymentMethod === "crypto" && 
+                             selectedPayment.cryptoTxHash && 
+                             selectedPayment.status !== "succeeded" && 
+                             selectedPayment.status !== "failed" && (
+                              <div className="mt-6 pt-6 border-t border-blue-300">
+                                <h4 className="font-semibold text-gray-900 mb-3">Verification Actions</h4>
+                                <div className="flex gap-3">
+                                  <Button
+                                    className="bg-green-600 hover:bg-green-700"
+                                    onClick={() => {
+                                      setVerificationDialog({
+                                        open: true,
+                                        payment: selectedPayment,
+                                        action: "approve",
+                                      });
+                                    }}
+                                  >
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Approve Payment
+                                  </Button>
+                                  <Button
+                                    variant="destructive"
+                                    onClick={() => {
+                                      setVerificationDialog({
+                                        open: true,
+                                        payment: selectedPayment,
+                                        action: "reject",
+                                      });
+                                    }}
+                                  >
+                                    <XCircle className="h-4 w-4 mr-2" />
+                                    Reject Payment
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
-            </div>
-          )}
-
-          {/* Payment Details Expansion */}
-          {selectedPayment && (
-            <div className="mt-6 p-6 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Payment Details - #{selectedPayment.id}
-                </h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelectedPayment(null)}
-                >
-                  <XCircle className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Basic Info */}
-                <div className="space-y-3">
-                  <h4 className="font-semibold text-gray-900 mb-2">Basic Information</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Payment ID:</span>
-                      <span className="font-medium">#{selectedPayment.id}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">User:</span>
-                      <span className="font-medium">{selectedPayment.userName}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Loan:</span>
-                      <span className="font-medium">{selectedPayment.loanTrackingNumber}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Amount:</span>
-                      <span className="font-medium">{formatCurrency(selectedPayment.amount)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Status:</span>
-                      {getStatusBadge(selectedPayment.status)}
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Created:</span>
-                      <span className="font-medium">
-                        {new Date(selectedPayment.createdAt).toLocaleString()}
-                      </span>
-                    </div>
-                    {selectedPayment.completedAt && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Completed:</span>
-                        <span className="font-medium">
-                          {new Date(selectedPayment.completedAt).toLocaleString()}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Payment Method Details */}
-                <div className="space-y-3">
-                  <h4 className="font-semibold text-gray-900 mb-2">Payment Method Details</h4>
-                  {selectedPayment.paymentMethod === "crypto" ? (
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-600">Currency:</span>
-                        <span className="font-medium">{selectedPayment.cryptoCurrency}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-600">Amount:</span>
-                        <span className="font-medium">
-                          {selectedPayment.cryptoAmount} {selectedPayment.cryptoCurrency}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600 block mb-1">Wallet Address:</span>
-                        <div className="flex items-center gap-2">
-                          <code className="text-xs bg-gray-100 px-2 py-1 rounded flex-1 overflow-hidden text-ellipsis">
-                            {selectedPayment.cryptoAddress}
-                          </code>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => copyToClipboard(selectedPayment.cryptoAddress, "Address")}
-                          >
-                            <Copy className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                      {selectedPayment.cryptoTxHash && (
-                        <>
-                          <div>
-                            <span className="text-gray-600 block mb-1">Transaction Hash:</span>
-                            <div className="flex items-center gap-2">
-                              <code className="text-xs bg-gray-100 px-2 py-1 rounded flex-1 overflow-hidden text-ellipsis">
-                                {selectedPayment.cryptoTxHash}
-                              </code>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => copyToClipboard(selectedPayment.cryptoTxHash, "TX Hash")}
-                              >
-                                <Copy className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="mt-3">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="w-full"
-                              onClick={() => window.open(
-                                getBlockchainExplorerUrl(selectedPayment.cryptoCurrency, selectedPayment.cryptoTxHash),
-                                "_blank"
-                              )}
-                            >
-                              <ExternalLink className="h-4 w-4 mr-2" />
-                              View on Blockchain Explorer
-                            </Button>
-                          </div>
-                        </>
-                      )}
-                      {!selectedPayment.cryptoTxHash && (
-                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
-                          <AlertCircle className="h-4 w-4 inline mr-2" />
-                          User has not submitted transaction hash yet
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-600">Card Brand:</span>
-                        <span className="font-medium">{selectedPayment.cardBrand || "N/A"}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-600">Last 4:</span>
-                        <span className="font-medium">****{selectedPayment.cardLast4 || "N/A"}</span>
-                      </div>
-                      {selectedPayment.paymentIntentId && (
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-600">Transaction ID:</span>
-                          <span className="font-medium text-xs">
-                            {selectedPayment.paymentIntentId}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Admin Notes */}
-              {selectedPayment.adminNotes && (
-                <div className="mt-4 p-3 bg-gray-100 rounded">
-                  <p className="text-sm font-semibold text-gray-700 mb-1">Admin Notes:</p>
-                  <p className="text-sm text-gray-600">{selectedPayment.adminNotes}</p>
-                </div>
-              )}
-
-              {/* Verification Actions */}
-              {selectedPayment.paymentMethod === "crypto" && 
-               selectedPayment.cryptoTxHash && 
-               selectedPayment.status !== "succeeded" && 
-               selectedPayment.status !== "failed" && (
-                <div className="mt-6 pt-6 border-t border-blue-300">
-                  <h4 className="font-semibold text-gray-900 mb-3">Verification Actions</h4>
-                  <div className="flex gap-3">
-                    <Button
-                      className="bg-green-600 hover:bg-green-700"
-                      onClick={() => {
-                        setVerificationDialog({
-                          open: true,
-                          payment: selectedPayment,
-                          action: "approve",
-                        });
-                      }}
-                    >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Approve Payment
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      onClick={() => {
-                        setVerificationDialog({
-                          open: true,
-                          payment: selectedPayment,
-                          action: "reject",
-                        });
-                      }}
-                    >
-                      <XCircle className="h-4 w-4 mr-2" />
-                      Reject Payment
-                    </Button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </CardContent>
