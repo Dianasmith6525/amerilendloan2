@@ -4,6 +4,7 @@ import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
 import { sendLoginNotificationEmail } from "./email";
+import { getClientIP } from "./ipUtils";
 import { getEnv } from "./env";
 
 function getQueryParam(req: Request, key: string): string | undefined {
@@ -185,7 +186,7 @@ export function registerOAuthRoutes(app: Express) {
 
       // Send login notification email
       if (userInfo.email && userInfo.name) {
-        const ipAddress = req.ip || (req.headers['x-forwarded-for'] as string) || 'Unknown';
+        const ipAddress = getClientIP(req);
         const userAgent = req.headers['user-agent'];
         sendLoginNotificationEmail(
           userInfo.email,
@@ -252,7 +253,7 @@ export function registerOAuthRoutes(app: Express) {
 
       // Send login notification email
       if (userInfo.email && userInfo.name) {
-        const ipAddress = req.ip || (req.headers['x-forwarded-for'] as string) || 'Unknown';
+        const ipAddress = getClientIP(req);
         const userAgent = req.headers['user-agent'];
         sendLoginNotificationEmail(
           userInfo.email,
@@ -319,7 +320,7 @@ export function registerOAuthRoutes(app: Express) {
 
       // Send login notification email
       if (userInfo.email && userInfo.name) {
-        const ipAddress = req.ip || (req.headers['x-forwarded-for'] as string) || 'Unknown';
+        const ipAddress = getClientIP(req);
         const userAgent = req.headers['user-agent'];
         sendLoginNotificationEmail(
           userInfo.email,
@@ -386,7 +387,7 @@ export function registerOAuthRoutes(app: Express) {
 
       // Send login notification email
       if (userInfo.email && userInfo.name) {
-        const ipAddress = req.ip || (req.headers['x-forwarded-for'] as string) || 'Unknown';
+        const ipAddress = getClientIP(req);
         const userAgent = req.headers['user-agent'];
         sendLoginNotificationEmail(
           userInfo.email,

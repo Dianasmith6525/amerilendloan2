@@ -9,6 +9,7 @@ import geoip from 'geoip-lite';
 import { Request } from 'express';
 import * as db from '../db';
 import { sendSuspiciousActivityAlert } from './email';
+import { getIPLocation, formatLocation } from './geolocation';
 
 /**
  * Common validation schemas to prevent injection attacks
@@ -403,12 +404,20 @@ export async function logLoginActivity(
   success: boolean,
   userAgent?: string
 ): Promise<void> {
-  const location = getGeoLocation(ipAddress);
+  // Use the async IP geolocation API for accurate location
+  const ipLocationData = await getIPLocation(ipAddress);
+  const location: GeoLocation = {
+    ip: ipAddress,
+    country: ipLocationData.country,
+    region: ipLocationData.state,
+    city: ipLocationData.city,
+    latitude: ipLocationData.latitude,
+    longitude: ipLocationData.longitude,
+    timezone: ipLocationData.timezone,
+  };
   
-  // Format location as "City, Country" for storage
-  const locationString = location.city && location.country
-    ? `${location.city}, ${location.country}`
-    : location.country || 'Unknown';
+  // Format location as "City, State, Country" for storage
+  const locationString = formatLocation(ipLocationData);
   
   await db.logLoginActivity(
     userId,

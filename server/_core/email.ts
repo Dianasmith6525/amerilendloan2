@@ -901,6 +901,12 @@ export async function sendSuspiciousActivityAlert(
 ): Promise<void> {
   const subject = "Security Alert: Unusual Account Activity";
   
+  // Resolve location from IP address
+  let locationInfo = 'Unknown Location';
+  if (ipAddress && ipAddress !== 'Unknown') {
+    locationInfo = await getLocationFromIP(ipAddress);
+  }
+
   const html = `
     <!DOCTYPE html>
     <html>
@@ -921,8 +927,9 @@ export async function sendSuspiciousActivityAlert(
           <div style="background-color: #ffe6e6; border: 2px solid #dc3545; padding: 15px; margin: 20px 0; border-radius: 5px;">
             <h3 style="margin-top: 0; color: #dc3545;">Activity Details</h3>
             <p style="margin: 5px 0;"><strong>Activity:</strong> ${activityDescription}</p>
-            ${ipAddress ? `<p style="margin: 5px 0;"><strong>IP Address:</strong> ${ipAddress}</p>` : ''}
-            <p style="margin: 5px 0;"><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+            <p style="margin: 5px 0;"><strong>📍 Location:</strong> ${locationInfo}</p>
+            ${ipAddress ? `<p style="margin: 5px 0;"><strong>🌐 IP Address:</strong> ${ipAddress}</p>` : ''}
+            <p style="margin: 5px 0;"><strong>🕐 Time:</strong> ${new Date().toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })} EST</p>
           </div>
 
           <div style="background-color: #fff3cd; border: 1px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">
