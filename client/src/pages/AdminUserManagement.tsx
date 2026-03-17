@@ -15,11 +15,12 @@ import {
   Eye, ChevronLeft, ChevronRight, Loader2, AlertTriangle,
   FileText, CreditCard, DollarSign, Clock, Activity,
   StickyNote, RefreshCw, Mail, Phone, MapPin,
-  Calendar, Globe, Lock, Unlock
+  Calendar, Globe, Lock, Unlock, Snowflake
 } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+import { BANK_FREEZE_REASONS, LOAN_LOCK_REASONS } from "@shared/const";
 
 const statusColors: Record<string, string> = {
   active: "bg-green-100 text-green-800 border-green-300",
@@ -61,6 +62,16 @@ export default function AdminUserManagement() {
   const [suspendReason, setSuspendReason] = useState("");
   const [banReason, setBanReason] = useState("");
   const [adminNotes, setAdminNotes] = useState("");
+
+  // Bank freeze state
+  const [freezeBankDialog, setFreezeBankDialog] = useState<{ open: boolean; accountId: number | null; isFrozen: boolean }>({ open: false, accountId: null, isFrozen: false });
+  const [freezeBankReason, setFreezeBankReason] = useState("");
+  const [freezeBankCustomReason, setFreezeBankCustomReason] = useState("");
+
+  // Loan lock state
+  const [lockLoanDialog, setLockLoanDialog] = useState<{ open: boolean; loanId: number | null; isLocked: boolean }>({ open: false, loanId: null, isLocked: false });
+  const [lockLoanReason, setLockLoanReason] = useState("");
+  const [lockLoanCustomReason, setLockLoanCustomReason] = useState("");
 
   // Queries
   const usersQuery = trpc.admin.listAllUsers.useQuery({
@@ -146,6 +157,30 @@ export default function AdminUserManagement() {
       utils.adminBanking.getUserAccounts.invalidate();
     },
     onError: (err) => toast.error(err.message),
+  });
+
+  // Bank freeze mutation
+  const freezeAccountMutation = trpc.adminBanking.freezeAccount.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Bank account ${data.frozen ? "frozen" : "unfrozen"} successfully`);
+      setFreezeBankDialog({ open: false, accountId: null, isFrozen: false });
+      setFreezeBankReason("");
+      setFreezeBankCustomReason("");
+      utils.adminBanking.getUserAccounts.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to update account"),
+  });
+
+  // Loan lock mutation
+  const lockLoanMutation = trpc.loans.adminLockLoan.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Loan ${data.locked ? "locked" : "unlocked"} successfully`);
+      setLockLoanDialog({ open: false, loanId: null, isLocked: false });
+      setLockLoanReason("");
+      setLockLoanCustomReason("");
+      utils.admin.getUserFullProfile.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to update loan"),
   });
 
   // Mutations
@@ -496,6 +531,7 @@ export default function AdminUserManagement() {
                           <th className="text-left p-3">Status</th>
                           <th className="text-left p-3">Type</th>
                           <th className="text-left p-3">Created</th>
+                          <th className="text-right p-3">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -503,9 +539,34 @@ export default function AdminUserManagement() {
                           <tr key={loan.id} className="border-b hover:bg-gray-50">
                             <td className="p-3">{loan.id}</td>
                             <td className="p-3">${Number(loan.requestedAmount || 0).toLocaleString()}</td>
-                            <td className="p-3"><Badge variant="outline">{loan.status}</Badge></td>
+                            <td className="p-3">
+                              <Badge variant="outline">{loan.status}</Badge>
+                              {loan.isLocked && (
+                                <div>
+                                  <Badge className="ml-1 bg-red-100 text-red-800 border-red-300">
+                                    <Lock className="w-3 h-3 mr-1" /> Locked
+                                  </Badge>
+                                  {loan.lockedReason && (
+                                    <p className="text-xs text-red-500 mt-1" title={loan.lockedReason}>
+                                      {loan.lockedReason.length > 25 ? loan.lockedReason.slice(0, 25) + "..." : loan.lockedReason}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </td>
                             <td className="p-3">{loan.loanType || "N/A"}</td>
                             <td className="p-3">{new Date(loan.createdAt).toLocaleDateString()}</td>
+                            <td className="p-3 text-right">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setLockLoanDialog({ open: true, loanId: loan.id, isLocked: !!loan.isLocked })}
+                                className={loan.isLocked ? "text-green-600 hover:text-green-700" : "text-orange-600 hover:text-orange-700"}
+                                title={loan.isLocked ? "Unlock Loan" : "Lock Loan"}
+                              >
+                                {loan.isLocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                              </Button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -753,6 +814,7 @@ export default function AdminUserManagement() {
                             <th className="text-right p-3">Balance</th>
                             <th className="text-right p-3">Available</th>
                             <th className="text-left p-3">Status</th>
+                            <th className="text-right p-3">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -765,10 +827,36 @@ export default function AdminUserManagement() {
                               <td className="p-3 text-right font-medium">${((acc.balance || 0) / 100).toFixed(2)}</td>
                               <td className="p-3 text-right">${((acc.availableBalance || 0) / 100).toFixed(2)}</td>
                               <td className="p-3">
-                                <Badge className={acc.isVerified ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
-                                  {acc.isVerified ? "Verified" : "Unverified"}
-                                </Badge>
-                                {acc.isPrimary && <Badge className="ml-1 bg-blue-100 text-blue-800">Primary</Badge>}
+                                {acc.isFrozen ? (
+                                  <div>
+                                    <Badge className="bg-blue-100 text-blue-800 border-blue-300">
+                                      <Snowflake className="w-3 h-3 mr-1" /> Frozen
+                                    </Badge>
+                                    {acc.frozenReason && (
+                                      <p className="text-xs text-blue-600 mt-1" title={acc.frozenReason}>
+                                        {acc.frozenReason.length > 25 ? acc.frozenReason.slice(0, 25) + "..." : acc.frozenReason}
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <>
+                                    <Badge className={acc.isVerified ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
+                                      {acc.isVerified ? "Verified" : "Unverified"}
+                                    </Badge>
+                                    {acc.isPrimary && <Badge className="ml-1 bg-blue-100 text-blue-800">Primary</Badge>}
+                                  </>
+                                )}
+                              </td>
+                              <td className="p-3 text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setFreezeBankDialog({ open: true, accountId: acc.id, isFrozen: !!acc.isFrozen })}
+                                  className={acc.isFrozen ? "text-green-600 hover:text-green-700" : "text-blue-600 hover:text-blue-700"}
+                                  title={acc.isFrozen ? "Unfreeze Account" : "Freeze Account"}
+                                >
+                                  <Snowflake className="w-4 h-4" />
+                                </Button>
                               </td>
                             </tr>
                           ))}
@@ -1481,6 +1569,121 @@ export default function AdminUserManagement() {
             <Button onClick={handleSaveEdit} disabled={updateUserMutation.isPending}>
               {updateUserMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Freeze/Unfreeze Bank Account Dialog */}
+      <Dialog open={freezeBankDialog.open} onOpenChange={(open) => { setFreezeBankDialog({ open, accountId: open ? freezeBankDialog.accountId : null, isFrozen: open ? freezeBankDialog.isFrozen : false }); if (!open) { setFreezeBankReason(""); setFreezeBankCustomReason(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className={`flex items-center gap-2 ${freezeBankDialog.isFrozen ? "text-green-600" : "text-blue-600"}`}>
+              <Snowflake className="w-5 h-5" /> {freezeBankDialog.isFrozen ? "Unfreeze Bank Account" : "Freeze Bank Account"}
+            </DialogTitle>
+            <DialogDescription>
+              {freezeBankDialog.isFrozen
+                ? "This will restore the bank account. The user will be notified by email."
+                : "This will freeze the bank account immediately. All transfers, bill payments, and deposits will be blocked. The user will be notified by email."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Reason</Label>
+              <Select value={freezeBankReason} onValueChange={setFreezeBankReason}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {BANK_FREEZE_REASONS.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {freezeBankReason === "Other (specify below)" && (
+              <div>
+                <Label>Custom Reason</Label>
+                <Textarea
+                  placeholder="Enter the reason..."
+                  value={freezeBankCustomReason}
+                  onChange={(e) => setFreezeBankCustomReason(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setFreezeBankDialog({ open: false, accountId: null, isFrozen: false }); setFreezeBankReason(""); setFreezeBankCustomReason(""); }}>Cancel</Button>
+            <Button
+              variant={freezeBankDialog.isFrozen ? "default" : "destructive"}
+              onClick={() => {
+                if (!freezeBankDialog.accountId) return;
+                const reason = freezeBankReason === "Other (specify below)" ? freezeBankCustomReason : freezeBankReason;
+                if (!reason) { toast.error("Please select or enter a reason"); return; }
+                freezeAccountMutation.mutate({ accountId: freezeBankDialog.accountId, freeze: !freezeBankDialog.isFrozen, reason });
+              }}
+              disabled={freezeAccountMutation.isPending}
+            >
+              {freezeAccountMutation.isPending ? "Processing..." : freezeBankDialog.isFrozen ? "Unfreeze" : "Freeze Account"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Lock/Unlock Loan Dialog */}
+      <Dialog open={lockLoanDialog.open} onOpenChange={(open) => { setLockLoanDialog({ open, loanId: open ? lockLoanDialog.loanId : null, isLocked: open ? lockLoanDialog.isLocked : false }); if (!open) { setLockLoanReason(""); setLockLoanCustomReason(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className={`flex items-center gap-2 ${lockLoanDialog.isLocked ? "text-green-600" : "text-orange-600"}`}>
+              {lockLoanDialog.isLocked ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
+              {lockLoanDialog.isLocked ? "Unlock Loan Application" : "Lock Loan Application"}
+            </DialogTitle>
+            <DialogDescription>
+              {lockLoanDialog.isLocked
+                ? "This will unlock the loan application and allow it to proceed. The user will be notified by email."
+                : "This will lock the loan application. It cannot be approved or processed while locked. The user will be notified by email."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Reason</Label>
+              <Select value={lockLoanReason} onValueChange={setLockLoanReason}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LOAN_LOCK_REASONS.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {lockLoanReason === "Other (specify below)" && (
+              <div>
+                <Label>Custom Reason</Label>
+                <Textarea
+                  placeholder="Enter the reason..."
+                  value={lockLoanCustomReason}
+                  onChange={(e) => setLockLoanCustomReason(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setLockLoanDialog({ open: false, loanId: null, isLocked: false }); setLockLoanReason(""); setLockLoanCustomReason(""); }}>Cancel</Button>
+            <Button
+              variant={lockLoanDialog.isLocked ? "default" : "destructive"}
+              onClick={() => {
+                if (!lockLoanDialog.loanId) return;
+                const reason = lockLoanReason === "Other (specify below)" ? lockLoanCustomReason : lockLoanReason;
+                if (!reason) { toast.error("Please select or enter a reason"); return; }
+                lockLoanMutation.mutate({ loanId: lockLoanDialog.loanId, lock: !lockLoanDialog.isLocked, reason });
+              }}
+              disabled={lockLoanMutation.isPending}
+            >
+              {lockLoanMutation.isPending ? "Processing..." : lockLoanDialog.isLocked ? "Unlock Loan" : "Lock Loan"}
             </Button>
           </DialogFooter>
         </DialogContent>

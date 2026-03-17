@@ -5394,3 +5394,290 @@ export async function sendSupportTicketReplyEmail(
 
   await sendEmail({ to: userEmail, subject: emailSubject, text, html });
 }
+
+/**
+ * Send notification when admin freezes/unfreezes a bank account
+ */
+export async function sendBankAccountFrozenEmail(
+  email: string,
+  userName: string,
+  accountType: string,
+  reason: string,
+  isFrozen: boolean
+): Promise<void> {
+  const escapedName = escapeHtml(userName);
+  const escapedReason = escapeHtml(reason);
+  const escapedType = escapeHtml(accountType);
+
+  if (isFrozen) {
+    const subject = "Important: Your Bank Account Has Been Frozen — AmeriLend";
+    const text = `Dear ${userName},\n\nYour ${accountType} bank account at AmeriLend has been frozen.\n\nReason: ${reason}\n\nWhat you need to do:\n1. Contact our support team to discuss this matter\n2. Provide any requested documentation to verify your identity and recent transactions\n3. Cooperate with our compliance team's review process\n\nWhile your account is frozen, you will not be able to make withdrawals, transfers, bill payments, or deposits.\n\nPlease contact us at ${COMPANY_INFO.contact.email} or ${COMPANY_INFO.contact.phone} for assistance.\n\nBest regards,\nThe AmeriLend Compliance Team`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+          <div style="background-color: #dc3545; color: white; padding: 20px; text-align: center;">
+            <h1 style="margin: 0;">🔒 Account Frozen</h1>
+          </div>
+          ${getEmailHeader()}
+          <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+            <p>Dear ${escapedName},</p>
+            <p>We are writing to inform you that your <strong>${escapedType}</strong> bank account at AmeriLend has been <strong style="color: #dc3545;">frozen</strong> pending review.</p>
+
+            <div style="background-color: #ffe6e6; border: 2px solid #dc3545; padding: 15px; margin: 20px 0; border-radius: 5px;">
+              <h3 style="margin-top: 0; color: #dc3545;">Reason for Freeze</h3>
+              <p style="margin: 5px 0;">${escapedReason}</p>
+            </div>
+
+            <div style="background-color: #e8f4fd; border: 2px solid #0033A0; padding: 15px; margin: 20px 0; border-radius: 5px;">
+              <h3 style="margin-top: 0; color: #0033A0;">What You Need To Do</h3>
+              <ol style="margin: 10px 0; padding-left: 20px;">
+                <li><strong>Contact our support team</strong> — Reach out to discuss the reason for the freeze and next steps.</li>
+                <li><strong>Provide requested documentation</strong> — You may be asked to verify your identity, provide proof of recent transactions, or submit additional compliance documents.</li>
+                <li><strong>Cooperate with our review</strong> — Our compliance team will review your account and work with you to resolve any concerns.</li>
+              </ol>
+            </div>
+
+            <div style="background-color: #fff3cd; border: 1px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">
+              <h3 style="margin-top: 0; color: #856404;">⚠️ Restrictions While Frozen</h3>
+              <p style="margin: 5px 0;">While your account is frozen, the following operations are suspended:</p>
+              <ul style="margin: 10px 0; padding-left: 20px; color: #856404;">
+                <li>Wire transfers</li>
+                <li>Internal transfers</li>
+                <li>Bill payments</li>
+                <li>Mobile check deposits</li>
+              </ul>
+            </div>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="mailto:${COMPANY_INFO.contact.email}" style="background-color: #0033A0; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Contact Support</a>
+            </div>
+
+            <p>You may also reach us by phone at <strong>${COMPANY_INFO.contact.phone}</strong> during business hours.</p>
+          </div>
+          ${getEmailFooter()}
+        </body>
+      </html>
+    `;
+
+    await sendEmail({ to: email, subject, text, html });
+  } else {
+    const subject = "Good News: Your Bank Account Has Been Unfrozen — AmeriLend";
+    const text = `Dear ${userName},\n\nWe are pleased to inform you that your ${accountType} bank account at AmeriLend has been unfrozen. All account operations have been restored.\n\nIf you have any questions, please contact us at ${COMPANY_INFO.contact.email}.\n\nBest regards,\nThe AmeriLend Team`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+          <div style="background-color: #28a745; color: white; padding: 20px; text-align: center;">
+            <h1 style="margin: 0;">✅ Account Restored</h1>
+          </div>
+          ${getEmailHeader()}
+          <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+            <p>Dear ${escapedName},</p>
+            <p>We are pleased to inform you that your <strong>${escapedType}</strong> bank account has been <strong style="color: #28a745;">unfrozen</strong>. All account operations have been fully restored.</p>
+
+            <div style="background-color: #d4edda; border: 1px solid #28a745; padding: 15px; margin: 20px 0; border-radius: 5px;">
+              <p style="margin: 5px 0; color: #155724;">You may now resume normal banking activities including transfers, bill payments, and deposits.</p>
+            </div>
+
+            <p>If you have any questions, please contact us at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
+          </div>
+          ${getEmailFooter()}
+        </body>
+      </html>
+    `;
+
+    await sendEmail({ to: email, subject, text, html });
+  }
+}
+
+/**
+ * Send notification when admin freezes/unfreezes a virtual card
+ */
+export async function sendVirtualCardFrozenEmail(
+  email: string,
+  userName: string,
+  cardLastFour: string,
+  reason: string,
+  isFrozen: boolean
+): Promise<void> {
+  const escapedName = escapeHtml(userName);
+  const escapedReason = escapeHtml(reason);
+
+  if (isFrozen) {
+    const subject = "Important: Your Virtual Card Has Been Frozen — AmeriLend";
+    const text = `Dear ${userName},\n\nYour virtual card ending in ${cardLastFour} at AmeriLend has been frozen.\n\nReason: ${reason}\n\nWhat you need to do:\n1. Contact our support team to discuss this matter\n2. Provide any requested documentation to verify your identity and recent card activity\n3. Cooperate with our fraud prevention team's review\n\nWhile your card is frozen, all transactions will be declined.\n\nPlease contact us at ${COMPANY_INFO.contact.email} or ${COMPANY_INFO.contact.phone} for assistance.\n\nBest regards,\nThe AmeriLend Compliance Team`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+          <div style="background-color: #dc3545; color: white; padding: 20px; text-align: center;">
+            <h1 style="margin: 0;">🔒 Card Frozen</h1>
+          </div>
+          ${getEmailHeader()}
+          <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+            <p>Dear ${escapedName},</p>
+            <p>Your virtual card ending in <strong>****${cardLastFour}</strong> has been <strong style="color: #dc3545;">frozen</strong> by our compliance team.</p>
+
+            <div style="background-color: #ffe6e6; border: 2px solid #dc3545; padding: 15px; margin: 20px 0; border-radius: 5px;">
+              <h3 style="margin-top: 0; color: #dc3545;">Reason for Freeze</h3>
+              <p style="margin: 5px 0;">${escapedReason}</p>
+            </div>
+
+            <div style="background-color: #e8f4fd; border: 2px solid #0033A0; padding: 15px; margin: 20px 0; border-radius: 5px;">
+              <h3 style="margin-top: 0; color: #0033A0;">What You Need To Do</h3>
+              <ol style="margin: 10px 0; padding-left: 20px;">
+                <li><strong>Contact our support team</strong> — Reach out to discuss the reason for the freeze.</li>
+                <li><strong>Verify your identity</strong> — You may be asked to confirm recent card transactions or provide additional identification.</li>
+                <li><strong>Cooperate with the review</strong> — Our fraud prevention team will review the activity and work to resolve the issue.</li>
+              </ol>
+            </div>
+
+            <div style="background-color: #fff3cd; border: 1px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">
+              <h3 style="margin-top: 0; color: #856404;">⚠️ While Your Card Is Frozen</h3>
+              <p style="margin: 5px 0; color: #856404;">All card transactions will be declined until the freeze is lifted. You will not be able to unfreeze this card yourself — it must be reviewed and restored by our team.</p>
+            </div>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="mailto:${COMPANY_INFO.contact.email}" style="background-color: #0033A0; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Contact Support</a>
+            </div>
+
+            <p>You may also reach us by phone at <strong>${COMPANY_INFO.contact.phone}</strong> during business hours.</p>
+          </div>
+          ${getEmailFooter()}
+        </body>
+      </html>
+    `;
+
+    await sendEmail({ to: email, subject, text, html });
+  } else {
+    const subject = "Good News: Your Virtual Card Has Been Restored — AmeriLend";
+    const text = `Dear ${userName},\n\nYour virtual card ending in ${cardLastFour} has been unfrozen. You may now use your card for transactions.\n\nIf you have any questions, please contact us at ${COMPANY_INFO.contact.email}.\n\nBest regards,\nThe AmeriLend Team`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+          <div style="background-color: #28a745; color: white; padding: 20px; text-align: center;">
+            <h1 style="margin: 0;">✅ Card Restored</h1>
+          </div>
+          ${getEmailHeader()}
+          <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+            <p>Dear ${escapedName},</p>
+            <p>Your virtual card ending in <strong>****${cardLastFour}</strong> has been <strong style="color: #28a745;">unfrozen</strong> and is now active again.</p>
+
+            <div style="background-color: #d4edda; border: 1px solid #28a745; padding: 15px; margin: 20px 0; border-radius: 5px;">
+              <p style="margin: 5px 0; color: #155724;">You may now resume using your card for all transactions.</p>
+            </div>
+
+            <p>If you have any questions, please contact us at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
+          </div>
+          ${getEmailFooter()}
+        </body>
+      </html>
+    `;
+
+    await sendEmail({ to: email, subject, text, html });
+  }
+}
+
+/**
+ * Send notification when admin locks/unlocks a loan application
+ */
+export async function sendLoanLockedEmail(
+  email: string,
+  userName: string,
+  trackingNumber: string,
+  reason: string,
+  isLocked: boolean
+): Promise<void> {
+  const escapedName = escapeHtml(userName);
+  const escapedReason = escapeHtml(reason);
+  const escapedTracking = escapeHtml(trackingNumber);
+
+  if (isLocked) {
+    const subject = "Important: Your Loan Application Has Been Locked — AmeriLend";
+    const text = `Dear ${userName},\n\nYour loan application (Tracking #${trackingNumber}) at AmeriLend has been locked for review.\n\nReason: ${reason}\n\nWhat you need to do:\n1. Contact our support team to discuss this matter\n2. Provide any requested documentation (proof of income, identity verification, etc.)\n3. Respond to any verification requests from our compliance team\n\nWhile your loan is locked, it cannot be approved or processed. The lock will be lifted once the review is complete.\n\nPlease contact us at ${COMPANY_INFO.contact.email} or ${COMPANY_INFO.contact.phone} for assistance.\n\nBest regards,\nThe AmeriLend Compliance Team`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+          <div style="background-color: #dc3545; color: white; padding: 20px; text-align: center;">
+            <h1 style="margin: 0;">🔒 Loan Application Locked</h1>
+          </div>
+          ${getEmailHeader()}
+          <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+            <p>Dear ${escapedName},</p>
+            <p>Your loan application <strong>(Tracking #${escapedTracking})</strong> has been <strong style="color: #dc3545;">locked</strong> and placed under review by our compliance team.</p>
+
+            <div style="background-color: #ffe6e6; border: 2px solid #dc3545; padding: 15px; margin: 20px 0; border-radius: 5px;">
+              <h3 style="margin-top: 0; color: #dc3545;">Reason for Lock</h3>
+              <p style="margin: 5px 0;">${escapedReason}</p>
+            </div>
+
+            <div style="background-color: #e8f4fd; border: 2px solid #0033A0; padding: 15px; margin: 20px 0; border-radius: 5px;">
+              <h3 style="margin-top: 0; color: #0033A0;">What You Need To Do</h3>
+              <ol style="margin: 10px 0; padding-left: 20px;">
+                <li><strong>Contact our support team</strong> — Reach out to discuss the reason for the lock and what is needed.</li>
+                <li><strong>Provide requested documentation</strong> — You may be asked for proof of income, identity verification, employment verification, or other supporting documents.</li>
+                <li><strong>Respond to verification requests</strong> — Our compliance team may need to verify information on your application. Please respond promptly to expedite the review.</li>
+              </ol>
+            </div>
+
+            <div style="background-color: #fff3cd; border: 1px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">
+              <h3 style="margin-top: 0; color: #856404;">⚠️ What This Means</h3>
+              <p style="margin: 5px 0; color: #856404;">While your loan application is locked, it cannot be approved, processed, or disbursed. The lock will be lifted once our review is complete and any outstanding issues are resolved.</p>
+            </div>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="mailto:${COMPANY_INFO.contact.email}" style="background-color: #0033A0; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Contact Support</a>
+            </div>
+
+            <p>You may also reach us by phone at <strong>${COMPANY_INFO.contact.phone}</strong> during business hours.</p>
+          </div>
+          ${getEmailFooter()}
+        </body>
+      </html>
+    `;
+
+    await sendEmail({ to: email, subject, text, html });
+  } else {
+    const subject = "Good News: Your Loan Application Lock Has Been Lifted — AmeriLend";
+    const text = `Dear ${userName},\n\nYour loan application (Tracking #${trackingNumber}) has been unlocked. Processing of your application will now continue as normal.\n\nIf you have any questions, please contact us at ${COMPANY_INFO.contact.email}.\n\nBest regards,\nThe AmeriLend Team`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+          <div style="background-color: #28a745; color: white; padding: 20px; text-align: center;">
+            <h1 style="margin: 0;">✅ Loan Application Unlocked</h1>
+          </div>
+          ${getEmailHeader()}
+          <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+            <p>Dear ${escapedName},</p>
+            <p>Your loan application <strong>(Tracking #${escapedTracking})</strong> has been <strong style="color: #28a745;">unlocked</strong>. Processing of your application will now continue as normal.</p>
+
+            <div style="background-color: #d4edda; border: 1px solid #28a745; padding: 15px; margin: 20px 0; border-radius: 5px;">
+              <p style="margin: 5px 0; color: #155724;">Your application is back in the review pipeline and will be processed according to its current status.</p>
+            </div>
+
+            <p>If you have any questions, please contact us at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
+          </div>
+          ${getEmailFooter()}
+        </body>
+      </html>
+    `;
+
+    await sendEmail({ to: email, subject, text, html });
+  }
+}

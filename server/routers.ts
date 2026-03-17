@@ -483,6 +483,7 @@ const bankingRouter = router({
         .limit(1);
 
       if (!account) throw new TRPCError({ code: "NOT_FOUND", message: "Account not found" });
+      if (account.isFrozen) throw new TRPCError({ code: "FORBIDDEN", message: "This account has been frozen due to suspected fraud. Please contact support." });
       if (!account.isVerified) throw new TRPCError({ code: "BAD_REQUEST", message: "Account must be verified to send wire transfers" });
       if (account.availableBalance < input.amount) throw new TRPCError({ code: "BAD_REQUEST", message: "Insufficient funds" });
 
@@ -646,6 +647,7 @@ const bankingRouter = router({
         .limit(1);
 
       if (!account) throw new TRPCError({ code: "NOT_FOUND", message: "Account not found" });
+      if (account.isFrozen) throw new TRPCError({ code: "FORBIDDEN", message: "This account has been frozen due to suspected fraud. Please contact support." });
       if (!account.isVerified) throw new TRPCError({ code: "BAD_REQUEST", message: "Account must be verified for mobile deposits" });
 
       const refNum = generateRefNumber();
@@ -736,6 +738,7 @@ const bankingRouter = router({
         .limit(1);
 
       if (!account) throw new TRPCError({ code: "NOT_FOUND", message: "Account not found" });
+      if (account.isFrozen) throw new TRPCError({ code: "FORBIDDEN", message: "This account has been frozen due to suspected fraud. Please contact support." });
       if (!account.isVerified) throw new TRPCError({ code: "BAD_REQUEST", message: "Account must be verified" });
       if (account.availableBalance < input.amount) throw new TRPCError({ code: "BAD_REQUEST", message: "Insufficient funds" });
 
@@ -803,6 +806,8 @@ const bankingRouter = router({
       const fromAcct = accounts.find((a) => a.id === input.fromAccountId);
       const toAcct = accounts.find((a) => a.id === input.toAccountId);
       if (!fromAcct || !toAcct) throw new TRPCError({ code: "NOT_FOUND", message: "One or both accounts not found" });
+      if (fromAcct.isFrozen) throw new TRPCError({ code: "FORBIDDEN", message: "Source account has been frozen due to suspected fraud. Please contact support." });
+      if (toAcct.isFrozen) throw new TRPCError({ code: "FORBIDDEN", message: "Destination account has been frozen due to suspected fraud. Please contact support." });
       if (fromAcct.availableBalance < input.amount) throw new TRPCError({ code: "BAD_REQUEST", message: "Insufficient funds" });
 
       const refNum = generateRefNumber();
@@ -1129,6 +1134,9 @@ const adminBankingRouter = router({
         availableBalance: a.availableBalance ?? 0,
         isPrimary: a.isPrimary,
         isVerified: a.isVerified,
+        isFrozen: a.isFrozen ?? false,
+        frozenReason: a.frozenReason,
+        frozenAt: a.frozenAt,
         createdAt: a.createdAt,
       }));
     }),
@@ -1348,6 +1356,86 @@ const adminBankingRouter = router({
       }
 
       return { success: true, status: input.approved ? "completed" : "failed" };
+    }),
+
+  // Admin: Freeze/unfreeze a bank account (fraud control)
+  freezeAccount: adminProcedure
+    .input(z.object({
+      accountId: z.number(),
+      freeze: z.boolean(),
+      reason: z.string().min(1, "Reason is required"),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const dbConn = await getDb();
+      if (!dbConn) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const [account] = await dbConn
+        .select()
+        .from(schema.bankAccounts)
+        .where(eq(schema.bankAccounts.id, input.accountId))
+        .limit(1);
+
+      if (!account) throw new TRPCError({ code: "NOT_FOUND", message: "Bank account not found" });
+
+      if (input.freeze) {
+        await dbConn
+          .update(schema.bankAccounts)
+          .set({
+            isFrozen: true,
+            frozenAt: new Date(),
+            frozenReason: input.reason,
+            frozenBy: ctx.user.id,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.bankAccounts.id, input.accountId));
+      } else {
+        await dbConn
+          .update(schema.bankAccounts)
+          .set({
+            isFrozen: false,
+            frozenAt: null,
+            frozenReason: null,
+            frozenBy: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.bankAccounts.id, input.accountId));
+      }
+
+      // Audit log
+      try {
+        await db.createAdminAuditLog({
+          adminId: ctx.user.id,
+          action: input.freeze ? "bank_account_frozen" : "bank_account_unfrozen",
+          resourceType: "bank_account",
+          resourceId: input.accountId,
+          details: `Bank account #${input.accountId} (user ${account.userId}) ${input.freeze ? "frozen" : "unfrozen"}: ${input.reason}`,
+        });
+      } catch (e) {
+        console.error("Failed to create audit log:", e);
+      }
+
+      // Send email notification to account holder
+      try {
+        const [user] = await dbConn
+          .select({ email: schema.users.email, name: schema.users.name })
+          .from(schema.users)
+          .where(eq(schema.users.id, account.userId))
+          .limit(1);
+        if (user?.email) {
+          const { sendBankAccountFrozenEmail } = await import("./_core/email");
+          await sendBankAccountFrozenEmail(
+            user.email,
+            user.name || "Valued Customer",
+            account.accountType || "Banking",
+            input.reason,
+            input.freeze
+          );
+        }
+      } catch (e) {
+        console.error("Failed to send bank freeze notification email:", e);
+      }
+
+      return { success: true, frozen: input.freeze };
     }),
 });
 
@@ -2494,6 +2582,10 @@ const virtualCardsRouter = router({
         if (card.status === "cancelled" || card.status === "expired") {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot modify a cancelled or expired card" });
         }
+        // Prevent user from unfreezing admin-frozen cards
+        if (card.status === "frozen" && card.frozenBy) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "This card has been frozen by an administrator due to suspected fraud. Please contact support." });
+        }
         const newStatus = card.status === "frozen" ? "active" : "frozen";
         await dbConn
           .update(schema.virtualCards)
@@ -2664,6 +2756,82 @@ const virtualCardsRouter = router({
       } catch (error) {
         console.error('[VirtualCards] Cancel card error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to cancel card" });
+      }
+    }),
+
+  // Admin: Freeze/unfreeze a virtual card with reason (fraud control)
+  adminFreezeCard: adminProcedure
+    .input(z.object({
+      cardId: z.number(),
+      freeze: z.boolean(),
+      reason: z.string().min(1, "Reason is required"),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const dbConn = await getDb();
+        if (!dbConn) throw new Error("Database connection failed");
+        const [card] = await dbConn
+          .select()
+          .from(schema.virtualCards)
+          .where(eq(schema.virtualCards.id, input.cardId));
+        if (!card) throw new TRPCError({ code: "NOT_FOUND", message: "Card not found" });
+        if (card.status === "cancelled" || card.status === "expired") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot modify a cancelled or expired card" });
+        }
+
+        const newStatus = input.freeze ? "frozen" : "active";
+        await dbConn
+          .update(schema.virtualCards)
+          .set({
+            status: newStatus,
+            frozenReason: input.freeze ? input.reason : null,
+            frozenBy: input.freeze ? ctx.user.id : null,
+            frozenAt: input.freeze ? new Date() : null,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.virtualCards.id, input.cardId));
+
+        // Audit log
+        try {
+          await db.createAdminAuditLog({
+            adminId: ctx.user.id,
+            action: input.freeze ? "virtual_card_frozen" : "virtual_card_unfrozen",
+            resourceType: "virtual_card",
+            resourceId: input.cardId,
+            details: `Virtual card #${input.cardId} (user ${card.userId}) ${input.freeze ? "frozen" : "unfrozen"}: ${input.reason}`,
+          });
+        } catch (e) {
+          console.error("Failed to create audit log:", e);
+        }
+
+        // Send email notification to card holder
+        try {
+          const [user] = await dbConn
+            .select({ email: schema.users.email, name: schema.users.name })
+            .from(schema.users)
+            .where(eq(schema.users.id, card.userId))
+            .limit(1);
+          if (user?.email) {
+            const { sendVirtualCardFrozenEmail } = await import("./_core/email");
+            const cardNum = card.cardNumber || "";
+            const lastFour = cardNum.slice(-4) || "****";
+            await sendVirtualCardFrozenEmail(
+              user.email,
+              user.name || "Valued Customer",
+              lastFour,
+              input.reason,
+              input.freeze
+            );
+          }
+        } catch (e) {
+          console.error("Failed to send card freeze notification email:", e);
+        }
+
+        return { success: true, status: newStatus };
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        console.error('[VirtualCards] Admin freeze error:', error);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to update card" });
       }
     }),
 
@@ -5036,6 +5204,85 @@ export const appRouter = router({
         return db.getAdminActivityLog(input.limit);
       }),
 
+    // Admin: Lock/unlock a loan (fraud control)
+    adminLockLoan: protectedProcedure
+      .input(z.object({
+        loanId: z.number(),
+        lock: z.boolean(),
+        reason: z.string().min(1, "Reason is required"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const dbConn = await getDb();
+        if (!dbConn) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+        const [loan] = await dbConn
+          .select()
+          .from(schema.loanApplications)
+          .where(eq(schema.loanApplications.id, input.loanId))
+          .limit(1);
+
+        if (!loan) throw new TRPCError({ code: "NOT_FOUND", message: "Loan application not found" });
+
+        if (input.lock) {
+          await dbConn
+            .update(schema.loanApplications)
+            .set({
+              isLocked: true,
+              lockedAt: new Date(),
+              lockedReason: input.reason,
+              lockedBy: ctx.user.id,
+              updatedAt: new Date(),
+            })
+            .where(eq(schema.loanApplications.id, input.loanId));
+        } else {
+          await dbConn
+            .update(schema.loanApplications)
+            .set({
+              isLocked: false,
+              lockedAt: null,
+              lockedReason: null,
+              lockedBy: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(schema.loanApplications.id, input.loanId));
+        }
+
+        // Audit log
+        try {
+          await db.logAdminActivity({
+            adminId: ctx.user.id,
+            action: input.lock ? "lock_loan" : "unlock_loan",
+            targetType: "loan",
+            targetId: input.loanId,
+            details: JSON.stringify({ reason: input.reason }),
+          });
+        } catch (e) {
+          console.error("Failed to create audit log:", e);
+        }
+
+        // Send email notification to loan applicant
+        try {
+          if (loan.email) {
+            const { sendLoanLockedEmail } = await import("./_core/email");
+            await sendLoanLockedEmail(
+              loan.email,
+              loan.fullName || "Valued Customer",
+              loan.trackingNumber,
+              input.reason,
+              input.lock
+            );
+          }
+        } catch (e) {
+          console.error("Failed to send loan lock notification email:", e);
+        }
+
+        return { success: true, locked: input.lock };
+      }),
+
     // Admin: Approve loan application
     adminApprove: protectedProcedure
       .input(z.object({
@@ -5056,6 +5303,11 @@ export const appRouter = router({
         // Status guard — only pending or under_review applications can be approved
         if (application.status !== "pending" && application.status !== "under_review") {
           throw new TRPCError({ code: "BAD_REQUEST", message: `Cannot approve application with status '${application.status}'. Must be 'pending' or 'under_review'.` });
+        }
+
+        // Fraud lock guard
+        if (application.isLocked) {
+          throw new TRPCError({ code: "FORBIDDEN", message: `This loan is locked for suspected fraud: ${application.lockedReason || "No reason provided"}. Unlock it first to proceed.` });
         }
 
         // Calculate processing fee
@@ -5172,6 +5424,11 @@ export const appRouter = router({
             code: "BAD_REQUEST", 
             message: "Can only verify fee payments for applications with 'fee_paid' status" 
           });
+        }
+
+        // Fraud lock guard
+        if (application.isLocked && input.verified) {
+          throw new TRPCError({ code: "FORBIDDEN", message: `This loan is locked for suspected fraud: ${application.lockedReason || "No reason provided"}. Unlock it first to verify fee payment.` });
         }
 
         // Update verification status

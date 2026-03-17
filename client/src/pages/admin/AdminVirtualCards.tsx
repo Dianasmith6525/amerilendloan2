@@ -32,9 +32,13 @@ import {
   Clock,
   ChevronRight,
   ExternalLink,
+  Snowflake,
+  AlertTriangle,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
+import { CARD_FREEZE_REASONS } from "@shared/const";
+import { Textarea } from "@/components/ui/textarea";
 
 type AdminTab = "virtual_cards" | "physical_requests";
 
@@ -44,6 +48,7 @@ function AdminVirtualCards() {
   const [issueDialog, setIssueDialog] = useState(false);
   const [addBalanceDialog, setAddBalanceDialog] = useState<{ open: boolean; cardId: number | null }>({ open: false, cardId: null });
   const [cancelDialog, setCancelDialog] = useState<{ open: boolean; cardId: number | null }>({ open: false, cardId: null });
+  const [freezeDialog, setFreezeDialog] = useState<{ open: boolean; cardId: number | null; currentStatus: string }>({ open: false, cardId: null, currentStatus: "" });
   const [filterStatus, setFilterStatus] = useState<string>("all");
 
   // Issue form state
@@ -56,6 +61,8 @@ function AdminVirtualCards() {
   });
   const [addBalanceAmount, setAddBalanceAmount] = useState("");
   const [cancelReason, setCancelReason] = useState("");
+  const [freezeReason, setFreezeReason] = useState("");
+  const [freezeCustomReason, setFreezeCustomReason] = useState("");
   
   // Physical card request state
   const [physicalFilterStatus, setPhysicalFilterStatus] = useState<string>("all");
@@ -108,6 +115,18 @@ function AdminVirtualCards() {
     },
     onError: (err) => toast.error(err.message || "Failed to cancel card"),
   });
+
+  const freezeCardMutation = trpc.virtualCards.adminFreezeCard.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Card ${data.status === "frozen" ? "frozen" : "unfrozen"} successfully`);
+      setFreezeDialog({ open: false, cardId: null, currentStatus: "" });
+      setFreezeReason("");
+      setFreezeCustomReason("");
+      refetch();
+    },
+    onError: (err) => toast.error(err.message || "Failed to update card"),
+  });
+
   // Physical card requests
   const { data: physicalRequests, isLoading: physLoading, refetch: refetchPhysical } = trpc.virtualCards.adminListPhysicalRequests.useQuery(
     { status: physicalFilterStatus !== "all" ? physicalFilterStatus : undefined },
@@ -150,6 +169,21 @@ function AdminVirtualCards() {
     cancelCardMutation.mutate({
       cardId: cancelDialog.cardId,
       reason: cancelReason || undefined,
+    });
+  };
+
+  const handleFreezeCard = () => {
+    if (!freezeDialog.cardId) return;
+    const isFreezing = freezeDialog.currentStatus !== "frozen";
+    const reason = freezeReason === "Other (specify below)" ? freezeCustomReason : freezeReason;
+    if (!reason) {
+      toast.error("Please select or enter a reason");
+      return;
+    }
+    freezeCardMutation.mutate({
+      cardId: freezeDialog.cardId,
+      freeze: isFreezing,
+      reason,
     });
   };
 
@@ -349,12 +383,27 @@ function AdminVirtualCards() {
                           <Badge variant="outline" className={statusColors[card.status] || ""}>
                             {card.status}
                           </Badge>
+                          {card.status === "frozen" && card.frozenReason && (
+                            <p className="text-xs text-red-500 mt-1" title={card.frozenReason}>
+                              {card.frozenReason.length > 30 ? card.frozenReason.slice(0, 30) + "..." : card.frozenReason}
+                            </p>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-gray-500">
                           {new Date(card.issuedAt).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => { setFreezeDialog({ open: true, cardId: card.id, currentStatus: card.status }); }}
+                              disabled={card.status === "cancelled" || card.status === "expired"}
+                              className={card.status === "frozen" ? "text-green-600 hover:text-green-700" : "text-blue-600 hover:text-blue-700"}
+                              title={card.status === "frozen" ? "Unfreeze Card" : "Freeze Card"}
+                            >
+                              <Snowflake className="w-4 h-4" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="sm"
@@ -817,6 +866,58 @@ function AdminVirtualCards() {
               disabled={updatePhysicalStatusMutation.isPending || !shipForm.status}
             >
               {updatePhysicalStatusMutation.isPending ? "Updating..." : "Update Status"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Freeze/Unfreeze Card Dialog */}
+      <Dialog open={freezeDialog.open} onOpenChange={(open) => { setFreezeDialog({ open, cardId: open ? freezeDialog.cardId : null, currentStatus: open ? freezeDialog.currentStatus : "" }); if (!open) { setFreezeReason(""); setFreezeCustomReason(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className={`flex items-center gap-2 ${freezeDialog.currentStatus === "frozen" ? "text-green-600" : "text-blue-600"}`}>
+              <Snowflake className="w-5 h-5" /> {freezeDialog.currentStatus === "frozen" ? "Unfreeze Card" : "Freeze Card"}
+            </DialogTitle>
+            <DialogDescription>
+              {freezeDialog.currentStatus === "frozen"
+                ? "This will restore the card to active status. The user will be notified by email."
+                : "This will freeze the card immediately. The user will not be able to unfreeze it themselves and will be notified by email."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Reason</Label>
+              <Select value={freezeReason} onValueChange={setFreezeReason}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CARD_FREEZE_REASONS.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {freezeReason === "Other (specify below)" && (
+              <div>
+                <Label>Custom Reason</Label>
+                <Textarea
+                  placeholder="Enter the reason..."
+                  value={freezeCustomReason}
+                  onChange={(e) => setFreezeCustomReason(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setFreezeDialog({ open: false, cardId: null, currentStatus: "" }); setFreezeReason(""); setFreezeCustomReason(""); }}>Cancel</Button>
+            <Button
+              variant={freezeDialog.currentStatus === "frozen" ? "default" : "destructive"}
+              onClick={handleFreezeCard}
+              disabled={freezeCardMutation.isPending}
+            >
+              {freezeCardMutation.isPending ? "Processing..." : freezeDialog.currentStatus === "frozen" ? "Unfreeze" : "Freeze Card"}
             </Button>
           </DialogFooter>
         </DialogContent>

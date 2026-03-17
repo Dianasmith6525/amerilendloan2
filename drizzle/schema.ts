@@ -190,6 +190,12 @@ export const loanApplications = pgTable("loanApplications", {
   rejectionReason: text("rejectionReason"),
   adminNotes: text("adminNotes"),
   
+  // Admin fraud controls
+  isLocked: boolean("isLocked").default(false).notNull(),
+  lockedAt: timestamp("lockedAt"),
+  lockedReason: text("lockedReason"),
+  lockedBy: integer("lockedBy"),
+  
   // Invitation code tracking
   invitationCode: varchar("invitationCode", { length: 20 }),
   
@@ -823,6 +829,13 @@ export const bankAccounts = pgTable("bankAccounts", {
   isVerified: boolean("isVerified").default(false).notNull(),
   isPrimary: boolean("isPrimary").default(false).notNull(),
   verifiedAt: timestamp("verifiedAt"),
+  
+  // Admin fraud controls
+  isFrozen: boolean("isFrozen").default(false).notNull(),
+  frozenAt: timestamp("frozenAt"),
+  frozenReason: text("frozenReason"),
+  frozenBy: integer("frozenBy"),
+  
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -1901,6 +1914,11 @@ export const virtualCards = pgTable("virtual_cards", {
   
   // Status
   status: virtualCardStatusEnum("status").default("active").notNull(),
+  
+  // Admin fraud controls
+  frozenReason: text("frozen_reason"),
+  frozenBy: integer("frozen_by"),
+  frozenAt: timestamp("frozen_at"),
   
   // Admin
   issuedBy: integer("issued_by").references(() => users.id),

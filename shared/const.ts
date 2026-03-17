@@ -9,3 +9,47 @@ export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
 export const SUPPORT_EMAIL = "support@amerilendloan.com";
 export const SUPPORT_PHONE = "(945) 212-1609";
 export const COMPANY_DOMAIN = "www.amerilendloan.com";
+
+// ===== Admin Fraud Control — Predefined Reasons =====
+
+export const BANK_FREEZE_REASONS = [
+  "Suspected fraudulent activity",
+  "Unauthorized transactions detected",
+  "Identity verification failure",
+  "Account under investigation",
+  "Suspicious deposit activity",
+  "Multiple failed login attempts",
+  "Reported stolen credentials",
+  "AML/KYC compliance hold",
+  "Court order / Legal hold",
+  "Chargeback dispute pending",
+  "Other (specify below)",
+] as const;
+
+export const CARD_FREEZE_REASONS = [
+  "Suspected fraudulent transactions",
+  "Unauthorized card usage",
+  "Card compromise / Data breach",
+  "Suspicious spending pattern",
+  "Identity verification failure",
+  "Account under investigation",
+  "Reported lost or stolen",
+  "Multiple declined transactions",
+  "Merchant dispute pending",
+  "AML/KYC compliance hold",
+  "Other (specify below)",
+] as const;
+
+export const LOAN_LOCK_REASONS = [
+  "Suspected fraudulent application",
+  "Identity theft reported",
+  "Inconsistent documentation",
+  "Duplicate application detected",
+  "Income verification failure",
+  "Suspicious activity on linked account",
+  "Under regulatory investigation",
+  "Court order / Legal hold",
+  "Address verification failure",
+  "Employer verification failure",
+  "Other (specify below)",
+] as const;
