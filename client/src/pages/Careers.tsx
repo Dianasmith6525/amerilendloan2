@@ -16,7 +16,6 @@ interface JobApplication {
 }
 
 export default function Careers() {
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<JobApplication>({
     fullName: "",
     email: "",
@@ -107,28 +106,14 @@ export default function Careers() {
       return;
     }
 
-    if (!formData.resume) {
-      toast.error("Please upload your resume");
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      // Send job application via new endpoint
-      sendJobApplicationMutation.mutate({
-        fullName: formData.fullName,
-        email: formData.email,
-        phone: formData.phone,
-        position: formData.position,
-        resumeFileName: formData.resume.name,
-        coverLetter: formData.coverLetter,
-      });
-    } catch (error) {
-      toast.error("Failed to submit application. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
+    sendJobApplicationMutation.mutate({
+      fullName: formData.fullName,
+      email: formData.email,
+      phone: formData.phone,
+      position: formData.position,
+      resumeFileName: formData.resume?.name || "Not provided",
+      coverLetter: formData.coverLetter,
+    });
   };
 
   return (
@@ -276,7 +261,7 @@ export default function Careers() {
                 {/* Resume */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Resume (PDF or Word) - Max 5MB
+                    Resume (PDF or Word) - Max 5MB <span className="text-gray-400 font-normal">(optional)</span>
                   </label>
                   <div className="relative">
                     <input
@@ -324,10 +309,10 @@ export default function Careers() {
                 {/* Submit Button */}
                 <Button
                   type="submit"
-                  disabled={isSubmitting || sendJobApplicationMutation.isPending}
+                  disabled={sendJobApplicationMutation.isPending}
                   className="w-full bg-[#0A2540] hover:bg-blue-800 text-white py-3 rounded-lg font-semibold text-lg transition-all"
                 >
-                  {isSubmitting || sendJobApplicationMutation.isPending ? (
+                  {sendJobApplicationMutation.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                       Submitting Application...
