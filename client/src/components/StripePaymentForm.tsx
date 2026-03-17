@@ -218,7 +218,12 @@ export default function StripePaymentForm({
 
   // Create the payment intent when component mounts
   useEffect(() => {
-    if (!stripeConfig?.enabled || configLoading) return;
+    if (configLoading) return;
+    
+    if (!stripeConfig?.enabled) {
+      setLoading(false);
+      return;
+    }
 
     createIntentMutation.mutate({
       loanApplicationId,
@@ -228,20 +233,21 @@ export default function StripePaymentForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stripeConfig?.enabled, configLoading, loanApplicationId]);
 
+  // Show disabled message early if config is loaded and Stripe is not available
+  if (!configLoading && !stripeConfig?.enabled) {
+    return (
+      <div className="text-center py-6 text-muted-foreground">
+        <p>Card payments are not currently available.</p>
+        <p className="text-sm mt-1">Please use another payment method.</p>
+      </div>
+    );
+  }
+
   if (configLoading || loading) {
     return (
       <div className="flex flex-col items-center justify-center py-8 space-y-3">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         <p className="text-sm text-muted-foreground">Initializing secure payment...</p>
-      </div>
-    );
-  }
-
-  if (!stripeConfig?.enabled) {
-    return (
-      <div className="text-center py-6 text-muted-foreground">
-        <p>Stripe payments are not currently available.</p>
-        <p className="text-sm mt-1">Please use another payment method.</p>
       </div>
     );
   }
