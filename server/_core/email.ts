@@ -76,6 +76,10 @@ export async function sendEmail(payload: EmailPayload): Promise<{ success: boole
       }),
     });
 
+    // Log full response details for debugging
+    const messageId = response.headers.get('x-message-id');
+    console.log(`[SendGrid] Response: status=${response.status} statusText=${response.statusText} messageId=${messageId} to=${payload.to} from=${process.env.SENDGRID_VERIFIED_EMAIL || "noreply@amerilendloan.com"}`);
+
     if (!response.ok) {
       const errorText = await response.text();
       let errorData;
@@ -116,7 +120,7 @@ export async function sendEmail(payload: EmailPayload): Promise<{ success: boole
       return { success: false, error: errorMessage };
     }
 
-    logger.info("Email sent successfully", { to: payload.to });
+    logger.info("Email sent successfully", { to: payload.to, messageId, status: response.status });
     return { success: true };
   } catch (error) {
     console.error("Error sending email:", error);
