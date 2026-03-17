@@ -11,9 +11,23 @@ import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
+interface ESignatureDocument {
+  id: number;
+  userId: number;
+  loanApplicationId: number;
+  documentType: string;
+  documentTitle?: string | null;
+  documentPath?: string | null;
+  status: string;
+  signatureHash?: string | null;
+  ipAddress?: string | null;
+  createdAt: string | Date;
+  signedAt?: string | Date | null;
+}
+
 export default function AdminESignatures() {
   const [, setLocation] = useLocation();
-  const [selectedDocument, setSelectedDocument] = useState<Record<string, unknown> | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<ESignatureDocument | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
 
   const { data: docsData, isLoading, refetch } = trpc.eSignature.adminGetAll.useQuery(

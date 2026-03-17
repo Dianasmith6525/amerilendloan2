@@ -14,10 +14,26 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
+interface InvitationCode {
+  id: number;
+  code: string;
+  recipientEmail: string;
+  recipientName: string;
+  offerAmount?: number | null;
+  offerApr?: number | null;
+  offerTermMonths?: number | null;
+  offerDescription?: string | null;
+  status: string;
+  adminNotes?: string | null;
+  createdAt: string | Date;
+  expiresAt?: string | Date | null;
+  redeemedAt?: string | Date | null;
+}
+
 export default function AdminInvitationCodes() {
   const [, setLocation] = useLocation();
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [selectedCode, setSelectedCode] = useState<Record<string, unknown> | null>(null);
+  const [selectedCode, setSelectedCode] = useState<InvitationCode | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
 
   // Create form state
@@ -67,11 +83,11 @@ export default function AdminInvitationCodes() {
     onError: (err) => toast.error(err.message),
   });
 
-  const codes = codesData?.data ?? [];
-  const active = codes.filter((c) => c.status === "active");
-  const redeemed = codes.filter((c) => c.status === "redeemed");
-  const expired = codes.filter((c) => c.status === "expired");
-  const revoked = codes.filter((c) => c.status === "revoked");
+  const codes = (codesData?.data ?? []) as InvitationCode[];
+  const active = codes.filter((c: InvitationCode) => c.status === "active");
+  const redeemed = codes.filter((c: InvitationCode) => c.status === "redeemed");
+  const expired = codes.filter((c: InvitationCode) => c.status === "expired");
+  const revoked = codes.filter((c: InvitationCode) => c.status === "revoked");
 
   const resetForm = () => {
     setShowCreateForm(false);
@@ -343,7 +359,7 @@ export default function AdminInvitationCodes() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {codes.map((code) => (
+                    {codes.map((code: InvitationCode) => (
                       <div
                         key={code.id}
                         onClick={() => setSelectedCode(code)}

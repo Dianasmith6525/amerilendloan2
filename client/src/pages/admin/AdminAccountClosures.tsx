@@ -13,9 +13,23 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
+interface ClosureRequest {
+  id: number;
+  userId: number;
+  userName: string | null;
+  userEmail: string | null;
+  reason: string;
+  detailedReason?: string | null;
+  status: string;
+  dataExportRequested: boolean | null;
+  adminNotes?: string | null;
+  createdAt: string | Date;
+  scheduledDeletionDate?: string | null;
+}
+
 export default function AdminAccountClosures() {
   const [, setLocation] = useLocation();
-  const [selectedRequest, setSelectedRequest] = useState<Record<string, unknown> | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<ClosureRequest | null>(null);
   const [adminNotes, setAdminNotes] = useState("");
   const [scheduledDeletionDate, setScheduledDeletionDate] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);

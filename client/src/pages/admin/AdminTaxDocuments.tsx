@@ -10,9 +10,25 @@ import {
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 
+interface TaxDocumentRecord {
+  id: number;
+  userId: number;
+  loanApplicationId?: number | null;
+  documentType: string;
+  taxYear: number;
+  totalInterestPaid?: number | null;
+  totalPrincipalPaid?: number | null;
+  debtCancelled?: number | null;
+  documentPath?: string | null;
+  content?: string | null;
+  generatedAt: string | Date;
+  sentToUser?: boolean | null;
+  sentAt?: string | Date | null;
+}
+
 export default function AdminTaxDocuments() {
   const [, setLocation] = useLocation();
-  const [selectedDocument, setSelectedDocument] = useState<Record<string, unknown> | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<TaxDocumentRecord | null>(null);
   const [taxYearFilter, setTaxYearFilter] = useState<number | undefined>(undefined);
   const [userIdFilter, setUserIdFilter] = useState<string>("");
 
@@ -175,7 +191,7 @@ export default function AdminTaxDocuments() {
                           <div className="flex flex-col items-end gap-2">
                             {docTypeBadge(doc.documentType)}
                             <span className="text-xs text-slate-500">
-                              {new Date(doc.createdAt).toLocaleDateString()}
+                              {new Date(doc.generatedAt).toLocaleDateString()}
                             </span>
                           </div>
                         </div>
@@ -223,13 +239,13 @@ export default function AdminTaxDocuments() {
                   )}
                   <div>
                     <h3 className="text-sm font-medium text-slate-400 mb-1">Generated</h3>
-                    <p className="text-slate-300 text-sm">{new Date(selectedDocument.createdAt).toLocaleString()}</p>
+                    <p className="text-slate-300 text-sm">{new Date(selectedDocument.generatedAt).toLocaleString()}</p>
                   </div>
-                  {selectedDocument.filePath && (
+                  {selectedDocument.documentPath && (
                     <div>
                       <h3 className="text-sm font-medium text-slate-400 mb-1">File Path</h3>
                       <p className="text-slate-300 text-xs font-mono bg-slate-700/50 p-2 rounded break-all">
-                        {selectedDocument.filePath}
+                        {selectedDocument.documentPath}
                       </p>
                     </div>
                   )}

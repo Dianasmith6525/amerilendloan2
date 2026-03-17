@@ -6566,6 +6566,7 @@ export const appRouter = router({
               await sendEmail({
                 to: userEmailValue,
                 subject: "Wire Transfer Received - Pending Verification",
+                text: `Wire Transfer Confirmation - We have received your wire transfer submission for Loan #${application.trackingNumber}. Amount: $${(application.processingFeeAmount / 100).toFixed(2)}. Confirmation Number: ${input.wireConfirmationNumber}. Our team will verify the transfer within 1-3 business days.`,
                 html: `
                   <h2>Wire Transfer Confirmation</h2>
                   <p>Dear ${fullName},</p>
@@ -6593,6 +6594,7 @@ export const appRouter = router({
               await sendEmail({
                 to: adminEmail,
                 subject: `[ACTION REQUIRED] Wire Transfer Pending Verification - Loan #${application.trackingNumber}`,
+                text: `New Wire Transfer Pending Verification - Customer: ${fullName}, Email: ${userEmailValue}, Loan: #${application.trackingNumber}, Amount: $${(application.processingFeeAmount / 100).toFixed(2)}, Confirmation: ${input.wireConfirmationNumber}. Please verify in your bank account.`,
                 html: `
                   <h2>New Wire Transfer Pending Verification</h2>
                   <div style="background: #fef3cd; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #ffc107;">
@@ -10484,7 +10486,6 @@ Format as JSON with array of applications including their recommendation.`;
               amount: input.amountCents,
               paymentMethod: "card",
               paymentProvider: "stripe",
-              transactionId: result.transactionId || result.paymentIntentId || "",
               status: "succeeded",
               paymentIntentId: result.paymentIntentId || "",
             });

@@ -23,10 +23,20 @@ interface ActionConfig {
   value: string;
 }
 
+interface AutomationRule {
+  id: number;
+  name: string;
+  enabled: boolean;
+  type: string;
+  conditions: Condition[];
+  action: ActionConfig;
+  createdAt?: string | Date;
+}
+
 export default function AdminAutomationRules() {
   const [, setLocation] = useLocation();
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [editingRule, setEditingRule] = useState<Record<string, unknown> | null>(null);
+  const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
 
   // Form state
   const [name, setName] = useState("");
@@ -76,7 +86,7 @@ export default function AdminAutomationRules() {
     setAction({ type: "send_notification", value: "" });
   };
 
-  const startEdit = (rule: Record<string, unknown>) => {
+  const startEdit = (rule: AutomationRule) => {
     setEditingRule(rule);
     setShowCreateForm(true);
     setName(rule.name);

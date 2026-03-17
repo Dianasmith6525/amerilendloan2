@@ -13,9 +13,26 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
+interface HardshipRequest {
+  id: number;
+  loanApplicationId: number;
+  trackingNumber: string | null;
+  userId: number;
+  userName: string | null;
+  userEmail: string | null;
+  programType: string;
+  reason: string;
+  status: string;
+  requestedDuration?: number | null;
+  proposedPaymentAmount?: number | null;
+  monthlyIncomeChange?: number | null;
+  adminNotes?: string | null;
+  createdAt: string | Date;
+}
+
 export default function AdminHardshipManagement() {
   const [, setLocation] = useLocation();
-  const [selectedRequest, setSelectedRequest] = useState<Record<string, unknown> | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<HardshipRequest | null>(null);
   const [adminNotes, setAdminNotes] = useState("");
   const [approvedDuration, setApprovedDuration] = useState("");
   const [approvedPaymentAmount, setApprovedPaymentAmount] = useState("");
