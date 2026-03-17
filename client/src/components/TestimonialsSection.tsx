@@ -94,7 +94,7 @@ export default function TestimonialsSection() {
             onClick={() => scroll('left')}
             variant="outline"
             size="icon"
-            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow-lg hover:bg-gray-50 rounded-full w-12 h-12 hidden md:flex"
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-20 bg-white shadow-lg hover:bg-gray-50 rounded-full w-12 h-12 hidden md:flex"
           >
             <ChevronLeft className="w-6 h-6" />
           </Button>
@@ -103,7 +103,7 @@ export default function TestimonialsSection() {
             onClick={() => scroll('right')}
             variant="outline"
             size="icon"
-            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow-lg hover:bg-gray-50 rounded-full w-12 h-12 hidden md:flex"
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-20 bg-white shadow-lg hover:bg-gray-50 rounded-full w-12 h-12 hidden md:flex"
           >
             <ChevronRight className="w-6 h-6" />
           </Button>

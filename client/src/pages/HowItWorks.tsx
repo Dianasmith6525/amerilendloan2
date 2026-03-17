@@ -107,7 +107,7 @@ export default function HowItWorks() {
             Three simple steps between you and the funds you need. No complicated paperwork, no long waits.
           </p>
         </div>
-        <div className="absolute bottom-0 left-0 w-full">
+        <div className="absolute bottom-0 left-0 w-full pointer-events-none">
           <svg viewBox="0 0 1440 100" preserveAspectRatio="none" className="block w-full h-16 md:h-24">
             <path d="M0,40 C480,100 960,0 1440,40 L1440,100 L0,100 Z" fill="white" />
           </svg>

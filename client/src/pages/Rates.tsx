@@ -135,7 +135,7 @@ export default function Rates() {
             Transparent pricing with no surprises. See our loan tiers and estimate your monthly payment.
           </p>
         </div>
-        <div className="absolute bottom-0 left-0 w-full">
+        <div className="absolute bottom-0 left-0 w-full pointer-events-none">
           <svg viewBox="0 0 1440 100" preserveAspectRatio="none" className="block w-full h-16 md:h-24">
             <path d="M0,40 C480,100 960,0 1440,40 L1440,100 L0,100 Z" fill="white" />
           </svg>
