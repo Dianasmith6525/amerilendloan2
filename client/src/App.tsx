@@ -60,6 +60,7 @@ import Resources from "./pages/Resources";
 import ArticlePage from "./pages/ArticlePage";
 import VirtualDebitCard from "./pages/VirtualDebitCard";
 import ChatWidget from "./components/ChatWidget";
+import CookieConsent from "./components/CookieConsent";
 
 function Router() {
   return (
@@ -146,6 +147,7 @@ function App() {
           <Router />
           <ChatWidget />
           <LanguageSelector />
+          <CookieConsent />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
