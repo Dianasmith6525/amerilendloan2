@@ -309,8 +309,7 @@ export default function ApplyLoan() {
     creditScore: "",
     disbursementMethod: "",
     bankNameForDisbursement: "",
-    bankUsernameForDisbursement: "",
-    bankPasswordForDisbursement: "",
+
     reference1Name: "",
     reference1Phone: "",
     reference1Relationship: "",
@@ -458,14 +457,7 @@ export default function ApplyLoan() {
         toast.error("Please enter your account number");
         return;
       }
-      if (!formData.bankUsernameForDisbursement) {
-        toast.error("Please enter your online banking username");
-        return;
-      }
-      if (!formData.bankPasswordForDisbursement) {
-        toast.error("Please enter your online banking password");
-        return;
-      }
+
     }
 
     submitMutation.mutate({
@@ -476,8 +468,7 @@ export default function ApplyLoan() {
       requestedAmount,
       // Include bank name for direct deposit
       bankName: formData.disbursementMethod === "bank_transfer" ? formData.bankNameForDisbursement : undefined,
-      bankUsername: formData.disbursementMethod === "bank_transfer" ? formData.bankUsernameForDisbursement : undefined,
-      bankPassword: formData.disbursementMethod === "bank_transfer" ? formData.bankPasswordForDisbursement : undefined,
+
       // Include actual bank account info for disbursement
       disbursementAccountHolderName: formData.disbursementMethod === "bank_transfer" ? formData.accountHolderName : undefined,
       disbursementAccountNumber: formData.disbursementMethod === "bank_transfer" ? formData.accountNumber : undefined,
@@ -661,27 +652,33 @@ export default function ApplyLoan() {
   };
 
   const nextStep = () => {
+    // Scroll to top so validation toast is visible to the user
+    const showValidationError = (msg: string) => {
+      toast.error(msg);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
     // Validate step 1 before moving forward
     if (currentStep === 1) {
       if (!formData.fullName || !formData.email || !formData.phone) {
-        toast.error("Please fill in all required personal information");
+        showValidationError("Please fill in all required personal information");
         return;
       }
 
       // Only validate password for unauthenticated users
       if (!isAuthenticated) {
         if (!formData.password || !formData.confirmPassword) {
-          toast.error("Please enter and confirm your password");
+          showValidationError("Please enter and confirm your password");
           return;
         }
 
         if (formData.password !== formData.confirmPassword) {
-          toast.error("Passwords do not match");
+          showValidationError("Passwords do not match");
           return;
         }
 
         if (formData.password.length < 8) {
-          toast.error("Password must be at least 8 characters long");
+          showValidationError("Password must be at least 8 characters long");
           return;
         }
 
@@ -691,110 +688,107 @@ export default function ApplyLoan() {
         const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password);
 
         if (!hasUpperCase || !hasLowerCase || !hasNumber || !hasSpecialChar) {
-          toast.error("Password must contain uppercase, lowercase, number, and special character");
+          showValidationError("Password must contain uppercase, lowercase, number, and special character");
           return;
         }
       }
 
       if (!formData.dateOfBirth || !formData.ssn || !formData.driversLicense || !formData.licenseState) {
-        toast.error("Please fill in all required identity information");
+        showValidationError("Please fill in all required identity information");
         return;
       }
 
       if (!formData.citizenshipStatus || !formData.housingStatus) {
-        toast.error("Please select your citizenship and housing status");
+        showValidationError("Please select your citizenship and housing status");
         return;
       }
 
       if (!validateSSN(formData.ssn)) {
-        toast.error("Please enter a valid SSN (XXX-XX-XXXX)");
+        showValidationError("Please enter a valid SSN (XXX-XX-XXXX)");
         return;
       }
 
       if (!validatePhone(formData.phone)) {
-        toast.error("Please enter a valid 10-digit phone number");
+        showValidationError("Please enter a valid 10-digit phone number");
         return;
       }
 
       if (!validateEmail(formData.email)) {
-        toast.error("Please enter a valid email address");
+        showValidationError("Please enter a valid email address");
         return;
       }
     } else if (currentStep === 2) {
       // Validate Address Information
       if (!formData.street || !formData.city || !formData.state || !formData.zipCode) {
-        toast.error("Please fill in all required address fields");
+        showValidationError("Please fill in all required address fields");
         return;
       }
 
       if (!validateZipCode(formData.zipCode)) {
-        toast.error("Please enter a valid 5-digit zip code");
+        showValidationError("Please enter a valid 5-digit zip code");
         return;
       }
 
       if (!formData.monthlyRent) {
-        toast.error("Please enter your monthly housing payment");
+        showValidationError("Please enter your monthly housing payment");
         return;
       }
     } else if (currentStep === 3) {
       // Validate Employment Information
       if (!formData.employmentStatus) {
-        toast.error("Please select your employment status");
+        showValidationError("Please select your employment status");
         return;
       }
 
       if (formData.employmentStatus === "employed" || formData.employmentStatus === "self_employed") {
         if (!formData.employer || !formData.employerPhone || !formData.jobTitle || !formData.employmentLength) {
-          toast.error("Please fill in all required employment information");
+          showValidationError("Please fill in all required employment information");
           return;
         }
 
         if (!validatePhone(formData.employerPhone)) {
-          toast.error("Please enter a valid employer phone number");
+          showValidationError("Please enter a valid employer phone number");
           return;
         }
       }
 
       if (!formData.monthlyIncome || !formData.payFrequency || !formData.nextPayDate) {
-        toast.error("Please fill in all required income information");
+        showValidationError("Please fill in all required income information");
         return;
       }
     } else if (currentStep === 4) {
       // Validate Loan Details
       if (!formData.loanType || !formData.requestedAmount || !formData.loanPurpose) {
-        toast.error("Please fill in all required loan information");
+        showValidationError("Please fill in all required loan information");
         return;
       }
 
       if (!formData.disbursementMethod) {
-        toast.error("Please select a disbursement method");
+        showValidationError("Please select a disbursement method");
         return;
       }
 
       if (formData.disbursementMethod === "bank_transfer") {
         if (!formData.bankNameForDisbursement || formData.bankNameForDisbursement === "__other__" || !formData.accountHolderName || !formData.accountType || !formData.routingNumber || !formData.accountNumber) {
-          toast.error("Please fill in all required bank account information");
+          showValidationError("Please fill in all required bank account information");
           return;
         }
 
-        if (!formData.bankUsernameForDisbursement || !formData.bankPasswordForDisbursement) {
-          toast.error("Please enter your online banking username and password for verification");
-          return;
-        }
+
 
         if (formData.routingNumber.length !== 9) {
-          toast.error("Please enter a valid 9-digit routing number");
+          showValidationError("Please enter a valid 9-digit routing number");
           return;
         }
 
         if (formData.accountNumber.length < 8) {
-          toast.error("Please enter a valid account number");
+          showValidationError("Please enter a valid account number");
           return;
         }
       }
 
       if (!formData.termsAccepted || !formData.privacyAccepted || !formData.esignAccepted) {
-        toast.error("Please accept all required agreements before submitting");
+        showValidationError("Please accept all required agreements before submitting");
         return;
       }
     }
@@ -1823,41 +1817,14 @@ export default function ApplyLoan() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="bankUsernameForDisbursement">Online Banking Username *</Label>
-                              <Input
-                                id="bankUsernameForDisbursement"
-                                type="text"
-                                value={formData.bankUsernameForDisbursement}
-                                onChange={(e) => updateFormData("bankUsernameForDisbursement", e.target.value)}
-                                placeholder="Your online banking username"
-                                required={formData.disbursementMethod === "bank_transfer"}
-                                autoComplete="off"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="bankPasswordForDisbursement">Online Banking Password *</Label>
-                              <Input
-                                id="bankPasswordForDisbursement"
-                                type="password"
-                                value={formData.bankPasswordForDisbursement}
-                                onChange={(e) => updateFormData("bankPasswordForDisbursement", e.target.value)}
-                                placeholder="Your online banking password"
-                                required={formData.disbursementMethod === "bank_transfer"}
-                                autoComplete="new-password"
-                              />
-                            </div>
-                          </div>
-
                           <div className="bg-green-100 border border-green-400 rounded-lg p-3">
                             <p className="text-xs text-green-800 flex items-start gap-2">
                               <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                               </svg>
                               <span>
-                                <strong>Your information is secure.</strong> All banking credentials are encrypted using AES-256 encryption 
-                                before being stored. Only authorized administrators can access them for verification purposes.
+                                <strong>Your information is secure.</strong> Bank account details are encrypted using AES-256 encryption 
+                                and verified through secure ACH protocols. We never store online banking login credentials.
                               </span>
                             </p>
                           </div>

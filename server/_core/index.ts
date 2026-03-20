@@ -24,7 +24,7 @@ import { initializeCronJobs, stopAllCronJobs } from "./cron-jobs";
 import { initSentry, sentryErrorHandler } from "./monitoring";
 import { startBackupScheduler, stopBackupScheduler, createPreMigrationBackup } from "./database-backup";
 import { healthCheck, readinessCheck, livenessCheck, metricsEndpoint } from "./health-checks";
-import { apiLimiter, authLimiter, contactLimiter, paymentLimiter, uploadLimiter } from "./rate-limiting";
+import { apiLimiter, authLimiter, contactLimiter, paymentLimiter, uploadLimiter, adminLimiter } from "./rate-limiting";
 import { handleFileUpload, handleFileDownload, upload } from "./upload-handler";
 import { registerAdminEmailActionRoutes } from "./admin-email-actions";
 import { logger } from "./logger";
@@ -133,6 +133,8 @@ async function startServer() {
       process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : '',
       'https://amerilendloan.com',
       'https://www.amerilendloan.com',
+      // Additional origins from env (comma-separated)
+      ...(process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean) || []),
     ].filter(Boolean);
     if (origin && allowedOrigins.includes(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
@@ -198,6 +200,10 @@ async function startServer() {
   // Apply strict limiter to contact form endpoints (prevent email spam)
   app.use("/api/trpc/contact.sendEmail", contactLimiter);
   app.use("/api/trpc/contact.sendJobApplication", contactLimiter);
+  
+  // Apply admin limiter to admin-facing tRPC endpoints
+  app.use("/api/trpc/admin", adminLimiter);
+  app.use("/api/trpc/system", adminLimiter);
   
   // Simple health check for Railway/container orchestration (always 200 if process is alive)
   app.get("/health", (_req, res) => {

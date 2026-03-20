@@ -43,9 +43,9 @@ export default function EnhancedPaymentPage() {
   // Card processing state for Stripe
   const [processingCard, setProcessingCard] = useState(false);
 
-  const { data: application, isLoading } = trpc.loans.getById.useQuery(
+  const { data: application, isLoading, error: queryError } = trpc.loans.getById.useQuery(
     { id: applicationId! },
-    { enabled: !!applicationId && isAuthenticated }
+    { enabled: !!applicationId && isAuthenticated, retry: 2 }
   );
 
   const confirmPaymentMutation = trpc.payments.confirmPayment.useMutation({
@@ -125,6 +125,28 @@ export default function EnhancedPaymentPage() {
             <Button className="w-full" onClick={() => setLocation("/dashboard")}>
               Return to Dashboard
             </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (queryError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-muted/30">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="w-5 h-5" />
+              Unable to Load Payment
+            </CardTitle>
+            <CardDescription>
+              {queryError.message || "A network error occurred. Please check your connection and try again."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex gap-2">
+            <Button className="flex-1" onClick={() => window.location.reload()}>Try Again</Button>
+            <Button variant="outline" className="flex-1" onClick={() => setLocation("/dashboard")}>Dashboard</Button>
           </CardContent>
         </Card>
       </div>

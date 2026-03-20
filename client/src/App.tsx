@@ -56,6 +56,7 @@ const AdminESignatures = lazy(() => import("./pages/admin/AdminESignatures"));
 const AdminAutomationRules = lazy(() => import("./pages/admin/AdminAutomationRules"));
 const AdminInvitationCodes = lazy(() => import("./pages/admin/AdminInvitationCodes"));
 const AdminJobApplications = lazy(() => import("./pages/admin/AdminJobApplications"));
+const AdminSystemHealth = lazy(() => import("./pages/admin/AdminSystemHealth"));
 const NotificationSettings = lazy(() => import("./pages/NotificationSettings"));
 const About = lazy(() => import("./pages/About"));
 const HowItWorksPage = lazy(() => import("./pages/HowItWorks"));
@@ -120,6 +121,7 @@ function Router() {
       <Route path={"/admin/automation"} component={AdminAutomationRules} />
       <Route path={"/admin/invitations"} component={AdminInvitationCodes} />
       <Route path={"/admin/job-applications"} component={AdminJobApplications} />
+      <Route path={"/admin/system-health"} component={AdminSystemHealth} />
       <Route path={"/payment/:id"} component={PaymentPage} />
       <Route path={"/pay-fee"} component={PayFee} />
       <Route path={"/otp-login"} component={OTPLogin} />

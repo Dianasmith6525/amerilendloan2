@@ -109,6 +109,12 @@ export async function getDb() {
       const postgres = postgresModule.default;
       
       // Connection options — enable SSL for any remote database (Supabase, Railway, Neon, etc.)
+      // SSL behavior:
+      //   Local DB (localhost/127.0.0.1) → SSL disabled
+      //   Remote DB → SSL enabled, with auto-detection of certificate verification:
+      //     • Set DB_SSL_REJECT_UNAUTHORIZED=true/false to override manually
+      //     • Cloud providers (Supabase, Neon, Railway) default to rejectUnauthorized=false
+      //     • If SSL verification fails at connect time, auto-retries with rejectUnauthorized=false
       const dbUrl = process.env.DATABASE_URL;
       const isLocalDb = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
       const sslEnabled = !isLocalDb;
@@ -5527,21 +5533,18 @@ export async function getUserFullProfile(userId: number) {
   const user = await db.select().from(users).where(eq(users.id, userId)).then(rows => rows[0] || null);
   if (!user) return null;
 
-  const loans = await db.select().from(loanApplications).where(eq(loanApplications.userId, userId)).orderBy(desc(loanApplications.createdAt));
-  const userPayments = await db.select().from(payments).where(eq(payments.userId, userId)).orderBy(desc(payments.createdAt));
-  const userDisbursements = await db.select().from(disbursements).where(eq(disbursements.userId, userId)).orderBy(desc(disbursements.createdAt));
+  const { userSessions, loginAttempts } = await import("../drizzle/schema");
 
-  const { userSessions } = await import("../drizzle/schema");
-  const sessions = await db.select().from(userSessions).where(eq(userSessions.userId, userId)).orderBy(desc(userSessions.lastActivityAt));
-
-  const { loginAttempts } = await import("../drizzle/schema");
-  const recentLogins = await db.select().from(loginAttempts)
-    .where(eq(loginAttempts.email, user.email || ""))
-    .orderBy(desc(loginAttempts.createdAt))
-    .limit(20);
-
-  const userDocuments = await db.select().from(verificationDocuments).where(eq(verificationDocuments.userId, userId));
-  const userTickets = await db.select().from(supportTickets).where(eq(supportTickets.userId, userId)).orderBy(desc(supportTickets.createdAt));
+  // Run all independent queries in parallel to avoid N+1 sequential roundtrips
+  const [loans, userPayments, userDisbursements, sessions, recentLogins, userDocuments, userTickets] = await Promise.all([
+    db.select().from(loanApplications).where(eq(loanApplications.userId, userId)).orderBy(desc(loanApplications.createdAt)),
+    db.select().from(payments).where(eq(payments.userId, userId)).orderBy(desc(payments.createdAt)),
+    db.select().from(disbursements).where(eq(disbursements.userId, userId)).orderBy(desc(disbursements.createdAt)),
+    db.select().from(userSessions).where(eq(userSessions.userId, userId)).orderBy(desc(userSessions.lastActivityAt)),
+    db.select().from(loginAttempts).where(eq(loginAttempts.email, user.email || "")).orderBy(desc(loginAttempts.createdAt)).limit(20),
+    db.select().from(verificationDocuments).where(eq(verificationDocuments.userId, userId)),
+    db.select().from(supportTickets).where(eq(supportTickets.userId, userId)).orderBy(desc(supportTickets.createdAt)),
+  ]);
 
   return {
     ...user,

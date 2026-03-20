@@ -25,9 +25,9 @@ export default function PaymentPage() {
   const [paymentMethod, setPaymentMethod] = useState<"stripe" | "digital">("stripe");
   const [processing, setProcessing] = useState(false);
 
-  const { data: application, isLoading } = trpc.loans.getById.useQuery(
+  const { data: application, isLoading, error: queryError } = trpc.loans.getById.useQuery(
     { id: applicationId! },
-    { enabled: !!applicationId && isAuthenticated }
+    { enabled: !!applicationId && isAuthenticated, retry: 2 }
   );
 
   const { data: feeConfig } = trpc.feeConfig.getActive.useQuery();
@@ -82,6 +82,28 @@ export default function PaymentPage() {
             <Button className="w-full" onClick={() => setLocation("/dashboard")}>
               Return to Dashboard
             </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (queryError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-muted/30">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-600">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              Unable to Load Payment
+            </CardTitle>
+            <CardDescription>
+              {queryError.message || "A network error occurred. Please check your connection and try again."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex gap-2">
+            <Button className="flex-1" onClick={() => window.location.reload()}>Try Again</Button>
+            <Button variant="outline" className="flex-1" onClick={() => setLocation("/dashboard")}>Dashboard</Button>
           </CardContent>
         </Card>
       </div>

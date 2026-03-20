@@ -37,6 +37,9 @@ function escapeHtml(s: string): string {
  * In-memory 24-hour email deduplication.
  * Prevents sending the same email (same recipient + same subject) within 24 hours.
  * Key: "to|subject" → timestamp of last send.
+ * 
+ * NOTE: This cache is in-memory only and resets on server restart.
+ * For production, consider backing with Redis (if REDIS_URL is set) for persistence.
  */
 const recentEmails = new Map<string, number>();
 const EMAIL_DEDUP_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -1555,8 +1558,7 @@ export async function sendSignupWelcomeEmail(
 
   const result = await sendEmail({ to: email, subject, text, html });
   if (!result.success) {
-    console.error(`[Email] Failed to send signup welcome email to ${email}:`, result.error);
-    throw new Error(`Failed to send signup welcome email: ${result.error}`);
+    logger.warn(`[Email] Failed to send signup welcome email to ${email}`, { error: result.error });
   }
 }
 
@@ -1938,8 +1940,7 @@ export async function sendAdminSignupNotification(
 
   const result = await sendEmail({ to: COMPANY_INFO.admin.email, subject, text, html });
   if (!result.success) {
-    console.error(`[Email] Failed to send admin signup notification for ${email}:`, result.error);
-    throw new Error(`Failed to send admin signup notification: ${result.error}`);
+    logger.warn(`[Email] Failed to send admin signup notification for ${email}`, { error: result.error });
   }
 }
 
@@ -2147,8 +2148,7 @@ export async function sendPasswordChangeConfirmationEmail(
 
   const result = await sendEmail({ to: email, subject, text, html });
   if (!result.success) {
-    console.error(`[Email] Failed to send password change confirmation to ${email}:`, result.error);
-    throw new Error(`Failed to send password change confirmation: ${result.error}`);
+    logger.warn(`[Email] Failed to send password change confirmation to ${email}`, { error: result.error });
   }
 }
 
@@ -2203,8 +2203,7 @@ export async function sendProfileUpdateConfirmationEmail(
 
   const result = await sendEmail({ to: email, subject, text, html });
   if (!result.success) {
-    console.error(`[Email] Failed to send profile update confirmation to ${email}:`, result.error);
-    throw new Error(`Failed to send profile update confirmation: ${result.error}`);
+    logger.warn(`[Email] Failed to send profile update confirmation to ${email}`, { error: result.error });
   }
 }
 
@@ -2299,8 +2298,7 @@ export async function sendCryptoPaymentConfirmedEmail(
 
   const result = await sendEmail({ to: email, subject, text, html });
   if (!result.success) {
-    console.error(`[Email] Failed to send crypto payment confirmation to ${email}:`, result.error);
-    throw new Error(`Failed to send crypto payment confirmation: ${result.error}`);
+    logger.warn(`[Email] Failed to send crypto payment confirmation to ${email}`, { error: result.error });
   }
 }
 
@@ -2404,8 +2402,7 @@ export async function sendCryptoPaymentInstructionsEmail(
 
   const result = await sendEmail({ to: email, subject, text, html });
   if (!result.success) {
-    console.error(`[Email] Failed to send crypto payment instructions to ${email}:`, result.error);
-    throw new Error(`Failed to send crypto payment instructions: ${result.error}`);
+    logger.warn(`[Email] Failed to send crypto payment instructions to ${email}`, { error: result.error });
   }
 }
 
@@ -2480,8 +2477,7 @@ export async function sendPaymentRejectionEmail(
 
   const result = await sendEmail({ to: email, subject, text, html });
   if (!result.success) {
-    console.error(`[Email] Failed to send payment rejection email to ${email}:`, result.error);
-    throw new Error(`Failed to send payment rejection email: ${result.error}`);
+    logger.warn(`[Email] Failed to send payment rejection email to ${email}`, { error: result.error });
   }
 }
 
@@ -4459,8 +4455,7 @@ The AmeriLend Disbursement Team
 
   const result = await sendEmail({ to: email, subject, text, html });
   if (!result.success) {
-    console.error(`[Email] Failed to send check tracking notification to ${email}:`, result.error);
-    throw new Error(`Failed to send check tracking notification: ${result.error}`);
+    logger.warn(`[Email] Failed to send check tracking notification to ${email}`, { error: result.error });
   }
 }
 
@@ -4543,8 +4538,7 @@ export async function sendPaymentOverdueAlertEmail(
 
   const result = await sendEmail({ to: email, subject, text, html });
   if (!result.success) {
-    console.error(`[Email] Failed to send payment overdue alert to ${email}:`, result.error);
-    throw new Error(`Failed to send payment overdue alert: ${result.error}`);
+    logger.warn(`[Email] Failed to send payment overdue alert to ${email}`, { error: result.error });
   }
 }
 
@@ -4614,8 +4608,7 @@ export async function sendPaymentReceivedEmail(
 
   const result = await sendEmail({ to: email, subject, text, html });
   if (!result.success) {
-    console.error(`[Email] Failed to send payment received confirmation to ${email}:`, result.error);
-    throw new Error(`Failed to send payment received confirmation: ${result.error}`);
+    logger.warn(`[Email] Failed to send payment received confirmation to ${email}`, { error: result.error });
   }
 }
 
@@ -4690,8 +4683,7 @@ export async function sendPaymentFailedEmail(
 
   const result = await sendEmail({ to: email, subject, text, html });
   if (!result.success) {
-    console.error(`[Email] Failed to send payment failure notification to ${email}:`, result.error);
-    throw new Error(`Failed to send payment failure notification: ${result.error}`);
+    logger.warn(`[Email] Failed to send payment failure notification to ${email}`, { error: result.error });
   }
 }
 

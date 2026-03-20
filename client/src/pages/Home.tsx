@@ -224,6 +224,7 @@ export default function Home() {
                 src="/images/hero-woman.png"
                 alt="Smiling woman viewing a mobile notification that she was approved for a $2,500 loan"
                 className="w-80 md:w-[28rem] lg:w-[32rem] h-auto object-contain drop-shadow-2xl"
+                loading="lazy"
               />
             </div>
           </div>
