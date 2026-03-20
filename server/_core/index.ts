@@ -22,7 +22,7 @@ import { startAutoPayScheduler } from "./auto-pay-scheduler";
 import { initializeReminderScheduler, shutdownReminderScheduler } from "./reminderScheduler";
 import { initializeCronJobs, stopAllCronJobs } from "./cron-jobs";
 import { initSentry, sentryErrorHandler } from "./monitoring";
-import { startBackupScheduler, stopBackupScheduler } from "./database-backup";
+import { startBackupScheduler, stopBackupScheduler, createPreMigrationBackup } from "./database-backup";
 import { healthCheck, readinessCheck, livenessCheck, metricsEndpoint } from "./health-checks";
 import { apiLimiter, authLimiter, contactLimiter, paymentLimiter, uploadLimiter } from "./rate-limiting";
 import { handleFileUpload, handleFileDownload, upload } from "./upload-handler";
@@ -80,6 +80,14 @@ async function startServer() {
   
   // Run database migrations on startup to ensure schema is up-to-date
   if (process.env.DATABASE_URL) {
+    try {
+      // Create a safety backup BEFORE running migrations
+      logger.info("Creating pre-migration safety backup...");
+      await createPreMigrationBackup();
+    } catch (backupError) {
+      logger.warn("Pre-migration backup failed (continuing with migration)", backupError);
+    }
+
     try {
       const { migrate } = await import("drizzle-orm/postgres-js/migrator");
       const { getDb } = await import("../db");
@@ -551,7 +559,7 @@ async function startServer() {
       startAutoPayScheduler();
       initializeReminderScheduler();
       cronJobs = initializeCronJobs();
-      startBackupScheduler(24);
+      startBackupScheduler(6);
       logger.info("All schedulers initialized successfully");
     } catch (error) {
       logger.warn("Failed to initialize schedulers", error);
@@ -582,6 +590,7 @@ async function startServer() {
       if (cronJobs) {
         stopAllCronJobs(cronJobs);
       }
+      stopBackupScheduler();
       if (dbKeepAliveTimer) {
         clearInterval(dbKeepAliveTimer);
       }

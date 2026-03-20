@@ -5,7 +5,28 @@ import * as path from "path";
 
 // Backup configuration
 const BACKUP_DIR = path.join(process.cwd(), "backups");
-const MAX_BACKUPS = 30; // Keep last 30 backups
+const MAX_BACKUPS = 50; // Keep last 50 backups (more than before since frequency is higher)
+
+// Track last backup status for health monitoring
+let lastBackupStatus: {
+  timestamp: string | null;
+  success: boolean;
+  tableCount: number;
+  totalRecords: number;
+  filename: string | null;
+  error: string | null;
+} = {
+  timestamp: null,
+  success: false,
+  tableCount: 0,
+  totalRecords: 0,
+  filename: null,
+  error: null,
+};
+
+export function getBackupHealth() {
+  return { ...lastBackupStatus };
+}
 
 // Ensure backup directory exists
 function ensureBackupDir() {
@@ -25,7 +46,7 @@ function getBackupTimestamp() {
 function cleanupOldBackups() {
   try {
     const files = fs.readdirSync(BACKUP_DIR)
-      .filter(f => f.startsWith("backup-") && f.endsWith(".json"))
+      .filter(f => (f.startsWith("backup-") || f.startsWith("pre-migration-backup-")) && f.endsWith(".json"))
       .sort()
       .reverse();
 
@@ -91,15 +112,62 @@ export async function createBackup(): Promise<string | null> {
     
     fs.writeFileSync(filepath, JSON.stringify(fullBackup, null, 2));
     
-    console.log(`[Backup] ✅ Backup created successfully: ${filename}`);
-    console.log(`[Backup] Total records backed up: ${Object.values(backupData).reduce((sum, arr) => sum + arr.length, 0)}`);
+    // Verify backup file is valid by re-reading and parsing it
+    const verifyContent = fs.readFileSync(filepath, "utf-8");
+    const verifyData = JSON.parse(verifyContent);
+    if (!verifyData.metadata || !verifyData.data || verifyData.metadata.tableCount !== metadata.tableCount) {
+      throw new Error("Backup verification failed: file contents don't match expected data");
+    }
+    
+    const totalRecords = Object.values(backupData).reduce((sum, arr) => sum + arr.length, 0);
+    console.log(`[Backup] ✅ Backup created and verified: ${filename}`);
+    console.log(`[Backup] Tables: ${metadata.tableCount}, Total records: ${totalRecords}`);
+    
+    // Update health status
+    lastBackupStatus = {
+      timestamp: metadata.createdAt,
+      success: true,
+      tableCount: metadata.tableCount,
+      totalRecords,
+      filename,
+      error: null,
+    };
     
     // Cleanup old backups
     cleanupOldBackups();
     
     return filepath;
   } catch (error) {
+    const errMsg = (error as Error).message;
     console.error("[Backup] ❌ Backup failed:", error);
+    lastBackupStatus = {
+      timestamp: new Date().toISOString(),
+      success: false,
+      tableCount: 0,
+      totalRecords: 0,
+      filename: null,
+      error: errMsg,
+    };
+    return null;
+  }
+}
+
+// Create a pre-migration backup (tagged differently for easy identification)
+export async function createPreMigrationBackup(): Promise<string | null> {
+  console.log("[Backup] Creating pre-migration safety backup...");
+  try {
+    ensureBackupDir();
+    const result = await createBackup();
+    if (result) {
+      // Rename to indicate it's a pre-migration backup
+      const preMigrationName = result.replace("backup-", "pre-migration-backup-");
+      fs.renameSync(result, preMigrationName);
+      console.log(`[Backup] ✅ Pre-migration backup: ${path.basename(preMigrationName)}`);
+      return preMigrationName;
+    }
+    return null;
+  } catch (error) {
+    console.error("[Backup] ❌ Pre-migration backup failed:", error);
     return null;
   }
 }
@@ -307,10 +375,10 @@ export function listBackups(): { filename: string; createdAt: string; size: numb
   
   try {
     const files = fs.readdirSync(BACKUP_DIR)
-      .filter(f => f.startsWith("backup-") && f.endsWith(".json"))
+      .filter(f => (f.startsWith("backup-") || f.startsWith("pre-migration-backup-")) && f.endsWith(".json"))
       .sort()
       .reverse();
-    
+
     return files.map(filename => {
       const filepath = path.join(BACKUP_DIR, filename);
       const stats = fs.statSync(filepath);
@@ -336,7 +404,7 @@ export function listBackups(): { filename: string; createdAt: string; size: numb
 // Backup scheduler - runs daily
 let backupInterval: NodeJS.Timeout | null = null;
 
-export function startBackupScheduler(intervalHours: number = 24) {
+export function startBackupScheduler(intervalHours: number = 6) {
   const intervalMs = intervalHours * 60 * 60 * 1000;
   
   console.log(`[Backup Scheduler] Starting automated backups every ${intervalHours} hours`);

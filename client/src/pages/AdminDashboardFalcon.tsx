@@ -31,6 +31,7 @@ import AdminPaymentVerification from "@/components/AdminPaymentVerification";
 import AdminInvitations from "@/components/AdminInvitations";
 import AdminAiAssistant from "@/components/AdminAiAssistant";
 import AdminJobApplications from "./admin/AdminJobApplications";
+import AdminSystemHealth from "./admin/AdminSystemHealth";
 
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
@@ -43,7 +44,7 @@ const statusColors: Record<string, string> = {
   cancelled: "bg-gray-100 text-gray-800 border-gray-300",
 };
 
-type ViewType = "dashboard" | "applications" | "tracking" | "verification" | "support" | "audit" | "fees" | "crypto" | "workflows" | "payments" | "invitations" | "virtual_cards" | "user_management" | "kyc" | "live_chat" | "fraud" | "collections" | "marketing" | "settings" | "ai_assistant" | "job_applications";
+type ViewType = "dashboard" | "applications" | "tracking" | "verification" | "support" | "audit" | "fees" | "crypto" | "workflows" | "payments" | "invitations" | "virtual_cards" | "user_management" | "kyc" | "live_chat" | "fraud" | "collections" | "marketing" | "settings" | "ai_assistant" | "job_applications" | "system_health";
 
 export default function AdminDashboardFalcon() {
   const [, setLocation] = useLocation();
@@ -56,7 +57,7 @@ export default function AdminDashboardFalcon() {
   // Read ?view= URL param on mount so email deep-links land on the right panel
   const getInitialView = (): ViewType => {
     const param = new URLSearchParams(window.location.search).get("view");
-    const valid: ViewType[] = ["dashboard","applications","tracking","verification","support","audit","fees","crypto","workflows","payments","invitations","virtual_cards","user_management","kyc","live_chat","fraud","collections","marketing","settings","ai_assistant","job_applications"];
+    const valid: ViewType[] = ["dashboard","applications","tracking","verification","support","audit","fees","crypto","workflows","payments","invitations","virtual_cards","user_management","kyc","live_chat","fraud","collections","marketing","settings","ai_assistant","job_applications","system_health"];
     return (valid.includes(param as ViewType) ? param : "dashboard") as ViewType;
   };
   const [currentView, setCurrentView] = useState<ViewType>(getInitialView);
@@ -441,6 +442,7 @@ export default function AdminDashboardFalcon() {
     { id: "settings" as ViewType, icon: Settings, label: "Settings" },
     { id: "ai_assistant" as ViewType, icon: Bot, label: "AI Assistant" },
     { id: "job_applications" as ViewType, icon: Briefcase, label: "Job Applications" },
+    { id: "system_health" as ViewType, icon: Activity, label: "System Health" },
   ];
 
   return (
@@ -1482,6 +1484,13 @@ export default function AdminDashboardFalcon() {
           {currentView === "job_applications" && (
             <div className="space-y-6">
               <AdminJobApplications />
+            </div>
+          )}
+
+          {/* System Health View */}
+          {currentView === "system_health" && (
+            <div className="space-y-6">
+              <AdminSystemHealth />
             </div>
           )}
         </div>

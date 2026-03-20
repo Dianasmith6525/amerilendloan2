@@ -4,7 +4,7 @@ import { adminProcedure, publicProcedure, router } from "./trpc";
 import { getDb, getDbStatus } from "../db";
 import { buildMessages, getSuggestedPrompts as getAiSuggestedPrompts } from "./aiSupport";
 import { invokeLLM } from "./llm";
-import { createBackup, restoreBackup, listBackups } from "./database-backup";
+import { createBackup, restoreBackup, listBackups, getBackupHealth } from "./database-backup";
 import * as db from "../db";
 import * as path from "path";
 
@@ -204,6 +204,61 @@ export const systemRouter = router({
     const isAuthenticated = !!ctx.user;
     return getAiSuggestedPrompts(isAuthenticated);
   }),
+
+  // System Health & Monitoring (Admin Only)
+  getSystemHealth: adminProcedure
+    .query(async () => {
+      try {
+        const dbStatus = getDbStatus();
+        const backupHealth = getBackupHealth();
+        const memoryUsage = process.memoryUsage();
+        const uptimeSeconds = process.uptime();
+
+        // Check database connectivity
+        let dbConnected = false;
+        let dbResponseTime = 0;
+        try {
+          const start = Date.now();
+          const testDb = await getDb();
+          dbConnected = !!testDb;
+          dbResponseTime = Date.now() - start;
+        } catch {
+          dbConnected = false;
+        }
+
+        return {
+          database: {
+            connected: dbConnected,
+            responseTimeMs: dbResponseTime,
+            status: dbStatus,
+          },
+          backup: {
+            lastBackupTime: backupHealth.timestamp,
+            lastBackupSuccess: backupHealth.success,
+            lastBackupTables: backupHealth.tableCount,
+            lastBackupRecords: backupHealth.totalRecords,
+            lastBackupFile: backupHealth.filename,
+            lastBackupError: backupHealth.error,
+            backupFrequencyHours: 6,
+          },
+          server: {
+            uptimeSeconds: Math.floor(uptimeSeconds),
+            uptimeFormatted: `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m`,
+            memoryUsageMB: Math.round(memoryUsage.heapUsed / 1024 / 1024),
+            memoryTotalMB: Math.round(memoryUsage.heapTotal / 1024 / 1024),
+            nodeVersion: process.version,
+            environment: process.env.NODE_ENV || "development",
+          },
+        };
+      } catch (error) {
+        console.error("[System Health] Error:", error);
+        return {
+          database: { connected: false, responseTimeMs: 0, status: "error" },
+          backup: { lastBackupTime: null, lastBackupSuccess: false, lastBackupTables: 0, lastBackupRecords: 0, lastBackupFile: null, lastBackupError: "Health check failed", backupFrequencyHours: 6 },
+          server: { uptimeSeconds: 0, uptimeFormatted: "0h 0m", memoryUsageMB: 0, memoryTotalMB: 0, nodeVersion: process.version, environment: process.env.NODE_ENV || "development" },
+        };
+      }
+    }),
 
   // Database Backup Management (Admin Only)
   createBackup: adminProcedure
