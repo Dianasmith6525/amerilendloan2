@@ -78,6 +78,23 @@ async function startServer() {
   // Validate environment variables first
   validateEnvironment();
   
+  // Run database migrations on startup to ensure schema is up-to-date
+  if (process.env.DATABASE_URL) {
+    try {
+      const { migrate } = await import("drizzle-orm/postgres-js/migrator");
+      const { getDb } = await import("../db");
+      const db = await getDb();
+      if (db) {
+        // Use process.cwd() to resolve migrations folder relative to where the server runs
+        const migrationsPath = path.resolve(process.cwd(), "drizzle");
+        await migrate(db, { migrationsFolder: migrationsPath });
+        logger.info("Database migrations applied successfully");
+      }
+    } catch (migrationError) {
+      logger.warn("Database migration failed (non-fatal, tables may already exist)", migrationError);
+    }
+  }
+  
   logger.info("Global error handlers installed");
   
   const app = express();
