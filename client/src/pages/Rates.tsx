@@ -12,6 +12,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import ComplianceFooter from "@/components/ComplianceFooter";
+import SEOHead from "@/components/SEOHead";
 
 const loanTiers = [
   {
@@ -66,8 +67,6 @@ export default function Rates() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  document.title = "Rates & Terms | AmeriLend";
-
   // Use tRPC server-side loan calculator
   const calcQuery = trpc.loanCalculator.calculatePayment.useQuery(
     { amount: loanAmount * 100, term: loanTerm, interestRate: 24.99 },
@@ -83,6 +82,11 @@ export default function Rates() {
 
   return (
     <div className="min-h-screen bg-white text-gray-800">
+      <SEOHead
+        title="Rates & Terms"
+        description="Competitive personal loan rates starting at 5.99% APR. Transparent terms, no hidden fees, and flexible repayment options from 12 to 60 months."
+        path="/rates"
+      />
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">

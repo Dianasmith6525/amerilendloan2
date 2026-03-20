@@ -25,6 +25,7 @@ const envSchema = z.object({
 
   // SendGrid (email)
   SENDGRID_API_KEY: z.string().optional().default(""),
+  SENDGRID_VERIFIED_EMAIL: z.string().email().optional().default("noreply@amerilendloan.com"),
   EMAIL_TEST_MODE: z.string().optional().default("false"),
 
   // Supabase
@@ -86,6 +87,7 @@ export const ENV = {
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN ?? "",
   twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER ?? "",
   sendGridApiKey: process.env.SENDGRID_API_KEY ?? "",
+  sendGridVerifiedEmail: process.env.SENDGRID_VERIFIED_EMAIL ?? "noreply@amerilendloan.com",
   emailTestMode: process.env.EMAIL_TEST_MODE === "true",
   supabaseUrl: process.env.VITE_SUPABASE_URL ?? "",
   supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY ?? "",

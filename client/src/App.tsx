@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, Redirect } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import LanguageSelector from "./components/LanguageSelector";
@@ -67,7 +67,7 @@ function Router() {
     <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/check-offers"} component={CheckOffers} />
-      <Route path={"/prequalify"} component={CheckOffers} />
+      <Route path="/prequalify">{() => <Redirect to="/check-offers" />}</Route>
       <Route path={"/apply"} component={ApplyLoan} />
       <Route path={"/dashboard"} component={Dashboard} />
       <Route path={"/user-dashboard"} component={UserDashboard} />
@@ -123,7 +123,7 @@ function Router() {
       <Route path="/careers" component={Careers} />
       <Route path={"/payment-enhanced/:id"} component={EnhancedPaymentPage} />
       <Route path={"/legal/:document"} component={LegalDocuments} />
-      <Route path={"/public/legal/:document"} component={LegalDocuments} />
+      <Route path="/public/legal/:document">{(params) => <Redirect to={`/legal/${params.document}`} />}</Route>
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

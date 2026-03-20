@@ -24,6 +24,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import AiSupportWidget from "@/components/AiSupportWidget";
 import TestimonialsSection from "@/components/TestimonialsSection";
 import ComplianceFooter from "@/components/ComplianceFooter";
+import SEOHead from "@/components/SEOHead";
 
 /* ─── FAQ Data ─── */
 const faqs = [
@@ -66,6 +67,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white text-gray-800">
+      <SEOHead
+        title="AmeriLend — Personal Loans Made Easy"
+        description="Apply online in minutes with no application fee. Fast approvals, transparent terms, and same-day funding. Personal loans from $500 to $15,000."
+        path="/"
+      />
       {/* ════════════════════════════════════════════════════
           HEADER / NAV
          ════════════════════════════════════════════════════ */}

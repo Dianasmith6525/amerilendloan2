@@ -5,6 +5,14 @@
   "installCommand": "npm install --legacy-peer-deps",
   "cleanUrls": false,
   "trailingSlash": false,
+  "redirects": [
+    { "source": "/prequalify", "destination": "/check-offers", "statusCode": 301 },
+    { "source": "/public/legal/:document", "destination": "/legal/:document", "statusCode": 301 },
+    { "source": "/user-dashboard", "destination": "/dashboard", "statusCode": 301 },
+    { "source": "/user-profile", "destination": "/profile", "statusCode": 301 },
+    { "source": "/signup", "destination": "/login", "statusCode": 301 },
+    { "source": "/register", "destination": "/login", "statusCode": 301 }
+  ],
   "headers": [
     {
       "source": "/sitemap.xml",

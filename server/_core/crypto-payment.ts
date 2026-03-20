@@ -158,27 +158,59 @@ export async function checkCryptoPaymentStatus(
     const etherscanKey = process.env.ETHERSCAN_API_KEY;
     
     if (etherscanKey && txHash.startsWith("0x")) {
-      const response = await fetch(
-        `https://api.etherscan.io/api?module=proxy&action=eth_getTransactionReceipt&txhash=${txHash}&apikey=${etherscanKey}`
-      );
-      const data = await response.json();
-      
-      if (data.result && data.result.blockNumber) {
-        const currentBlockRes = await fetch(
-          `https://api.etherscan.io/api?module=proxy&action=eth_blockNumber&apikey=${etherscanKey}`
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+
+      try {
+        const response = await fetch(
+          `https://api.etherscan.io/api?module=proxy&action=eth_getTransactionReceipt&txhash=${encodeURIComponent(txHash)}&apikey=${encodeURIComponent(etherscanKey)}`,
+          { signal: controller.signal }
         );
-        const currentBlockData = await currentBlockRes.json();
-        const currentBlock = parseInt(currentBlockData.result, 16);
-        const txBlock = parseInt(data.result.blockNumber, 16);
-        const confirmations = currentBlock - txBlock;
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          console.warn(`[CryptoPayment] Etherscan returned status ${response.status}`);
+          return { status: "pending", txHash };
+        }
+
+        const data = await response.json();
+
+        // Handle Etherscan rate-limit or error responses
+        if (data.status === "0" || data.message === "NOTOK") {
+          console.warn("[CryptoPayment] Etherscan rate limit or error:", data.result);
+          return { status: "pending", txHash };
+        }
         
-        return {
-          status: confirmations >= 12 ? "confirmed" : "pending",
-          txHash,
-          confirmations,
-          blockNumber: txBlock,
-          timestamp: new Date(),
-        };
+        if (data.result && data.result.blockNumber) {
+          const controller2 = new AbortController();
+          const timeout2 = setTimeout(() => controller2.abort(), 15000);
+
+          const currentBlockRes = await fetch(
+            `https://api.etherscan.io/api?module=proxy&action=eth_blockNumber&apikey=${encodeURIComponent(etherscanKey)}`,
+            { signal: controller2.signal }
+          );
+          clearTimeout(timeout2);
+          const currentBlockData = await currentBlockRes.json();
+          const currentBlock = parseInt(currentBlockData.result, 16);
+          const txBlock = parseInt(data.result.blockNumber, 16);
+          const confirmations = currentBlock - txBlock;
+          
+          return {
+            status: confirmations >= 12 ? "confirmed" : "pending",
+            txHash,
+            confirmations,
+            blockNumber: txBlock,
+            timestamp: new Date(),
+          };
+        }
+      } catch (fetchErr) {
+        clearTimeout(timeout);
+        if (fetchErr instanceof DOMException && fetchErr.name === "AbortError") {
+          console.warn("[CryptoPayment] Etherscan request timed out");
+        } else {
+          console.error("[CryptoPayment] Etherscan fetch error:", fetchErr);
+        }
+        return { status: "pending", txHash };
       }
     }
     
@@ -234,7 +266,7 @@ export async function verifyCryptoPaymentByTxHash(
 
     // Use Web3 to verify transaction on blockchain
     const result = await verifyCryptoTransactionWeb3(
-      currency as any,
+      currency,
       txHash,
       expectedAddress,
       expectedAmount
@@ -266,7 +298,7 @@ export async function checkNetworkStatus(
   currentBlock: number;
   message: string;
 }> {
-  if (!["ETH", "BTC"].includes(currency)) {
+  if (currency !== "ETH" && currency !== "BTC") {
     return {
       online: false,
       currentBlock: 0,
@@ -274,7 +306,7 @@ export async function checkNetworkStatus(
     };
   }
 
-  return getNetworkStatus(currency as any);
+  return getNetworkStatus(currency);
 }
 
 /**
@@ -314,6 +346,14 @@ function getCryptoWalletAddress(currency: CryptoCurrency): string {
   
   if (!address) {
     throw new Error(`No wallet address configured for ${currency}. Please ask the admin to set wallet addresses in the dashboard.`);
+  }
+
+  // Basic address format validation
+  if ((currency === "ETH" || currency === "USDT" || currency === "USDC") && !/^0x[a-fA-F0-9]{40}$/.test(address)) {
+    throw new Error(`Invalid ${currency} wallet address format. Expected a 42-character hex address starting with 0x.`);
+  }
+  if (currency === "BTC" && !/^(1|3|bc1)[a-zA-HJ-NP-Z0-9]{25,62}$/.test(address)) {
+    throw new Error(`Invalid BTC wallet address format.`);
   }
   
   return address;

@@ -58,7 +58,7 @@ export default function AdminUserManagement() {
   const [notesDialog, setNotesDialog] = useState(false);
 
   // Form state
-  const [editForm, setEditForm] = useState<any>({});
+  const [editForm, setEditForm] = useState<Record<string, string | number>>({});
   const [suspendReason, setSuspendReason] = useState("");
   const [banReason, setBanReason] = useState("");
   const [adminNotes, setAdminNotes] = useState("");
@@ -120,15 +120,15 @@ export default function AdminUserManagement() {
 
   // Manual charge state
   const [chargeDialogOpen, setChargeDialogOpen] = useState(false);
-  const [selectedCard, setSelectedCard] = useState<any>(null);
+  const [selectedCard, setSelectedCard] = useState<{ id: number; cardBrand?: string; cardLast4?: string; isEnabled?: boolean; paymentDay?: number } | null>(null);
   const [chargeAmount, setChargeAmount] = useState("");
   const [chargeDescription, setChargeDescription] = useState("");
 
   // Manual charge mutation
   const chargeSavedCardMutation = trpc.autoPay.adminChargeSavedCard.useMutation({
-    onSuccess: (data: any) => {
+    onSuccess: (data) => {
       toast.success(`Payment of $${chargeAmount} processed successfully`, {
-        description: `Transaction: ${data.data?.transactionId || 'N/A'}`
+        description: `Transaction: ${(data as { data?: { transactionId?: string } }).data?.transactionId || 'N/A'}`
       });
       setChargeDialogOpen(false);
       setSelectedCard(null);
@@ -271,7 +271,7 @@ export default function AdminUserManagement() {
     onError: (err) => toast.error(err.message),
   });
 
-  const handleOpenEdit = (user: any) => {
+  const handleOpenEdit = (user: Record<string, unknown>) => {
     setEditForm({
       userId: user.id,
       name: user.name || "",
@@ -535,7 +535,7 @@ export default function AdminUserManagement() {
                         </tr>
                       </thead>
                       <tbody>
-                        {profile.loans.map((loan: any) => (
+                        {profile.loans.map((loan) => (
                           <tr key={loan.id} className="border-b hover:bg-gray-50">
                             <td className="p-3">{loan.id}</td>
                             <td className="p-3">${Number(loan.requestedAmount || 0).toLocaleString()}</td>
@@ -596,7 +596,7 @@ export default function AdminUserManagement() {
                   <p className="text-gray-500 text-center py-4">No saved cards</p>
                 ) : (
                   <div className="grid gap-3">
-                    {savedCardsQuery.data.map((card: any) => (
+                    {savedCardsQuery.data.map((card) => (
                       <div
                         key={card.id}
                         className="flex items-center justify-between p-4 border rounded-lg bg-gray-50 hover:bg-gray-100"
@@ -647,7 +647,7 @@ export default function AdminUserManagement() {
                         </tr>
                       </thead>
                       <tbody>
-                        {profile.payments.map((payment: any) => (
+                        {profile.payments.map((payment) => (
                           <tr key={payment.id} className="border-b hover:bg-gray-50">
                             <td className="p-3">{payment.id}</td>
                             <td className="p-3">${Number(payment.amount || 0).toLocaleString()}</td>
@@ -684,7 +684,7 @@ export default function AdminUserManagement() {
                         </tr>
                       </thead>
                       <tbody>
-                        {profile.documents.map((doc: any) => (
+                        {profile.documents.map((doc) => (
                           <tr key={doc.id} className="border-b hover:bg-gray-50">
                             <td className="p-3">{doc.id}</td>
                             <td className="p-3">{doc.documentType}</td>
@@ -726,7 +726,7 @@ export default function AdminUserManagement() {
                   <p className="text-gray-500 text-center py-8">No active sessions</p>
                 ) : (
                   <div className="space-y-3">
-                    {userSessionsQuery.data.map((session: any) => (
+                    {userSessionsQuery.data.map((session) => (
                       <div key={session.id} className="p-4 bg-gray-50 rounded-lg border">
                         <div className="flex justify-between items-start">
                           <div>
@@ -769,7 +769,7 @@ export default function AdminUserManagement() {
                         </tr>
                       </thead>
                       <tbody>
-                        {loginHistoryQuery.data.map((attempt: any) => (
+                        {loginHistoryQuery.data.map((attempt) => (
                           <tr key={attempt.id} className="border-b hover:bg-gray-50">
                             <td className="p-3">{new Date(attempt.createdAt).toLocaleString()}</td>
                             <td className="p-3">{attempt.ipAddress}</td>
@@ -818,7 +818,7 @@ export default function AdminUserManagement() {
                           </tr>
                         </thead>
                         <tbody>
-                          {userBankAccountsQuery.data.map((acc: any) => (
+                          {userBankAccountsQuery.data.map((acc) => (
                             <tr key={acc.id} className="border-b hover:bg-gray-50">
                               <td className="p-3 font-medium">{acc.bankName}</td>
                               <td className="p-3 capitalize">{acc.accountType}</td>
@@ -892,7 +892,7 @@ export default function AdminUserManagement() {
                           </tr>
                         </thead>
                         <tbody>
-                          {userTransactionsQuery.data.transactions.map((tx: any) => (
+                          {userTransactionsQuery.data.transactions.map((tx) => (
                             <tr key={tx.id} className="border-b hover:bg-gray-50">
                               <td className="p-3 whitespace-nowrap">{new Date(tx.createdAt).toLocaleDateString()}</td>
                               <td className="p-3 capitalize">{tx.type?.replace(/_/g, " ")}</td>
@@ -1385,7 +1385,7 @@ export default function AdminUserManagement() {
                     </tr>
                   </thead>
                   <tbody>
-                    {usersData.users.map((user: any) => (
+                    {usersData.users.map((user) => (
                       <tr key={user.id} className="border-b hover:bg-gray-50 transition-colors">
                         <td className="p-4">
                           <div className="flex items-center gap-3">

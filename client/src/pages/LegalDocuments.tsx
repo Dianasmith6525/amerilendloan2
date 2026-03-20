@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import SEOHead from "@/components/SEOHead";
 
 // Import markdown files as raw text
 import loanAgreementRaw from "@/legal/loan-agreement.md?raw";
@@ -84,6 +85,11 @@ export default function LegalDocuments() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8f9fa] to-[#e9ecef]">
+      <SEOHead
+        title={`${documentData.title} | Legal`}
+        description={documentData.description}
+        path={`/legal/${documentKey}`}
+      />
       {/* Header */}
       <div className="bg-gradient-to-r from-[#0033A0] to-[#002070] text-white sticky top-0 z-40 shadow-lg">
         <div className="max-w-5xl mx-auto px-4 py-6 sm:px-6 lg:px-8">

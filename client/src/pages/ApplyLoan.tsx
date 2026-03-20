@@ -13,6 +13,7 @@ import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { toTitleCase, capitalizeWords } from "@shared/format";
+import SEOHead from "@/components/SEOHead";
 import { useTranslation } from "react-i18next";
 import {
   formatSSN,
@@ -902,6 +903,11 @@ export default function ApplyLoan() {
 
   return (
     <>
+      <SEOHead
+        title="Apply for a Loan"
+        description="Complete your personal loan application with AmeriLend. Fast online process, no application fee, and get a decision in minutes."
+        path="/apply"
+      />
       {!authLoading && isAuthenticated && user?.role === "admin" ? (
         <div className="min-h-screen flex flex-col items-center justify-center bg-muted/30">
           <Card className="max-w-md">

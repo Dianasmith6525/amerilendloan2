@@ -15,6 +15,7 @@ import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import ComplianceFooter from "@/components/ComplianceFooter";
+import SEOHead from "@/components/SEOHead";
 
 const contactMethods = [
   {
@@ -63,8 +64,6 @@ export default function Contact() {
     },
   });
 
-  document.title = "Contact Us | AmeriLend";
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.subject || !formData.message) {
@@ -81,6 +80,11 @@ export default function Contact() {
 
   return (
     <div className="min-h-screen bg-white text-gray-800">
+      <SEOHead
+        title="Contact Us"
+        description="Get in touch with AmeriLend. Call us at (945) 212-1609, email support@amerilendloan.com, or submit a message. We're here to help with your loan questions."
+        path="/contact"
+      />
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">

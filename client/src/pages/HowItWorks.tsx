@@ -15,6 +15,7 @@ import {
 import { useState } from "react";
 import { Link } from "wouter";
 import ComplianceFooter from "@/components/ComplianceFooter";
+import SEOHead from "@/components/SEOHead";
 
 const steps = [
   {
@@ -52,9 +53,13 @@ const features = [
 
 export default function HowItWorks() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  document.title = "How It Works | AmeriLend";
   return (
     <div className="min-h-screen bg-white text-gray-800">
+      <SEOHead
+        title="How It Works"
+        description="See how easy it is to get a personal loan with AmeriLend. Check your rate in minutes, choose your offer, and get funded as fast as the same business day."
+        path="/how-it-works"
+      />
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">

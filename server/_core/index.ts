@@ -399,6 +399,64 @@ async function startServer() {
   // Document upload endpoint (Priority 3)
   app.post("/api/upload", upload.single('file'), handleFileUpload);
   app.get("/api/download/:id", handleFileDownload);
+
+  // Public resume upload endpoint for job applications (no auth required)
+  const resumeUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max for resumes
+    fileFilter: (req, file, cb) => {
+      const allowedMimes = [
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ];
+      if (allowedMimes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error("Invalid file type. Only PDF and Word documents are allowed."));
+      }
+    },
+  });
+
+  app.post("/api/upload-resume", uploadLimiter, resumeUpload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file provided" });
+      }
+
+      logger.info("Resume upload: file received", { name: req.file.originalname, size: req.file.size, mime: req.file.mimetype });
+
+      let url: string;
+
+      if (ENV.forgeApiUrl && ENV.forgeApiKey) {
+        try {
+          const key = `job-resumes/${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+          const { url: storageUrl } = await storagePut(key, req.file.buffer, req.file.mimetype);
+          url = storageUrl;
+          logger.info("Resume upload: storage upload successful");
+        } catch (storageError) {
+          logger.warn("Resume upload: storage failed, using base64 fallback", storageError);
+          url = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+        }
+      } else {
+        logger.warn("Resume upload: storage not configured, using base64 fallback");
+        url = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+      }
+
+      res.json({
+        success: true,
+        url,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+      });
+    } catch (error) {
+      logger.error("Resume upload error", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Upload failed",
+      });
+    }
+  });
   
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);

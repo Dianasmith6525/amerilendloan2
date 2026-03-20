@@ -13,6 +13,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { Link, useParams, useLocation } from "wouter";
+import SEOHead from "@/components/SEOHead";
 
 interface ArticleData {
   slug: string;
@@ -288,6 +289,11 @@ export default function ArticlePage() {
 
   return (
     <div className="min-h-screen bg-white text-gray-800">
+      <SEOHead
+        title={`${article.title} | AmeriLend Resources`}
+        description={article.excerpt}
+        path={`/resources/${article.slug}`}
+      />
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">

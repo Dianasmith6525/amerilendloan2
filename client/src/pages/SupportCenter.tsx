@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Link } from "wouter";
+import SEOHead from "@/components/SEOHead";
 
 interface SupportTicket {
   id: string;
@@ -215,6 +216,11 @@ export function SupportCenter() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 p-4 md:p-8">
+      <SEOHead
+        title="Support Center"
+        description="Get help with your AmeriLend account, loans, and payments. Submit a support ticket or browse FAQs for quick answers."
+        path="/support"
+      />
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">

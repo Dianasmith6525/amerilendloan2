@@ -31,6 +31,7 @@ import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import SEOHead from "@/components/SEOHead";
 
 /* ─── offer generation helpers ─── */
 interface LoanOffer {
@@ -681,6 +682,11 @@ export default function CheckOffers() {
      ════════════════════════════════════ */
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#f0f7f6] to-white">
+      <SEOHead
+        title="Check Your Loan Offers"
+        description="See personalized loan offers in minutes with no impact on your credit score. Compare rates, terms, and monthly payments from AmeriLend."
+        path="/check-offers"
+      />
       {/* Header bar */}
       <header className="bg-white/80 backdrop-blur border-b border-gray-100 sticky top-0 z-30">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">

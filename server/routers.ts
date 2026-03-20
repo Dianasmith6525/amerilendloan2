@@ -17,7 +17,7 @@ import { legalAcceptances, loanApplications, referralProgram } from "../drizzle/
 import * as schema from "../drizzle/schema";
 import { eq, and, or, sql, desc } from "drizzle-orm";
 import { getDb } from "./db";
-import { sendLoginNotificationEmail, sendEmailChangeNotification, sendBankInfoChangeNotification, sendApplicationRejectedNotificationEmail, sendApplicationDisbursedNotificationEmail, sendLoanApplicationReceivedEmail, sendAdminNewApplicationNotification, sendSignupWelcomeEmail, sendJobApplicationConfirmationEmail, sendAdminJobApplicationNotification, sendAdminSignupNotification, sendAdminEmailChangeNotification, sendAdminBankInfoChangeNotification, sendPasswordChangeConfirmationEmail, sendProfileUpdateConfirmationEmail, sendCryptoPaymentConfirmedEmail, sendCryptoPaymentInstructionsEmail, sendPaymentRejectionEmail, sendBankCredentialAccessNotification, sendAdminCryptoPaymentNotification, sendPaymentReceiptEmail, sendDocumentApprovedEmail, sendDocumentRejectedEmail, sendAdminNewDocumentUploadNotification, sendPaymentFailureEmail, sendCheckTrackingNotificationEmail, sendLoanApplicationCancelledEmail, sendBulkDocumentsApprovedEmail, sendBulkDocumentsRejectedEmail, sendNewSupportTicketNotificationEmail, sendSupportTicketReplyEmail } from "./_core/email";
+import { sendLoginNotificationEmail, sendEmailChangeNotification, sendBankInfoChangeNotification, sendApplicationRejectedNotificationEmail, sendApplicationDisbursedNotificationEmail, sendLoanApplicationReceivedEmail, sendAdminNewApplicationNotification, sendSignupWelcomeEmail, sendJobApplicationConfirmationEmail, sendAdminJobApplicationNotification, sendJobApplicationDecisionEmail, sendAdminSignupNotification, sendAdminEmailChangeNotification, sendAdminBankInfoChangeNotification, sendPasswordChangeConfirmationEmail, sendProfileUpdateConfirmationEmail, sendCryptoPaymentConfirmedEmail, sendCryptoPaymentInstructionsEmail, sendPaymentRejectionEmail, sendBankCredentialAccessNotification, sendAdminCryptoPaymentNotification, sendPaymentReceiptEmail, sendDocumentApprovedEmail, sendDocumentRejectedEmail, sendAdminNewDocumentUploadNotification, sendPaymentFailureEmail, sendCheckTrackingNotificationEmail, sendLoanApplicationCancelledEmail, sendBulkDocumentsApprovedEmail, sendBulkDocumentsRejectedEmail, sendNewSupportTicketNotificationEmail, sendSupportTicketReplyEmail } from "./_core/email";
 import { sendPasswordResetConfirmationEmail } from "./_core/password-reset-email";
 import { successResponse, errorResponse, duplicateResponse, ERROR_CODES, HTTP_STATUS } from "./_core/response-handler";
 import { invokeLLM } from "./_core/llm";
@@ -3479,6 +3479,50 @@ export const appRouter = router({
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to send 2FA code"
+          });
+        }
+      }),
+
+    // Verify 2FA code for sensitive operations
+    verifyTwoFA: protectedProcedure
+      .input(z.object({
+        operationType: z.enum(['password', 'email', 'bank']),
+        code: z.string().min(4).max(8),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const email = ctx.user.email;
+          if (!email) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "No email on file for verification"
+            });
+          }
+
+          const { verifyOTP } = await import("./_core/otp");
+          const verified = await verifyOTP(email, input.code, 'reset');
+
+          if (!verified) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Invalid or expired verification code"
+            });
+          }
+
+          await db.logAccountActivity({
+            userId: ctx.user.id,
+            activityType: 'settings_changed',
+            description: `2FA verified for ${input.operationType} change`,
+            ipAddress: getClientIP(ctx.req),
+            userAgent: ctx.req?.headers?.['user-agent'] as string,
+          });
+
+          return { success: true, verified: true };
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to verify 2FA code"
           });
         }
       }),
@@ -9975,6 +10019,7 @@ Format as JSON with array of applications including their recommendation.`;
         phone: z.string().min(10),
         position: z.string().min(1),
         resumeFileName: z.string(),
+        resumeFileUrl: z.string().optional(),
         coverLetter: z.string().min(1),
       }))
       .mutation(async ({ input }) => {
@@ -9986,6 +10031,7 @@ Format as JSON with array of applications including their recommendation.`;
             phone: input.phone,
             position: input.position,
             resumeFileName: input.resumeFileName,
+            resumeFileUrl: input.resumeFileUrl,
             coverLetter: input.coverLetter,
           });
 
@@ -10033,14 +10079,51 @@ Format as JSON with array of applications including their recommendation.`;
         id: z.number(),
         status: z.enum(["pending", "under_review", "approved", "rejected"]),
         adminNotes: z.string().optional(),
+        replyMessage: z.string().optional(),
+        rejectionReasons: z.array(z.string()).optional(),
+        sendNotification: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        // Fetch the application first so we have the applicant's email
+        const application = await db.getJobApplicationById(input.id);
+        if (!application) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
+        }
+
         const updated = await db.updateJobApplicationStatus(
           input.id,
           input.status,
           ctx.user.id,
           input.adminNotes,
+          input.replyMessage,
+          input.status === "rejected" ? input.rejectionReasons : undefined,
         );
+
+        // Send decision email to the applicant if requested
+        if (input.sendNotification) {
+          try {
+            // Auto-generate a reply message based on status if none provided
+            const statusMessages: Record<string, string> = {
+              approved: `Dear ${application.fullName.split(" ")[0]},\n\nCongratulations! We are pleased to inform you that your application for the ${application.position} position at AmeriLend has been approved.\n\nOur HR team will be reaching out to you shortly with next steps regarding the onboarding process.\n\nBest regards,\nAmeriLend HR Team`,
+              rejected: `Dear ${application.fullName.split(" ")[0]},\n\nThank you for your interest in the ${application.position} position at AmeriLend.\n\nAfter careful consideration, we have decided to move forward with other candidates. We encourage you to apply again in the future.\n\nBest regards,\nAmeriLend HR Team`,
+              under_review: `Dear ${application.fullName.split(" ")[0]},\n\nThank you for applying for the ${application.position} position. Your application is currently under review by our hiring team. We will be in touch soon.\n\nBest regards,\nAmeriLend HR Team`,
+              pending: `Dear ${application.fullName.split(" ")[0]},\n\nYour application for the ${application.position} position has been received and is pending review.\n\nBest regards,\nAmeriLend HR Team`,
+            };
+            const message = input.replyMessage || statusMessages[input.status] || statusMessages.pending;
+
+            await sendJobApplicationDecisionEmail(
+              application.email,
+              application.fullName,
+              application.position,
+              input.status,
+              message,
+              input.status === "rejected" ? input.rejectionReasons : undefined,
+            );
+          } catch (emailError) {
+            console.error("[JobApplications] Failed to send decision email:", emailError);
+          }
+        }
+
         return { success: true, application: updated };
       }),
   }),

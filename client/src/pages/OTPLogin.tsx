@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { SocialAuthButtons } from "@/components/SocialAuthButtons";
+import SEOHead from "@/components/SEOHead";
 
 export default function OTPLogin() {
   const [, setLocation] = useLocation();
@@ -365,6 +366,11 @@ export default function OTPLogin() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#f0f7f6] to-white">
+      <SEOHead
+        title="Log In"
+        description="Sign in to your AmeriLend account to manage your loans, make payments, and track your application status."
+        path="/login"
+      />
       {/* Header */}
       <header className="bg-white border-b border-gray-100 shadow-sm py-0">
         <div className="container mx-auto px-4 h-16 flex items-center">

@@ -15,6 +15,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { articles } from "./ArticlePage";
 import ComplianceFooter from "@/components/ComplianceFooter";
+import SEOHead from "@/components/SEOHead";
 
 const tips = [
   "Always read the full loan agreement before signing.",
@@ -26,9 +27,13 @@ const tips = [
 
 export default function Resources() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  document.title = "Financial Resources | AmeriLend";
   return (
     <div className="min-h-screen bg-white text-gray-800">
+      <SEOHead
+        title="Financial Resources"
+        description="Free financial guides, tips, and articles to help you make smarter borrowing decisions. Learn about credit, budgeting, and personal loans."
+        path="/resources"
+      />
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">

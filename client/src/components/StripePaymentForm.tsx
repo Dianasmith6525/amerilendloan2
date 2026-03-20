@@ -201,7 +201,7 @@ export default function StripePaymentForm({
 
   // Create payment intent mutation
   const createIntentMutation = trpc.payments.createIntent.useMutation({
-    onSuccess: (data: any) => {
+    onSuccess: (data) => {
       if (data.success && data.clientSecret) {
         setClientSecret(data.clientSecret);
         setPaymentId(data.paymentId);
@@ -286,6 +286,15 @@ export default function StripePaymentForm({
 
   if (!clientSecret || paymentId === null || !paymentIntentId) {
     return null;
+  }
+
+  if (!stripeConfig?.publishableKey) {
+    return (
+      <div className="text-center py-6 text-muted-foreground">
+        <p>Card payments are not properly configured.</p>
+        <p className="text-sm mt-1">Please contact support or use another payment method.</p>
+      </div>
+    );
   }
 
   const stripePromise = getStripePromise(stripeConfig.publishableKey);

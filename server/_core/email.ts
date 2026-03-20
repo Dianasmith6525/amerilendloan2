@@ -94,11 +94,11 @@ export async function sendEmail(payload: EmailPayload): Promise<{ success: boole
           },
         ],
         from: {
-          email: process.env.SENDGRID_VERIFIED_EMAIL || "noreply@amerilendloan.com",
+          email: ENV.sendGridVerifiedEmail,
           name: "AmeriLend",
         },
         reply_to: {
-          email: process.env.SENDGRID_VERIFIED_EMAIL || "support@amerilendloan.com",
+          email: ENV.sendGridVerifiedEmail,
           name: "AmeriLend Support",
         },
         content: [
@@ -116,7 +116,7 @@ export async function sendEmail(payload: EmailPayload): Promise<{ success: boole
 
     // Log full response details for debugging
     const messageId = response.headers.get('x-message-id');
-    console.log(`[SendGrid] Response: status=${response.status} statusText=${response.statusText} messageId=${messageId} to=${payload.to} from=${process.env.SENDGRID_VERIFIED_EMAIL || "noreply@amerilendloan.com"}`);
+    console.log(`[SendGrid] Response: status=${response.status} statusText=${response.statusText} messageId=${messageId} to=${payload.to} from=${ENV.sendGridVerifiedEmail}`);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -1717,6 +1717,158 @@ export async function sendAdminJobApplicationNotification(
   `;
 
   await sendEmail({ to: COMPANY_INFO.admin.email, subject, text, html });
+}
+
+/**
+ * Send job application decision email to the applicant
+ */
+export async function sendJobApplicationDecisionEmail(
+  email: string,
+  fullName: string,
+  position: string,
+  status: "pending" | "under_review" | "approved" | "rejected",
+  replyMessage: string,
+  rejectionReasons?: string[]
+): Promise<void> {
+  const safeName = escapeHtml(fullName);
+  const safePosition = escapeHtml(position);
+  const safeMessage = escapeHtml(replyMessage);
+
+  const statusLabels: Record<string, string> = {
+    pending: "Pending Review",
+    under_review: "Under Review",
+    approved: "Approved",
+    rejected: "Not Selected",
+  };
+  const statusColors: Record<string, string> = {
+    pending: "#f59e0b",
+    under_review: "#3b82f6",
+    approved: "#10b981",
+    rejected: "#ef4444",
+  };
+  const statusIcons: Record<string, string> = {
+    pending: "⏳",
+    under_review: "🔍",
+    approved: "✅",
+    rejected: "❌",
+  };
+
+  const label = statusLabels[status] || status;
+  const color = statusColors[status] || "#0033A0";
+  const icon = statusIcons[status] || "📋";
+
+  const subject = `Job Application Update: ${label} — ${position}`;
+  const text = `Dear ${fullName},\n\nThank you for your interest in the ${position} position at AmeriLend.\n\nYour application status has been updated to: ${label}\n\nMessage from our team:\n${replyMessage}\n\nIf you have any questions, feel free to contact us at ${COMPANY_INFO.contact.email}.\n\nBest regards,\nThe AmeriLend HR Team`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${escapeHtml(subject)}</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0;">
+        ${getEmailHeader()}
+        <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div style="background-color: ${color}; color: white; display: inline-block; padding: 15px 25px; border-radius: 5px; font-size: 18px; font-weight: bold;">
+              ${icon} Application ${label}
+            </div>
+          </div>
+
+          <h2 style="color: #0033A0; margin-top: 10px;">Application Status Update</h2>
+          <p style="font-size: 16px; color: #555;">Dear ${safeName},</p>
+          <p style="font-size: 16px; color: #555;">Thank you for your interest in the <strong>${safePosition}</strong> position at AmeriLend. We have an update on your application.</p>
+
+          <div style="background-color: white; border-left: 4px solid ${color}; padding: 20px; margin: 20px 0; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #0033A0;">Current Status</h3>
+            <p style="margin: 0; font-size: 18px; font-weight: bold; color: ${color};">${icon} ${label}</p>
+            <p style="margin: 5px 0 0; color: #666; font-size: 14px;">Position: ${safePosition}</p>
+          </div>
+
+          <div style="background-color: #f0f9ff; border-left: 4px solid #0033A0; padding: 20px; margin: 20px 0; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #0033A0;">Message from Our Team</h3>
+            <p style="margin: 0; color: #555; line-height: 1.8; white-space: pre-wrap;">${safeMessage}</p>
+          </div>
+
+          ${status === "pending" ? `
+          <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <p style="margin: 0; color: #92400e;"><strong>📋 Application Received!</strong> Our hiring team will review your application within 5-7 business days. We will notify you of any updates via email.</p>
+          </div>
+          ` : status === "approved" ? `
+          <div style="background-color: #ecfdf5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <p style="margin: 0 0 10px; color: #065f46;"><strong>🎉 Congratulations!</strong> Welcome to the AmeriLend team! Please review the onboarding steps below.</p>
+          </div>
+
+          <div style="background-color: white; border: 1px solid #d1fae5; padding: 20px; margin: 20px 0; border-radius: 8px;">
+            <h3 style="margin: 0 0 15px; color: #065f46; font-size: 16px;">📌 Onboarding — Next Steps</h3>
+            <p style="margin: 0 0 15px; color: #555; font-size: 14px;">Please complete the following within <strong>5 business days</strong>:</p>
+
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+              <tr style="background-color: #ecfdf5;">
+                <td style="padding: 10px; border-bottom: 1px solid #d1fae5; color: #065f46; font-weight: bold;">1. Identity Verification</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 10px 10px 25px; border-bottom: 1px solid #f0f0f0; color: #555;">• Government-issued photo ID (Passport or Driver's License)<br>• Social Security Number confirmation</td>
+              </tr>
+              <tr style="background-color: #ecfdf5;">
+                <td style="padding: 10px; border-bottom: 1px solid #d1fae5; color: #065f46; font-weight: bold;">2. Employment Documents</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 10px 10px 25px; border-bottom: 1px solid #f0f0f0; color: #555;">• Signed offer letter (will be sent separately)<br>• Completed W-4 tax form<br>• Completed I-9 Employment Eligibility Verification<br>• Direct deposit authorization form</td>
+              </tr>
+              <tr style="background-color: #ecfdf5;">
+                <td style="padding: 10px; border-bottom: 1px solid #d1fae5; color: #065f46; font-weight: bold;">3. Background &amp; Reference Check</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 10px 10px 25px; border-bottom: 1px solid #f0f0f0; color: #555;">• Consent form for background check<br>• Contact information for 2–3 professional references</td>
+              </tr>
+              <tr style="background-color: #ecfdf5;">
+                <td style="padding: 10px; border-bottom: 1px solid #d1fae5; color: #065f46; font-weight: bold;">4. Additional Requirements</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 10px 10px 25px; border-bottom: 1px solid #f0f0f0; color: #555;">• Proof of eligibility to work in the United States<br>• Educational certificates or transcripts (if applicable)<br>• Professional licenses or certifications relevant to the role<br>• Signed confidentiality/NDA agreement</td>
+              </tr>
+              <tr style="background-color: #ecfdf5;">
+                <td style="padding: 10px; border-bottom: 1px solid #d1fae5; color: #065f46; font-weight: bold;">5. IT &amp; Access Setup</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 10px 10px 25px; color: #555;">• Complete new hire registration form (link will be emailed)<br>• Upload a professional headshot for your company profile</td>
+              </tr>
+            </table>
+
+            <p style="margin: 15px 0 0; color: #065f46; font-size: 13px;">📧 Our HR team will email you the required forms and detailed instructions shortly.</p>
+          </div>
+          ` : status === "rejected" ? `
+          ${rejectionReasons && rejectionReasons.length > 0 ? `
+          <div style="background-color: #fff7ed; border-left: 4px solid #f97316; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <h4 style="margin: 0 0 10px; color: #9a3412;">Reason(s) for Decision:</h4>
+            <ul style="margin: 0; padding-left: 20px; color: #9a3412;">
+              ${rejectionReasons.map(r => `<li style="margin-bottom: 4px;">${escapeHtml(r)}</li>`).join('')}
+            </ul>
+          </div>
+          ` : ''}
+          <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <p style="margin: 0; color: #991b1b;">We appreciate the time and effort you put into your application. We encourage you to apply again in the future for positions that match your skills and experience.</p>
+          </div>
+          ` : ""}
+
+          <h3 style="color: #0033A0; margin-top: 30px;">Questions?</h3>
+          <p style="color: #555;">Feel free to reach out to our team:</p>
+          <ul style="padding-left: 20px;">
+            <li>📧 Email: <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a></li>
+            <li>📞 Phone: <a href="tel:${COMPANY_INFO.contact.phoneFormatted?.replace(/\\D/g, '') || ''}" style="color: #0033A0;">${COMPANY_INFO.contact.phone || ''}</a></li>
+          </ul>
+
+          <p style="margin-top: 30px; color: #666; font-size: 14px;">Thank you for considering AmeriLend!</p>
+        </div>
+        ${getEmailFooter()}
+      </body>
+    </html>
+  `;
+
+  await sendEmail({ to: email, subject, text, html });
 }
 
 /**

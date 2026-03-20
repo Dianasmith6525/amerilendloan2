@@ -5804,6 +5804,7 @@ export async function createJobApplication(data: {
   phone: string;
   position: string;
   resumeFileName?: string;
+  resumeFileUrl?: string;
   coverLetter: string;
 }) {
   const db = await getDb();
@@ -5817,6 +5818,7 @@ export async function createJobApplication(data: {
     phone: data.phone,
     position: data.position,
     resumeFileName: data.resumeFileName,
+    resumeFileUrl: data.resumeFileUrl,
     coverLetter: data.coverLetter,
     status: "pending",
   }).returning();
@@ -5853,6 +5855,8 @@ export async function updateJobApplicationStatus(
   status: "pending" | "under_review" | "approved" | "rejected",
   adminId: number,
   adminNotes?: string,
+  replyMessage?: string,
+  rejectionReasons?: string[],
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
@@ -5865,6 +5869,8 @@ export async function updateJobApplicationStatus(
       reviewedBy: adminId,
       reviewedAt: new Date(),
       adminNotes: adminNotes ?? null,
+      replyMessage: replyMessage ?? null,
+      rejectionReasons: rejectionReasons && rejectionReasons.length > 0 ? JSON.stringify(rejectionReasons) : null,
       updatedAt: new Date(),
     })
     .where(eq(jobApplications.id, id))

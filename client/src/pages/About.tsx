@@ -13,6 +13,7 @@ import {
 import { useState } from "react";
 import { Link } from "wouter";
 import ComplianceFooter from "@/components/ComplianceFooter";
+import SEOHead from "@/components/SEOHead";
 
 
 
@@ -54,9 +55,13 @@ const milestones = [
 
 export default function About() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  document.title = "About Us | AmeriLend";
   return (
     <div className="min-h-screen bg-white text-gray-800">
+      <SEOHead
+        title="About Us"
+        description="Learn about AmeriLend's mission to simplify personal lending. Founded in 2020, we've helped thousands get fast, fair personal loans with same-day funding."
+        path="/about"
+      />
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">

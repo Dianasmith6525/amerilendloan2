@@ -6,6 +6,7 @@ import { Link } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import ComplianceFooter from "@/components/ComplianceFooter";
+import SEOHead from "@/components/SEOHead";
 
 interface JobApplication {
   fullName: string;
@@ -25,6 +26,7 @@ export default function Careers() {
     resume: null,
     coverLetter: "",
   });
+  const [fileError, setFileError] = useState<string | null>(null);
 
   // Get current user data to auto-fill form
   const { data: user } = trpc.auth.me.useQuery();
@@ -71,13 +73,18 @@ export default function Careers() {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
+        setFileError("Resume must be less than 5MB");
         toast.error("Resume must be less than 5MB");
+        e.target.value = "";
         return;
       }
       if (!["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"].includes(file.type)) {
+        setFileError("Resume must be PDF or Word document");
         toast.error("Resume must be PDF or Word document");
+        e.target.value = "";
         return;
       }
+      setFileError(null);
       setFormData((prev) => ({
         ...prev,
         resume: file,
@@ -107,18 +114,47 @@ export default function Careers() {
       return;
     }
 
+    // Upload the resume file first if one was selected
+    let resumeFileUrl: string | undefined;
+    if (formData.resume) {
+      try {
+        const uploadData = new FormData();
+        uploadData.append("file", formData.resume);
+        const uploadRes = await fetch("/api/upload-resume", {
+          method: "POST",
+          body: uploadData,
+        });
+        if (!uploadRes.ok) {
+          const err = await uploadRes.json().catch(() => ({ error: "Upload failed" }));
+          toast.error(err.error || "Failed to upload resume");
+          return;
+        }
+        const uploadResult = await uploadRes.json();
+        resumeFileUrl = uploadResult.url;
+      } catch {
+        toast.error("Failed to upload resume. Please try again.");
+        return;
+      }
+    }
+
     sendJobApplicationMutation.mutate({
       fullName: formData.fullName,
       email: formData.email,
       phone: formData.phone,
       position: formData.position,
       resumeFileName: formData.resume?.name || "Not provided",
+      resumeFileUrl,
       coverLetter: formData.coverLetter,
     });
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50">
+      <SEOHead
+        title="Careers"
+        description="Join the AmeriLend team. Explore open positions in fintech, engineering, customer support, and more. Build your career helping people access fair lending."
+        path="/careers"
+      />
       {/* Header */}
       <div className="bg-[#0A2540] text-white py-12">
         <div className="container mx-auto px-4">
@@ -279,6 +315,11 @@ export default function Careers() {
                       ✓ {formData.resume.name} ({(formData.resume.size / 1024).toFixed(2)} KB)
                     </p>
                   )}
+                  {fileError && (
+                    <p className="text-sm text-red-600 mt-2">
+                      ✗ {fileError}
+                    </p>
+                  )}
                 </div>
 
                 {/* Cover Letter */}
@@ -310,7 +351,7 @@ export default function Careers() {
                 {/* Submit Button */}
                 <Button
                   type="submit"
-                  disabled={sendJobApplicationMutation.isPending}
+                  disabled={sendJobApplicationMutation.isPending || !!fileError}
                   className="w-full bg-[#0A2540] hover:bg-blue-800 text-white py-3 rounded-lg font-semibold text-lg transition-all"
                 >
                   {sendJobApplicationMutation.isPending ? (
