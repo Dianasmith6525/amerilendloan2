@@ -55,69 +55,19 @@ export async function createBackup(): Promise<string | null> {
     }
     const backupData: Record<string, any[]> = {};
     
-    // Export all critical tables
-    console.log("[Backup] Exporting users...");
-    backupData.users = await db.select().from(schema.users);
-    
-    console.log("[Backup] Exporting loan applications...");
-    backupData.loanApplications = await db.select().from(schema.loanApplications);
-    
-    console.log("[Backup] Exporting payments...");
-    backupData.payments = await db.select().from(schema.payments);
-    
-    console.log("[Backup] Exporting payment schedules...");
-    backupData.paymentSchedules = await db.select().from(schema.paymentSchedules);
-    
-    console.log("[Backup] Exporting disbursements...");
-    backupData.disbursements = await db.select().from(schema.disbursements);
-    
-    console.log("[Backup] Exporting fee configuration...");
-    backupData.feeConfiguration = await db.select().from(schema.feeConfiguration);
-    
-    console.log("[Backup] Exporting support tickets...");
-    backupData.supportTickets = await db.select().from(schema.supportTickets);
-    
-    console.log("[Backup] Exporting ticket messages...");
-    backupData.ticketMessages = await db.select().from(schema.ticketMessages);
-    
-    console.log("[Backup] Exporting uploaded documents...");
-    backupData.uploadedDocuments = await db.select().from(schema.uploadedDocuments);
-    
-    console.log("[Backup] Exporting bank accounts...");
-    backupData.bankAccounts = await db.select().from(schema.bankAccounts);
-    
-    console.log("[Backup] Exporting user notifications...");
-    backupData.userNotifications = await db.select().from(schema.userNotifications);
-    
-    console.log("[Backup] Exporting notification preferences...");
-    backupData.notificationPreferences = await db.select().from(schema.notificationPreferences);
-    
-    console.log("[Backup] Exporting OTP codes...");
-    backupData.otpCodes = await db.select().from(schema.otpCodes);
-    
-    console.log("[Backup] Exporting login attempts...");
-    backupData.loginAttempts = await db.select().from(schema.loginAttempts);
-    
-    console.log("[Backup] Exporting admin activity log...");
-    backupData.adminActivityLog = await db.select().from(schema.adminActivityLog);
-    
-    console.log("[Backup] Exporting account activity...");
-    backupData.accountActivity = await db.select().from(schema.accountActivity);
-    
-    console.log("[Backup] Exporting autopay settings...");
-    backupData.autopaySettings = await db.select().from(schema.autopaySettings);
-    
-    console.log("[Backup] Exporting saved payment methods...");
-    backupData.savedPaymentMethods = await db.select().from(schema.savedPaymentMethods);
-    
-    console.log("[Backup] Exporting legal acceptances...");
-    backupData.legalAcceptances = await db.select().from(schema.legalAcceptances);
-    
-    console.log("[Backup] Exporting referral program...");
-    backupData.referralProgram = await db.select().from(schema.referralProgram);
-    
-    console.log("[Backup] Exporting user rewards balance...");
-    backupData.userRewardsBalance = await db.select().from(schema.userRewardsBalance);
+    // Dynamically export ALL tables from schema
+    // Uses Drizzle's internal Symbol to identify pgTable objects vs enums/types
+    const DrizzleColumns = Symbol.for('drizzle:Columns');
+    for (const [tableName, tableValue] of Object.entries(schema)) {
+      if (tableValue && typeof tableValue === 'object' && DrizzleColumns in (tableValue as any)) {
+        try {
+          console.log(`[Backup] Exporting ${tableName}...`);
+          backupData[tableName] = await db.select().from(tableValue as any);
+        } catch (e) {
+          console.warn(`[Backup] Failed to export ${tableName}:`, (e as Error).message);
+        }
+      }
+    }
 
     // Add metadata
     const metadata = {
@@ -309,27 +259,36 @@ export async function restoreBackup(backupFilePath: string): Promise<boolean> {
       }
     }
     
-    // Other tables...
-    const otherTables = [
-      { name: "notificationPreferences", schema: schema.notificationPreferences },
-      { name: "adminActivityLog", schema: schema.adminActivityLog },
-      { name: "accountActivity", schema: schema.accountActivity },
-      { name: "autopaySettings", schema: schema.autopaySettings },
-      { name: "savedPaymentMethods", schema: schema.savedPaymentMethods },
-      { name: "legalAcceptances", schema: schema.legalAcceptances },
-      { name: "referralProgram", schema: schema.referralProgram },
-      { name: "userRewardsBalance", schema: schema.userRewardsBalance },
-    ];
-    
-    for (const table of otherTables) {
-      if (data[table.name]?.length > 0) {
-        console.log(`[Restore] Restoring ${data[table.name].length} ${table.name}...`);
-        for (const record of data[table.name]) {
-          try {
-            await db.insert(table.schema).values(record).onConflictDoNothing();
-          } catch (e) {
-            // Skip silently for non-critical tables
-          }
+    // Dynamically restore ALL remaining tables from the backup
+    const alreadyRestored = new Set([
+      'users', 'feeConfiguration', 'loanApplications', 'paymentSchedules',
+      'payments', 'disbursements', 'supportTickets', 'ticketMessages',
+      'uploadedDocuments', 'bankAccounts', 'userNotifications',
+    ]);
+
+    // Build a map of schema table name -> Drizzle table object
+    const DrizzleColumns = Symbol.for('drizzle:Columns');
+    const schemaTableMap: Record<string, any> = {};
+    for (const [name, value] of Object.entries(schema)) {
+      if (value && typeof value === 'object' && DrizzleColumns in (value as any)) {
+        schemaTableMap[name] = value;
+      }
+    }
+
+    for (const tableName of Object.keys(data)) {
+      if (alreadyRestored.has(tableName)) continue;
+      if (!data[tableName]?.length) continue;
+      if (!schemaTableMap[tableName]) {
+        console.warn(`[Restore] Unknown table in backup: ${tableName}, skipping`);
+        continue;
+      }
+
+      console.log(`[Restore] Restoring ${data[tableName].length} ${tableName}...`);
+      for (const record of data[tableName]) {
+        try {
+          await db.insert(schemaTableMap[tableName]).values(record).onConflictDoNothing();
+        } catch (e) {
+          // Skip individual record failures (FK constraints, etc.)
         }
       }
     }
