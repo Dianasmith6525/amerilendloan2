@@ -5,6 +5,7 @@
  */
 
 import { Request, Response, NextFunction } from "express";
+import { logger } from "./logger";
 
 export interface PayloadValidationOptions {
   allowEmpty?: boolean; // Allow empty payloads (default: false)
@@ -170,7 +171,7 @@ export function validatePayload(
     const { isEmpty, reason } = isEmptyPayload(req.body, options);
 
     if (isEmpty && reason) {
-      console.warn(`[Payload Validation] Empty payload on ${req.method} ${req.path}: ${reason}`);
+      logger.warn(`[Payload Validation] Empty payload on ${req.method} ${req.path}: ${reason}`);
 
       const errorResponse = createEmptyPayloadErrorResponse(reason);
 

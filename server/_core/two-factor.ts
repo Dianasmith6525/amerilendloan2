@@ -2,6 +2,7 @@ import speakeasy from "speakeasy";
 import QRCode from "qrcode";
 import bcrypt from "bcryptjs";
 import { ENV } from "./env";
+import { logger } from "./logger";
 
 /**
  * Generate a TOTP secret for authenticator apps
@@ -27,7 +28,7 @@ export async function generateQRCode(otpauthUrl: string): Promise<string> {
     const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
     return qrCodeDataUrl;
   } catch (error) {
-    console.error("Error generating QR code:", error);
+    logger.error("Error generating QR code:", error);
     throw new Error("Failed to generate QR code");
   }
 }

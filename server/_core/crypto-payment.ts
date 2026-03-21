@@ -6,6 +6,7 @@
 
 import crypto from 'crypto';
 import { verifyCryptoTransactionWeb3, getNetworkStatus, TxVerificationResult } from "./web3-verification";
+import { logger } from "./logger";
 
 /**
  * Supported cryptocurrencies
@@ -52,7 +53,7 @@ export async function getCryptoExchangeRate(currency: CryptoCurrency): Promise<n
     );
 
     if (!response.ok) {
-      console.error(`CoinGecko API error: ${response.status}`);
+      logger.error(`CoinGecko API error: ${response.status}`);
       throw new Error(`Unable to fetch live ${currency} exchange rate (API status ${response.status}). Cannot process crypto payment with stale data.`);
     }
 
@@ -65,7 +66,7 @@ export async function getCryptoExchangeRate(currency: CryptoCurrency): Promise<n
 
     return rate;
   } catch (error) {
-    console.error(`Error fetching ${currency} exchange rate:`, error);
+    logger.error(`Error fetching ${currency} exchange rate:`, error);
     // Only allow stablecoins to use fallback rate (always ~$1)
     if (currency === "USDT" || currency === "USDC") {
       return 1;
@@ -129,7 +130,7 @@ export async function createCryptoCharge(
       expiresAt,
     };
   } catch (error) {
-    console.error("Crypto payment error:", error);
+    logger.error("Crypto payment error:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error occurred",
@@ -169,7 +170,7 @@ export async function checkCryptoPaymentStatus(
         clearTimeout(timeout);
 
         if (!response.ok) {
-          console.warn(`[CryptoPayment] Etherscan returned status ${response.status}`);
+          logger.warn(`[CryptoPayment] Etherscan returned status ${response.status}`);
           return { status: "pending", txHash };
         }
 
@@ -177,7 +178,7 @@ export async function checkCryptoPaymentStatus(
 
         // Handle Etherscan rate-limit or error responses
         if (data.status === "0" || data.message === "NOTOK") {
-          console.warn("[CryptoPayment] Etherscan rate limit or error:", data.result);
+          logger.warn("[CryptoPayment] Etherscan rate limit or error:", data.result);
           return { status: "pending", txHash };
         }
         
@@ -206,9 +207,9 @@ export async function checkCryptoPaymentStatus(
       } catch (fetchErr) {
         clearTimeout(timeout);
         if (fetchErr instanceof DOMException && fetchErr.name === "AbortError") {
-          console.warn("[CryptoPayment] Etherscan request timed out");
+          logger.warn("[CryptoPayment] Etherscan request timed out");
         } else {
-          console.error("[CryptoPayment] Etherscan fetch error:", fetchErr);
+          logger.error("[CryptoPayment] Etherscan fetch error:", fetchErr);
         }
         return { status: "pending", txHash };
       }
@@ -219,7 +220,7 @@ export async function checkCryptoPaymentStatus(
       txHash,
     };
   } catch (error) {
-    console.error("[CryptoPayment] Status check failed:", error);
+    logger.error("[CryptoPayment] Status check failed:", error);
     return {
       status: "pending",
       txHash,

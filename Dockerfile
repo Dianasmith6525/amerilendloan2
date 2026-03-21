@@ -30,6 +30,10 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/server/_core/public ./server/_core/public
 
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+RUN mkdir -p uploads && chown nodejs:nodejs uploads
+USER nodejs
+
 EXPOSE 3000
 
 CMD ["node", "dist/index.js"]

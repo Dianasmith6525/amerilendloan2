@@ -16,6 +16,7 @@ import {
   notifyPaymentOverdue,
   notifyDelinquency,
 } from "./paymentNotifications";
+import { logger } from "./logger";
 
 interface ScheduleOptions {
   intervalMs?: number; // Check interval in milliseconds (default: 1 hour)
@@ -45,11 +46,11 @@ class PaymentNotificationScheduler {
    */
   start(): void {
     if (this.isRunning) {
-      console.warn("[Payment Scheduler] Scheduler already running");
+      logger.warn("[Payment Scheduler] Scheduler already running");
       return;
     }
 
-    console.log(
+    logger.info(
       "[Payment Scheduler] Starting payment notification scheduler",
       `(interval: ${this.options.intervalMs}ms)`
     );
@@ -58,14 +59,14 @@ class PaymentNotificationScheduler {
 
     // Run immediately on start
     this.runCheck().catch((error) => {
-      console.error("[Payment Scheduler] Error on initial check:", error);
+      logger.error("[Payment Scheduler] Error on initial check:", error);
     });
 
     // Then set up recurring interval
     this.intervalId = setInterval(
       () => {
         this.runCheck().catch((error) => {
-          console.error("[Payment Scheduler] Error in scheduled check:", error);
+          logger.error("[Payment Scheduler] Error in scheduled check:", error);
         });
       },
       this.options.intervalMs
@@ -77,7 +78,7 @@ class PaymentNotificationScheduler {
    */
   stop(): void {
     if (!this.isRunning) {
-      console.warn("[Payment Scheduler] Scheduler not running");
+      logger.warn("[Payment Scheduler] Scheduler not running");
       return;
     }
 
@@ -87,7 +88,7 @@ class PaymentNotificationScheduler {
     }
 
     this.isRunning = false;
-    console.log("[Payment Scheduler] Payment notification scheduler stopped");
+    logger.info("[Payment Scheduler] Payment notification scheduler stopped");
   }
 
   /**
@@ -95,7 +96,7 @@ class PaymentNotificationScheduler {
    */
   private async runCheck(): Promise<void> {
     try {
-      console.log("[Payment Scheduler] Running payment notification check...");
+      logger.info("[Payment Scheduler] Running payment notification check...");
 
       let totalProcessed = 0;
       let totalErrors = 0;
@@ -107,7 +108,7 @@ class PaymentNotificationScheduler {
           totalProcessed += result.processed;
           totalErrors += result.errors;
         } catch (error) {
-          console.error("[Payment Scheduler] Error checking payment due reminders:", error);
+          logger.error("[Payment Scheduler] Error checking payment due reminders:", error);
           totalErrors++;
         }
       }
@@ -119,7 +120,7 @@ class PaymentNotificationScheduler {
           totalProcessed += result.processed;
           totalErrors += result.errors;
         } catch (error) {
-          console.error("[Payment Scheduler] Error checking overdue payments:", error);
+          logger.error("[Payment Scheduler] Error checking overdue payments:", error);
           totalErrors++;
         }
       }
@@ -131,16 +132,16 @@ class PaymentNotificationScheduler {
           totalProcessed += result.processed;
           totalErrors += result.errors;
         } catch (error) {
-          console.error("[Payment Scheduler] Error checking delinquencies:", error);
+          logger.error("[Payment Scheduler] Error checking delinquencies:", error);
           totalErrors++;
         }
       }
 
-      console.log(
+      logger.info(
         `[Payment Scheduler] Check complete: ${totalProcessed} notifications sent, ${totalErrors} errors`
       );
     } catch (error) {
-      console.error("[Payment Scheduler] Fatal error in runCheck:", error);
+      logger.error("[Payment Scheduler] Fatal error in runCheck:", error);
     }
   }
 
@@ -151,7 +152,7 @@ class PaymentNotificationScheduler {
     processed: number;
     errors: number;
   }> {
-    console.log("[Payment Scheduler] Checking for payment due reminders (7 days)...");
+    logger.info("[Payment Scheduler] Checking for payment due reminders (7 days)...");
 
     let processed = 0;
     let errors = 0;
@@ -173,13 +174,13 @@ class PaymentNotificationScheduler {
             processed++;
           } else {
             errors++;
-            console.warn(
+            logger.warn(
               `[Payment Scheduler] Due reminder errors for payment ${payment.paymentId}:`,
               result.errors
             );
           }
         } catch (error) {
-          console.error(
+          logger.error(
             `[Payment Scheduler] Failed to send due reminder for payment ${payment.paymentId}:`,
             error
           );
@@ -187,11 +188,11 @@ class PaymentNotificationScheduler {
         }
       }
     } catch (error) {
-      console.error("[Payment Scheduler] Error in checkPaymentDueReminders:", error);
+      logger.error("[Payment Scheduler] Error in checkPaymentDueReminders:", error);
       errors++;
     }
 
-    console.log(
+    logger.info(
       `[Payment Scheduler] Payment due reminders: ${processed} sent, ${errors} errors`
     );
     return { processed, errors };
@@ -204,7 +205,7 @@ class PaymentNotificationScheduler {
     processed: number;
     errors: number;
   }> {
-    console.log("[Payment Scheduler] Checking for overdue payments...");
+    logger.info("[Payment Scheduler] Checking for overdue payments...");
 
     let processed = 0;
     let errors = 0;
@@ -228,13 +229,13 @@ class PaymentNotificationScheduler {
             processed++;
           } else {
             errors++;
-            console.warn(
+            logger.warn(
               `[Payment Scheduler] Overdue alert errors for payment ${payment.paymentId}:`,
               result.errors
             );
           }
         } catch (error) {
-          console.error(
+          logger.error(
             `[Payment Scheduler] Failed to send overdue alert for payment ${payment.paymentId}:`,
             error
           );
@@ -242,11 +243,11 @@ class PaymentNotificationScheduler {
         }
       }
     } catch (error) {
-      console.error("[Payment Scheduler] Error in checkPaymentOverdue:", error);
+      logger.error("[Payment Scheduler] Error in checkPaymentOverdue:", error);
       errors++;
     }
 
-    console.log(
+    logger.info(
       `[Payment Scheduler] Overdue payment alerts: ${processed} sent, ${errors} errors`
     );
     return { processed, errors };
@@ -259,7 +260,7 @@ class PaymentNotificationScheduler {
     processed: number;
     errors: number;
   }> {
-    console.log("[Payment Scheduler] Checking for delinquencies (30+ days)...");
+    logger.info("[Payment Scheduler] Checking for delinquencies (30+ days)...");
 
     let processed = 0;
     let errors = 0;
@@ -286,13 +287,13 @@ class PaymentNotificationScheduler {
             processed++;
           } else {
             errors++;
-            console.warn(
+            logger.warn(
               `[Payment Scheduler] Delinquency alert errors for payment ${payment.paymentId}:`,
               result.errors
             );
           }
         } catch (error) {
-          console.error(
+          logger.error(
             `[Payment Scheduler] Failed to send delinquency alert for payment ${payment.paymentId}:`,
             error
           );
@@ -300,11 +301,11 @@ class PaymentNotificationScheduler {
         }
       }
     } catch (error) {
-      console.error("[Payment Scheduler] Error in checkDelinquencies:", error);
+      logger.error("[Payment Scheduler] Error in checkDelinquencies:", error);
       errors++;
     }
 
-    console.log(
+    logger.info(
       `[Payment Scheduler] Delinquency alerts: ${processed} sent, ${errors} errors`
     );
     return { processed, errors };
@@ -341,7 +342,7 @@ class PaymentNotificationScheduler {
       this.start();
     }
 
-    console.log("[Payment Scheduler] Options updated:", this.options);
+    logger.info("[Payment Scheduler] Options updated:", this.options);
   }
 }
 
@@ -363,7 +364,7 @@ export const paymentNotificationScheduler = new PaymentNotificationScheduler({
  */
 export function initializePaymentNotificationScheduler(): void {
   if (process.env.DISABLE_PAYMENT_SCHEDULER === "true") {
-    console.log(
+    logger.info(
       "[Payment Scheduler] Scheduler disabled via DISABLE_PAYMENT_SCHEDULER env var"
     );
     return;

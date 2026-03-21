@@ -2,6 +2,7 @@ import rateLimit from "express-rate-limit";
 import RedisStore from "rate-limit-redis";
 import { createClient } from "redis";
 import { Request, Response } from "express";
+import { logger } from "./logger";
 
 // Redis client (optional - falls back to memory store)
 let redisClient: ReturnType<typeof createClient> | null = null;
@@ -12,7 +13,7 @@ if (process.env.REDIS_URL) {
   });
   
   redisClient.on('error', (err) => {
-    console.error('Redis error:', err);
+    logger.error('Redis error:', err);
   });
   
   redisClient.connect();

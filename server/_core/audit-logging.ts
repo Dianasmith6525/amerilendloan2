@@ -1,6 +1,7 @@
 import { Request } from "express";
 import { getDb, createAuditLog } from "../db";
 import { getClientIP } from "./ipUtils";
+import { logger } from "./logger";
 
 export enum AuditEventType {
   // Authentication events
@@ -84,7 +85,7 @@ export async function logAuditEvent(entry: AuditLogEntry): Promise<void> {
 
     // Log critical events to console immediately
     if (entry.severity === AuditSeverity.CRITICAL) {
-      console.error('🚨 CRITICAL AUDIT EVENT:', {
+      logger.error('🚨 CRITICAL AUDIT EVENT:', {
         eventType: entry.eventType,
         userId: entry.userId,
         description: entry.description,
@@ -92,7 +93,7 @@ export async function logAuditEvent(entry: AuditLogEntry): Promise<void> {
       });
     }
   } catch (error) {
-    console.error('Failed to log audit event:', error);
+    logger.error('Failed to log audit event:', error);
     // Don't throw - audit logging should not break application flow
   }
 }

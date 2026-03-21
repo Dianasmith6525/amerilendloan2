@@ -17,6 +17,7 @@ import {
   sendPaymentReceivedSMS,
   sendPaymentFailedSMS,
 } from "./sms";
+import { logger } from "./logger";
 
 /**
  * Send payment due reminder (7 days before due date)
@@ -31,7 +32,7 @@ export async function notifyPaymentDueReminder(
   try {
     const user = await getUserById(userId);
     if (!user || !user.email) {
-      console.warn(`[Payment Notification] User ${userId} not found or has no email`);
+      logger.warn(`[Payment Notification] User ${userId} not found or has no email`);
       return { success: false, errors: ["User not found or has no email"] };
     }
 
@@ -56,14 +57,14 @@ export async function notifyPaymentDueReminder(
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
-      console.error(`[Payment Notification] Email error for payment reminder:`, errorMsg);
+      logger.error(`[Payment Notification] Email error for payment reminder:`, errorMsg);
       errors.push(`Email: ${errorMsg}`);
     }
 
     return { success: errors.length === 0, errors: errors.length > 0 ? errors : undefined };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[Payment Notification] Error sending payment due reminder:`, errorMsg);
+    logger.error(`[Payment Notification] Error sending payment due reminder:`, errorMsg);
     return { success: false, errors: [errorMsg] };
   }
 }
@@ -82,7 +83,7 @@ export async function notifyPaymentOverdue(
   try {
     const user = await getUserById(userId);
     if (!user || !user.email) {
-      console.warn(`[Payment Notification] User ${userId} not found or has no email`);
+      logger.warn(`[Payment Notification] User ${userId} not found or has no email`);
       return { success: false, errors: ["User not found or has no email"] };
     }
 
@@ -108,7 +109,7 @@ export async function notifyPaymentOverdue(
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
-      console.error(`[Payment Notification] Email error for overdue alert:`, errorMsg);
+      logger.error(`[Payment Notification] Email error for overdue alert:`, errorMsg);
       errors.push(`Email: ${errorMsg}`);
     }
 
@@ -123,7 +124,7 @@ export async function notifyPaymentOverdue(
         );
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : "Unknown error";
-        console.error(`[Payment Notification] SMS error for overdue alert:`, errorMsg);
+        logger.error(`[Payment Notification] SMS error for overdue alert:`, errorMsg);
         errors.push(`SMS: ${errorMsg}`);
       }
     }
@@ -131,7 +132,7 @@ export async function notifyPaymentOverdue(
     return { success: errors.length === 0, errors: errors.length > 0 ? errors : undefined };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[Payment Notification] Error sending payment overdue alert:`, errorMsg);
+    logger.error(`[Payment Notification] Error sending payment overdue alert:`, errorMsg);
     return { success: false, errors: [errorMsg] };
   }
 }
@@ -149,7 +150,7 @@ export async function notifyDelinquency(
   try {
     const user = await getUserById(userId);
     if (!user || !user.email) {
-      console.warn(`[Payment Notification] User ${userId} not found or has no email`);
+      logger.warn(`[Payment Notification] User ${userId} not found or has no email`);
       return { success: false, errors: ["User not found or has no email"] };
     }
 
@@ -175,7 +176,7 @@ export async function notifyDelinquency(
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
-      console.error(`[Payment Notification] Email error for delinquency alert:`, errorMsg);
+      logger.error(`[Payment Notification] Email error for delinquency alert:`, errorMsg);
       errors.push(`Email: ${errorMsg}`);
     }
 
@@ -190,7 +191,7 @@ export async function notifyDelinquency(
         );
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : "Unknown error";
-        console.error(`[Payment Notification] Error sending delinquency SMS:`, errorMsg);
+        logger.error(`[Payment Notification] Error sending delinquency SMS:`, errorMsg);
         errors.push(`SMS: ${errorMsg}`);
       }
     }
@@ -198,7 +199,7 @@ export async function notifyDelinquency(
     return { success: errors.length === 0, errors: errors.length > 0 ? errors : undefined };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[Payment Notification] Error sending delinquency notification:`, errorMsg);
+    logger.error(`[Payment Notification] Error sending delinquency notification:`, errorMsg);
     return { success: false, errors: [errorMsg] };
   }
 }
@@ -218,7 +219,7 @@ export async function notifyPaymentReceived(
   try {
     const user = await getUserById(userId);
     if (!user || !user.email) {
-      console.warn(`[Payment Notification] User ${userId} not found or has no email`);
+      logger.warn(`[Payment Notification] User ${userId} not found or has no email`);
       return { success: false, errors: ["User not found or has no email"] };
     }
 
@@ -245,7 +246,7 @@ export async function notifyPaymentReceived(
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
-      console.error(`[Payment Notification] Email error for payment confirmation:`, errorMsg);
+      logger.error(`[Payment Notification] Email error for payment confirmation:`, errorMsg);
       errors.push(`Email: ${errorMsg}`);
     }
 
@@ -258,7 +259,7 @@ export async function notifyPaymentReceived(
           paymentAmount
         );
       } catch (error) {
-        console.warn(`[Payment Notification] Error sending confirmation SMS:`, error);
+        logger.warn(`[Payment Notification] Error sending confirmation SMS:`, error);
         // Don't add to errors - confirmations are not critical
       }
     }
@@ -266,7 +267,7 @@ export async function notifyPaymentReceived(
     return { success: errors.length === 0, errors: errors.length > 0 ? errors : undefined };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[Payment Notification] Error sending payment received notification:`, errorMsg);
+    logger.error(`[Payment Notification] Error sending payment received notification:`, errorMsg);
     return { success: false, errors: [errorMsg] };
   }
 }
@@ -284,7 +285,7 @@ export async function notifyPaymentFailed(
   try {
     const user = await getUserById(userId);
     if (!user || !user.email) {
-      console.warn(`[Payment Notification] User ${userId} not found or has no email`);
+      logger.warn(`[Payment Notification] User ${userId} not found or has no email`);
       return { success: false, errors: ["User not found or has no email"] };
     }
 
@@ -309,7 +310,7 @@ export async function notifyPaymentFailed(
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
-      console.error(`[Payment Notification] Email error for payment failed alert:`, errorMsg);
+      logger.error(`[Payment Notification] Email error for payment failed alert:`, errorMsg);
       errors.push(`Email: ${errorMsg}`);
     }
 
@@ -324,7 +325,7 @@ export async function notifyPaymentFailed(
         );
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : "Unknown error";
-        console.error(`[Payment Notification] Error sending payment failed SMS:`, errorMsg);
+        logger.error(`[Payment Notification] Error sending payment failed SMS:`, errorMsg);
         errors.push(`SMS: ${errorMsg}`);
       }
     }
@@ -332,7 +333,7 @@ export async function notifyPaymentFailed(
     return { success: errors.length === 0, errors: errors.length > 0 ? errors : undefined };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[Payment Notification] Error sending payment failed notification:`, errorMsg);
+    logger.error(`[Payment Notification] Error sending payment failed notification:`, errorMsg);
     return { success: false, errors: [errorMsg] };
   }
 }
@@ -378,7 +379,7 @@ export async function sendBatchPaymentDueReminders(): Promise<{
     
     return results;
   } catch (error) {
-    console.error("[PaymentNotifications] Batch reminder error:", error);
+    logger.error("[PaymentNotifications] Batch reminder error:", error);
     return results;
   }
 }
@@ -429,7 +430,7 @@ export async function sendBatchPaymentOverdueAlerts(): Promise<{
     
     return results;
   } catch (error) {
-    console.error("[PaymentNotifications] Batch overdue alert error:", error);
+    logger.error("[PaymentNotifications] Batch overdue alert error:", error);
     return results;
   }
 }

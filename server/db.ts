@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { asc, desc, eq, or, and, sql, ilike, inArray, gt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
+import { logger } from "./_core/logger";
 import type postgres from "postgres";
 import { 
   InsertUser, 
@@ -54,7 +55,7 @@ const ENCRYPTION_KEY = (() => {
   if (fallback) {
     if (process.env.NODE_ENV === 'production') {
       // Log loudly — operators must set ENCRYPTION_KEY in production
-      console.error('[SECURITY WARNING] Using JWT_SECRET for bank data encryption. Set a dedicated ENCRYPTION_KEY environment variable immediately.');
+      logger.error('[SECURITY WARNING] Using JWT_SECRET for bank data encryption. Set a dedicated ENCRYPTION_KEY environment variable immediately.');
     }
     return crypto.createHash('sha256').update(fallback).digest();
   }
@@ -93,7 +94,7 @@ export async function getDb() {
       await _client`SELECT 1`;
       return _db;
     } catch (error) {
-      console.warn("[Database] Connection lost, attempting to reconnect...");
+      logger.warn("[Database] Connection lost, attempting to reconnect...");
       _db = null;
       _client = null;
       _connectionStartTime = null;
@@ -103,7 +104,7 @@ export async function getDb() {
   // Create new connection
   if (!_db && process.env.DATABASE_URL) {
     try {
-      console.log("[Database] Attempting to connect to database...");
+      logger.info("[Database] Attempting to connect to database...");
       _connectionStartTime = new Date();
       
       const postgresModule = await import("postgres");
@@ -135,7 +136,7 @@ export async function getDb() {
       const rejectUnauthorized = envSslSetting !== undefined
         ? envSslSetting === 'true'
         : !urlDisablesVerify;
-      console.log(`[Database] SSL mode: ${sslEnabled ? `ENABLED (verify=${rejectUnauthorized})` : 'DISABLED (local)'}`);
+      logger.info(`[Database] SSL mode: ${sslEnabled ? `ENABLED (verify=${rejectUnauthorized})` : 'DISABLED (local)'}`);
       
       _client = postgres(process.env.DATABASE_URL, {
         ssl: sslEnabled ? { rejectUnauthorized } : false,
@@ -159,7 +160,7 @@ export async function getDb() {
         
         // If SSL verification failed, automatically retry without verification
         if (testErrorMsg.includes('self-signed') || testErrorMsg.includes('certificate') || testErrorMsg.includes('SSL')) {
-          console.warn(`[Database] SSL verification failed, retrying with rejectUnauthorized=false...`);
+          logger.warn(`[Database] SSL verification failed, retrying with rejectUnauthorized=false...`);
           try {
             // Close the broken client
             await _client.end({ timeout: 3 }).catch(() => {});
@@ -175,13 +176,13 @@ export async function getDb() {
           try {
             await _client`SELECT 1`;
             connectionTestPassed = true;
-            console.log(`[Database] SSL retry successful with rejectUnauthorized=false`);
+            logger.info(`[Database] SSL retry successful with rejectUnauthorized=false`);
           } catch (retryError) {
             const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
-            console.warn(`[Database] Connection test failed after SSL retry: ${retryMsg} (server will continue)`);
+            logger.warn(`[Database] Connection test failed after SSL retry: ${retryMsg} (server will continue)`);
           }
         } else {
-          console.warn(`[Database] Connection test failed: ${testErrorMsg} (server will continue)`);
+          logger.warn(`[Database] Connection test failed: ${testErrorMsg} (server will continue)`);
         }
       }
       
@@ -189,19 +190,19 @@ export async function getDb() {
       _lastError = null;
       
       const uptime = new Date().getTime() - _connectionStartTime.getTime();
-      console.log(`[Database] ✅ Successfully connected to database (${uptime}ms)`);
+      logger.info(`[Database] ✅ Successfully connected to database (${uptime}ms)`);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       _lastError = errorMsg;
-      console.error("[Database] ❌ Failed to connect:", errorMsg);
+      logger.error("[Database] ❌ Failed to connect:", errorMsg);
       
       // Log detailed error info for debugging
       if (errorMsg.includes('SSL')) {
-        console.error("[Database] Tip: SSL error detected. Check your DATABASE_URL format.");
+        logger.error("[Database] Tip: SSL error detected. Check your DATABASE_URL format.");
       } else if (errorMsg.includes('ECONNREFUSED')) {
-        console.error("[Database] Tip: Connection refused. Is the database server running?");
+        logger.error("[Database] Tip: Connection refused. Is the database server running?");
       } else if (errorMsg.includes('authentication')) {
-        console.error("[Database] Tip: Authentication failed. Check database credentials.");
+        logger.error("[Database] Tip: Authentication failed. Check database credentials.");
       }
       
       _db = null;
@@ -211,7 +212,7 @@ export async function getDb() {
   }
   
   if (!process.env.DATABASE_URL) {
-    console.warn("[Database] DATABASE_URL not set - database operations will fail");
+    logger.warn("[Database] DATABASE_URL not set - database operations will fail");
   }
   
   return _db;
@@ -237,7 +238,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
+    logger.warn("[Database] Cannot upsert user: database not available");
     return;
   }
 
@@ -271,7 +272,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       // Auto-assign admin role if openId matches OWNER_OPEN_ID or email is admin email
       values.role = 'admin';
       updateSet.role = 'admin';
-      console.log(`✅ [Database] Auto-promoted ${user.email || user.openId} to admin role`);
+      logger.info(`✅ [Database] Auto-promoted ${user.email || user.openId} to admin role`);
     }
 
     if (!values.lastSignedIn) {
@@ -290,7 +291,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
         set: updateSet,
       });
   } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
+    logger.error("[Database] Failed to upsert user:", error);
     throw error;
   }
 }
@@ -298,7 +299,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 export async function getUserByOpenId(openId: string) {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
+    logger.warn("[Database] Cannot get user: database not available");
     return undefined;
   }
 
@@ -310,7 +311,7 @@ export async function getUserByOpenId(openId: string) {
 export async function getUserByEmail(email: string) {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
+    logger.warn("[Database] Cannot get user: database not available");
     return undefined;
   }
 
@@ -322,7 +323,7 @@ export async function getUserByEmail(email: string) {
 
     return result[0];
   } catch (error) {
-    console.error("[Database] Error in getUserByEmail:", error instanceof Error ? error.message : error);
+    logger.error("[Database] Error in getUserByEmail:", error instanceof Error ? error.message : error);
     return undefined;
   }
 }
@@ -330,7 +331,7 @@ export async function getUserByEmail(email: string) {
 export async function getUserByName(name: string) {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
+    logger.warn("[Database] Cannot get user: database not available");
     return undefined;
   }
 
@@ -342,7 +343,7 @@ export async function getUserByName(name: string) {
 
     return result[0];
   } catch (error) {
-    console.error("[Database] Error in getUserByName:", error instanceof Error ? error.message : error);
+    logger.error("[Database] Error in getUserByName:", error instanceof Error ? error.message : error);
     return undefined;
   }
 }
@@ -350,7 +351,7 @@ export async function getUserByName(name: string) {
 export async function createUser(email: string, fullName?: string) {
   const db = await getDb();
   if (!db) {
-    console.error("[Database] createUser: Database connection not available");
+    logger.error("[Database] createUser: Database connection not available");
     throw new Error("Database connection not available");
   }
 
@@ -398,8 +399,8 @@ export async function createUser(email: string, fullName?: string) {
     return result[0];
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("[Database] createUser failed:", errorMessage);
-    console.error("[Database] Full error:", error);
+    logger.error("[Database] createUser failed:", errorMessage);
+    logger.error("[Database] Full error:", error);
     throw error;
   }
 }
@@ -407,7 +408,7 @@ export async function createUser(email: string, fullName?: string) {
 export async function getUserByEmailOrPhone(identifier: string) {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
+    logger.warn("[Database] Cannot get user: database not available");
     return undefined;
   }
 
@@ -537,13 +538,13 @@ export async function createLoanApplication(data: InsertLoanApplication) {
         insertedApplication.fullName,
         insertedApplication.trackingNumber,
         insertedApplication.requestedAmount
-      ).catch(err => console.error('[Database] Failed to send application submitted email:', err));
+      ).catch(err => logger.error('[Database] Failed to send application submitted email:', err));
     }
     
     return { ...result, trackingNumber };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error in createLoanApplication";
-    console.error("[Database] createLoanApplication error:", errorMsg);
+    logger.error("[Database] createLoanApplication error:", errorMsg);
     throw error; // Re-throw so caller can handle it
   }
 }
@@ -646,7 +647,7 @@ export async function updateLoanApplicationStatus(
               additionalData.approvedAmount
             );
           } catch (smsError) {
-            console.error('Failed to send approval SMS:', smsError);
+            logger.error('Failed to send approval SMS:', smsError);
           }
         }
         break;
@@ -685,7 +686,7 @@ export async function updateLoanApplicationStatus(
         break;
     }
   } catch (emailError) {
-    console.error('Failed to send status update email:', emailError);
+    logger.error('Failed to send status update email:', emailError);
   }
 }
 
@@ -836,7 +837,7 @@ export async function updatePaymentStatus(
       auditContext?.userId,
       auditContext?.ipAddress,
       auditContext?.userAgent
-    ).catch(err => console.warn("[Audit] Failed to log payment status change:", err));
+    ).catch(err => logger.warn("[Audit] Failed to log payment status change:", err));
   }
   
   return result;
@@ -1316,7 +1317,7 @@ export async function getUserBankInfo(userId: number) {
       bankAccountType: user[0].bankAccountType,
     };
   } catch (error) {
-    console.error('Failed to decrypt bank data:', error);
+    logger.error('Failed to decrypt bank data:', error);
     return null;
   }
 }
@@ -2303,7 +2304,7 @@ export async function getUpcomingPayments(daysAhead: number = 7) {
     
     return result;
   } catch (error) {
-    console.error("[db.getUpcomingPayments] Error:", error);
+    logger.error("[db.getUpcomingPayments] Error:", error);
     return [];
   }
 }
@@ -2363,7 +2364,7 @@ export async function getPaymentsDueReminder(daysFromNow: number = 7) {
     
     return result;
   } catch (error) {
-    console.error("[db.getPaymentsDueReminder] Error:", error);
+    logger.error("[db.getPaymentsDueReminder] Error:", error);
     return [];
   }
 }
@@ -2419,7 +2420,7 @@ export async function getOverduePayments(minDays: number = 1, maxDays: number = 
       return daysOverdue >= minDays && daysOverdue <= maxDays;
     });
   } catch (error) {
-    console.error("[db.getOverduePayments] Error:", error);
+    logger.error("[db.getOverduePayments] Error:", error);
     return [];
   }
 }
@@ -2476,7 +2477,7 @@ export async function getDelinquentPayments(minDays: number = 30) {
       return daysOverdue >= minDays;
     });
   } catch (error) {
-    console.error("[db.getDelinquentPayments] Error:", error);
+    logger.error("[db.getDelinquentPayments] Error:", error);
     return [];
   }
 }
@@ -2501,7 +2502,7 @@ export async function markLoanAsDelinquent(loanApplicationId: number) {
     
     return true;
   } catch (error) {
-    console.error("[db.markLoanAsDelinquent] Error:", error);
+    logger.error("[db.markLoanAsDelinquent] Error:", error);
     return false;
   }
 }
@@ -2523,7 +2524,7 @@ export async function getSystemConfig() {
     const configs = await db.select().from(systemConfig).limit(1);
     return configs[0] || null;
   } catch (error) {
-    console.error("[db.getSystemConfig] Error:", error);
+    logger.error("[db.getSystemConfig] Error:", error);
     return null;
   }
 }
@@ -2571,7 +2572,7 @@ export async function updateSystemConfig(data: {
       return await getSystemConfig();
     }
   } catch (error) {
-    console.error("[db.updateSystemConfig] Error:", error);
+    logger.error("[db.updateSystemConfig] Error:", error);
     return null;
   }
 }
@@ -2623,7 +2624,7 @@ export async function saveAPIKey(data: {
       return result[0]?.id || null;
     }
   } catch (error) {
-    console.error("[db.saveAPIKey] Error:", error);
+    logger.error("[db.saveAPIKey] Error:", error);
     return null;
   }
 }
@@ -2655,7 +2656,7 @@ export async function getAPIKey(provider: string, keyName: string) {
       value: decryptedValue,
     };
   } catch (error) {
-    console.error("[db.getAPIKey] Error:", error);
+    logger.error("[db.getAPIKey] Error:", error);
     return null;
   }
 }
@@ -2690,7 +2691,7 @@ export async function getAPIKeysByProvider(provider: string) {
       };
     });
   } catch (error) {
-    console.error("[db.getAPIKeysByProvider] Error:", error);
+    logger.error("[db.getAPIKeysByProvider] Error:", error);
     return [];
   }
 }
@@ -2755,7 +2756,7 @@ export async function saveEmailConfig(data: {
       return result[0]?.id || null;
     }
   } catch (error) {
-    console.error("[db.saveEmailConfig] Error:", error);
+    logger.error("[db.saveEmailConfig] Error:", error);
     return null;
   }
 }
@@ -2789,7 +2790,7 @@ export async function getEmailConfig() {
     
     return config;
   } catch (error) {
-    console.error("[db.getEmailConfig] Error:", error);
+    logger.error("[db.getEmailConfig] Error:", error);
     return null;
   }
 }
@@ -2807,7 +2808,7 @@ export async function getNotificationSettings() {
     const settings = await db.select().from(notificationSettings).limit(1);
     return settings[0] || null;
   } catch (error) {
-    console.error("[db.getNotificationSettings] Error:", error);
+    logger.error("[db.getNotificationSettings] Error:", error);
     return null;
   }
 }
@@ -2859,7 +2860,7 @@ export async function updateNotificationSettings(data: {
       return await getNotificationSettings();
     }
   } catch (error) {
-    console.error("[db.updateNotificationSettings] Error:", error);
+    logger.error("[db.updateNotificationSettings] Error:", error);
     return null;
   }
 }
@@ -2877,7 +2878,7 @@ export async function getCryptoWalletSettings() {
     const [settings] = await db.select().from(cryptoWalletSettings).where(eq(cryptoWalletSettings.isActive, true)).limit(1);
     return settings || null;
   } catch (error) {
-    console.error("[db.getCryptoWalletSettings] Error:", error);
+    logger.error("[db.getCryptoWalletSettings] Error:", error);
     return null;
   }
 }
@@ -2919,7 +2920,7 @@ export async function updateCryptoWalletSettings(data: {
       return await getCryptoWalletSettings();
     }
   } catch (error) {
-    console.error("[db.updateCryptoWalletSettings] Error:", error);
+    logger.error("[db.updateCryptoWalletSettings] Error:", error);
     return null;
   }
 }
@@ -2937,7 +2938,7 @@ export async function getCompanyBankSettings() {
     const [settings] = await db.select().from(companyBankSettings).where(eq(companyBankSettings.isActive, true)).limit(1);
     return settings || null;
   } catch (error) {
-    console.error("[db.getCompanyBankSettings] Error:", error);
+    logger.error("[db.getCompanyBankSettings] Error:", error);
     return null;
   }
 }
@@ -2987,7 +2988,7 @@ export async function updateCompanyBankSettings(data: {
       return await getCompanyBankSettings();
     }
   } catch (error) {
-    console.error("[db.updateCompanyBankSettings] Error:", error);
+    logger.error("[db.updateCompanyBankSettings] Error:", error);
     return null;
   }
 }
@@ -3669,7 +3670,7 @@ export async function logPaymentReminder(loanId: number, daysUntilDue: number) {
 
     return { success: true };
   } catch (error) {
-    console.error("Error logging payment reminder:", error);
+    logger.error("Error logging payment reminder:", error);
     return { success: false };
   }
 }
@@ -3761,7 +3762,7 @@ export async function logAutoPayFailure(loanId: number, reason: string) {
 
     return { success: true };
   } catch (error) {
-    console.error("Error logging auto-pay failure:", error);
+    logger.error("Error logging auto-pay failure:", error);
     return { success: false };
   }
 }
@@ -3790,7 +3791,7 @@ export async function createAuditLog(data: {
     const result = await db.insert(auditLog).values(data).returning();
     return result[0];
   } catch (error) {
-    console.error("Error creating audit log:", error);
+    logger.error("Error creating audit log:", error);
     throw error;
   }
 }
@@ -3835,7 +3836,7 @@ export async function getAuditLogs(filters?: {
 
     return await query;
   } catch (error) {
-    console.error("Error fetching audit logs:", error);
+    logger.error("Error fetching audit logs:", error);
     throw error;
   }
 }
@@ -3873,7 +3874,7 @@ export async function addLoanDocument(data: {
 
     return result[0];
   } catch (error) {
-    console.error("Error adding loan document:", error);
+    logger.error("Error adding loan document:", error);
     throw error;
   }
 }
@@ -3890,7 +3891,7 @@ export async function getLoanDocuments(loanApplicationId: number) {
       .where(eq(loanDocuments.loanApplicationId, loanApplicationId))
       .orderBy(desc(loanDocuments.uploadedAt));
   } catch (error) {
-    console.error("Error fetching loan documents:", error);
+    logger.error("Error fetching loan documents:", error);
     throw error;
   }
 }
@@ -3909,7 +3910,7 @@ export async function getLoanDocument(documentId: number) {
 
     return results[0] || null;
   } catch (error) {
-    console.error("Error fetching loan document:", error);
+    logger.error("Error fetching loan document:", error);
     throw error;
   }
 }
@@ -3938,7 +3939,7 @@ export async function updateDocumentStatus(
 
     return result[0];
   } catch (error) {
-    console.error("Error updating document status:", error);
+    logger.error("Error updating document status:", error);
     throw error;
   }
 }

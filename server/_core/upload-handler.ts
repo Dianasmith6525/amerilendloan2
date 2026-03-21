@@ -1,25 +1,26 @@
 import { Request, Response } from "express";
 import multer from "multer";
 import path from "path";
+import crypto from "crypto";
 import { 
   getLoanApplicationById,
   addLoanDocument,
   getLoanDocument
 } from "../db";
 import { sdk } from "./sdk";
+import { logger } from "./logger";
+
+const UPLOADS_DIR = path.resolve('uploads');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    cb(null, UPLOADS_DIR);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
-    const ext = path.extname(file.originalname);
-    const name = path.basename(file.originalname, ext)
-      .replace(/[^a-zA-Z0-9]/g, '_')
-      .substring(0, 50);
-    cb(null, `${name}-${uniqueSuffix}${ext}`);
+    const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}`;
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${uniqueSuffix}${ext}`);
   }
 });
 
@@ -89,7 +90,7 @@ export async function handleFileUpload(req: Request, res: Response) {
     });
 
   } catch (error) {
-    console.error('Upload error:', error);
+    logger.error('Upload error:', error);
     res.status(500).json({ 
       error: error instanceof Error ? error.message : 'Upload failed' 
     });
@@ -114,11 +115,17 @@ export async function handleFileDownload(req: Request, res: Response) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
+    // Verify file path is within uploads directory to prevent path traversal
+    const resolvedPath = path.resolve(document.filePath);
+    if (!resolvedPath.startsWith(UPLOADS_DIR)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
     // Send file
-    res.download(document.filePath, document.fileName);
+    res.download(resolvedPath, document.fileName);
 
   } catch (error) {
-    console.error('Download error:', error);
+    logger.error('Download error:', error);
     res.status(500).json({ 
       error: error instanceof Error ? error.message : 'Download failed' 
     });

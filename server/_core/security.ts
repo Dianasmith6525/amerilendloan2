@@ -189,7 +189,7 @@ export function logSecurityEvent(
   details: string,
   timestamp: Date = new Date()
 ): void {
-  console.warn(`[SECURITY] ${eventType.toUpperCase()} - User: ${userId || 'unknown'} - ${timestamp.toISOString()} - ${details}`);
+  logger.warn(`[SECURITY] ${eventType.toUpperCase()} - User: ${userId || 'unknown'} - ${timestamp.toISOString()} - ${details}`);
   
   // In production, send to security monitoring service
   // await sendToSecurityMonitoring({ eventType, userId, details, timestamp });
@@ -235,6 +235,7 @@ export function isSafeNumber(num: number, min: number = -2147483648, max: number
  * Hash sensitive data for logging (never log actual values)
  */
 import crypto from 'crypto';
+import { logger } from "./logger";
 
 export function hashForLogging(input: string): string {
   return crypto.createHash('sha256').update(input).digest('hex').substring(0, 8);
@@ -433,7 +434,7 @@ export async function logLoginActivity(
   if (success) {
     const suspiciousCheck = await isSuspiciousLocation(userId, location);
     if (suspiciousCheck.suspicious) {
-      console.log(`[Security] ⚠️ Suspicious login for user ${userId}: ${suspiciousCheck.reason}`);
+      logger.info(`[Security] ⚠️ Suspicious login for user ${userId}: ${suspiciousCheck.reason}`);
       // Send email notification to user about suspicious login
       try {
         const user = await db.getUserById(userId);
@@ -449,7 +450,7 @@ export async function logLoginActivity(
           );
         }
       } catch (emailErr) {
-        console.error('[Security] Failed to send suspicious login alert email:', emailErr);
+        logger.error('[Security] Failed to send suspicious login alert email:', emailErr);
       }
     }
   }

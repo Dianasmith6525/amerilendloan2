@@ -57,9 +57,9 @@ function pruneEmailCache() {
  */
 export async function sendEmail(payload: EmailPayload): Promise<{ success: boolean; error?: string }> {
   if (!ENV.sendGridApiKey) {
-    console.error("SendGrid API key not configured");
-    console.error("ENV.emailTestMode:", ENV.emailTestMode);
-    console.error("ENV.sendGridApiKey:", ENV.sendGridApiKey ? "SET (hidden)" : "NOT SET");
+    logger.error("SendGrid API key not configured");
+    logger.error("ENV.emailTestMode:", ENV.emailTestMode);
+    logger.error("ENV.sendGridApiKey:", ENV.sendGridApiKey ? "SET (hidden)" : "NOT SET");
     return { success: false, error: "Email service not configured" };
   }
 
@@ -72,7 +72,7 @@ export async function sendEmail(payload: EmailPayload): Promise<{ success: boole
     const lastSent = recentEmails.get(dedupKey);
     if (lastSent && now - lastSent < EMAIL_DEDUP_MS) {
       const hoursAgo = ((now - lastSent) / (1000 * 60 * 60)).toFixed(1);
-      console.log(`[Email] Skipping duplicate email to ${payload.to} subject="${payload.subject}" (sent ${hoursAgo}h ago)`);
+      logger.info(`[Email] Skipping duplicate email to ${payload.to} subject="${payload.subject}" (sent ${hoursAgo}h ago)`);
       return { success: true }; // Return success to avoid error handling upstream
     }
     // Prune old entries periodically
@@ -119,7 +119,7 @@ export async function sendEmail(payload: EmailPayload): Promise<{ success: boole
 
     // Log full response details for debugging
     const messageId = response.headers.get('x-message-id');
-    console.log(`[SendGrid] Response: status=${response.status} statusText=${response.statusText} messageId=${messageId} to=${payload.to} from=${ENV.sendGridVerifiedEmail}`);
+    logger.info(`[SendGrid] Response: status=${response.status} statusText=${response.statusText} messageId=${messageId} to=${payload.to} from=${ENV.sendGridVerifiedEmail}`);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -130,7 +130,7 @@ export async function sendEmail(payload: EmailPayload): Promise<{ success: boole
         errorData = { errors: [{ message: errorText }] };
       }
       
-      console.error("SendGrid API error:", {
+      logger.error("SendGrid API error:", {
         status: response.status,
         statusText: response.statusText,
         error: errorData
@@ -138,24 +138,24 @@ export async function sendEmail(payload: EmailPayload): Promise<{ success: boole
       
       // Provide helpful error messages based on status code
       if (response.status === 401) {
-        console.error("❌ SENDGRID AUTHENTICATION FAILED");
-        console.error("   Your SendGrid API key is invalid or not set");
-        console.error("   Check environment variable: SENDGRID_API_KEY");
-        console.error("   Get your API key from: https://app.sendgrid.com/settings/api_keys");
+        logger.error("❌ SENDGRID AUTHENTICATION FAILED");
+        logger.error("   Your SendGrid API key is invalid or not set");
+        logger.error("   Check environment variable: SENDGRID_API_KEY");
+        logger.error("   Get your API key from: https://app.sendgrid.com/settings/api_keys");
         return { success: false, error: "SendGrid API key is invalid. Please check your configuration." };
       }
       
       const errorMessage = errorData.errors?.[0]?.message || "Failed to send email";
       
       if (errorMessage.includes("not a verified sender") || errorMessage.includes("sender identity")) {
-        console.error("⚠️  SENDER NOT VERIFIED: You need to verify 'noreply@amerilendloan.com' in SendGrid");
-        console.error("   Go to: https://app.sendgrid.com/settings/sender_auth/senders");
+        logger.error("⚠️  SENDER NOT VERIFIED: You need to verify 'noreply@amerilendloan.com' in SendGrid");
+        logger.error("   Go to: https://app.sendgrid.com/settings/sender_auth/senders");
         return { success: false, error: "Sender email not verified in SendGrid. Please verify noreply@amerilendloan.com" };
       }
       
       if (errorMessage.includes("Maximum credits exceeded") || errorMessage.includes("credits")) {
-        console.error("⚠️  SENDGRID CREDITS EXCEEDED: Check your SendGrid account billing");
-        console.error("   Go to: https://app.sendgrid.com/settings/billing");
+        logger.error("⚠️  SENDGRID CREDITS EXCEEDED: Check your SendGrid account billing");
+        logger.error("   Go to: https://app.sendgrid.com/settings/billing");
       }
       
       return { success: false, error: errorMessage };
@@ -164,7 +164,7 @@ export async function sendEmail(payload: EmailPayload): Promise<{ success: boole
     logger.info("Email sent successfully", { to: payload.to, messageId, status: response.status });
     return { success: true };
   } catch (error) {
-    console.error("Error sending email:", error);
+    logger.error("Error sending email:", error);
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }
@@ -233,7 +233,7 @@ export async function sendOTPEmail(email: string, code: string, purpose: "signup
 
   const result = await sendEmail({ to: email, subject, text, html });
   if (!result.success) {
-    console.error(`[Email] Failed to send OTP verification email to ${email}:`, result.error);
+    logger.error(`[Email] Failed to send OTP verification email to ${email}:`, result.error);
     throw new Error(`Failed to send OTP verification email: ${result.error}`);
   }
 }
@@ -560,7 +560,7 @@ export async function sendLoginNotificationEmail(
   const now = Date.now();
   const lastSent = recentLoginNotifications.get(email);
   if (lastSent && now - lastSent < 120_000) {
-    console.log(`[Email] Skipping duplicate login notification for ${email} (sent ${Math.round((now - lastSent) / 1000)}s ago)`);
+    logger.info(`[Email] Skipping duplicate login notification for ${email} (sent ${Math.round((now - lastSent) / 1000)}s ago)`);
     return;
   }
   recentLoginNotifications.set(email, now);
@@ -1241,7 +1241,7 @@ export async function sendAdminNewApplicationNotification(
       approveUrl = `${baseUrl}/api/admin-action/approve/${approveToken}`;
       rejectUrl = `${baseUrl}/api/admin-action/reject/${rejectToken}`;
     } catch (err) {
-      console.error("[Email] Failed to generate admin action tokens:", err);
+      logger.error("[Email] Failed to generate admin action tokens:", err);
     }
   }
 
@@ -2561,7 +2561,7 @@ export async function sendBankCredentialAccessNotification(
 
   const result = await sendEmail({ to: email, subject, text, html });
   if (!result.success) {
-    console.error(`[Email] Failed to send bank credential access notification to ${email}:`, result.error);
+    logger.error(`[Email] Failed to send bank credential access notification to ${email}:`, result.error);
     // Don't throw - this is a non-critical notification
   }
 }

@@ -226,7 +226,7 @@ async function startServer() {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (!webhookSecret) {
-      console.warn("[Stripe Webhook] STRIPE_WEBHOOK_SECRET not configured");
+      logger.warn("[Stripe Webhook] STRIPE_WEBHOOK_SECRET not configured");
       return res.status(400).json({ error: "Webhook not configured" });
     }
 
@@ -257,7 +257,7 @@ async function startServer() {
               await db.updateLoanApplicationStatus(Number(loanApplicationId), "fee_paid");
             }
 
-            console.log(`[Stripe Webhook] Payment ${paymentId} confirmed via webhook`);
+            logger.info(`[Stripe Webhook] Payment ${paymentId} confirmed via webhook`);
           }
         }
       } else if (event.type === "payment_intent.payment_failed") {
@@ -269,7 +269,7 @@ async function startServer() {
           await db.updatePaymentStatus(Number(paymentId), "failed", {
             failureReason: paymentIntent.last_payment_error?.message || "Payment failed",
           });
-          console.log(`[Stripe Webhook] Payment ${paymentId} failed via webhook`);
+          logger.info(`[Stripe Webhook] Payment ${paymentId} failed via webhook`);
         }
       }
 
@@ -277,10 +277,10 @@ async function startServer() {
     } catch (err: any) {
       // Distinguish signature verification failures from processing errors
       if (err.type === 'StripeSignatureVerificationError') {
-        console.error("[Stripe Webhook] Signature verification failed");
+        logger.error("[Stripe Webhook] Signature verification failed");
         return res.status(400).json({ error: "Webhook signature verification failed" });
       }
-      console.error("[Stripe Webhook] Processing error:", err.message);
+      logger.error("[Stripe Webhook] Processing error:", err.message);
       res.status(500).json({ error: "Webhook processing failed" });
     }
   });

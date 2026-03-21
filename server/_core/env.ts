@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { logger } from "./logger";
 
 // Define validation schema for critical environment variables
 const envSchema = z.object({
@@ -63,7 +64,7 @@ function validateEnv() {
     const missing = Object.entries(errors)
       .map(([key, msgs]) => `  - ${key}: ${(msgs ?? []).join(", ")}`)
       .join("\n");
-    console.error(`\n[env] Missing or invalid environment variables:\n${missing}\n`);
+    logger.error(`\n[env] Missing or invalid environment variables:\n${missing}\n`);
     if (process.env.NODE_ENV === "production") {
       process.exit(1);
     }

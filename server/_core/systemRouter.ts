@@ -7,6 +7,7 @@ import { invokeLLM } from "./llm";
 import { createBackup, restoreBackup, listBackups, getBackupHealth } from "./database-backup";
 import * as db from "../db";
 import * as path from "path";
+import { logger } from "./logger";
 
 // Helper function to get varied fallback responses based on user intent
 const getFallbackResponse = (userMessage: string): string => {
@@ -148,7 +149,7 @@ export const systemRouter = router({
               }
             }
           } catch (dbError) {
-            console.warn('[AI Support] Failed to fetch user loans for context:', dbError);
+            logger.warn('[AI Support] Failed to fetch user loans for context:', dbError);
           }
         }
 
@@ -178,7 +179,7 @@ export const systemRouter = router({
             userContext,
           };
         } catch (llmError) {
-          console.error('[AI Support] LLM error, using fallback:', llmError);
+          logger.error('[AI Support] LLM error, using fallback:', llmError);
           // Use fallback response if LLM fails
           const fallbackMsg = getFallbackResponse(input.message);
           return {
@@ -189,7 +190,7 @@ export const systemRouter = router({
           };
         }
       } catch (error) {
-        console.error('[AI Support] Error:', error);
+        logger.error('[AI Support] Error:', error);
         return {
           success: false,
           message: "I apologize, but I'm having trouble connecting right now. Please try again or contact support at support@amerilendloan.com or (945) 212-1609.",
@@ -251,7 +252,7 @@ export const systemRouter = router({
           },
         };
       } catch (error) {
-        console.error("[System Health] Error:", error);
+        logger.error("[System Health] Error:", error);
         return {
           database: { connected: false, responseTimeMs: 0, status: "error" },
           backup: { lastBackupTime: null, lastBackupSuccess: false, lastBackupTables: 0, lastBackupRecords: 0, lastBackupFile: null, lastBackupError: "Health check failed", backupFrequencyHours: 6 },
@@ -279,7 +280,7 @@ export const systemRouter = router({
           };
         }
       } catch (error) {
-        console.error("[Backup] Error creating backup:", error);
+        logger.error("[Backup] Error creating backup:", error);
         return {
           success: false,
           message: `Backup failed: ${(error as Error).message}`,
@@ -300,7 +301,7 @@ export const systemRouter = router({
           })),
         };
       } catch (error) {
-        console.error("[Backup] Error listing backups:", error);
+        logger.error("[Backup] Error listing backups:", error);
         return {
           success: false,
           backups: [],
@@ -331,7 +332,7 @@ export const systemRouter = router({
           message: success ? "Backup restored successfully" : "Failed to restore backup",
         };
       } catch (error) {
-        console.error("[Backup] Error restoring backup:", error);
+        logger.error("[Backup] Error restoring backup:", error);
         return {
           success: false,
           message: `Restore failed: ${(error as Error).message}`,

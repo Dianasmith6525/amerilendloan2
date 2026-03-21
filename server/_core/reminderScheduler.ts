@@ -18,6 +18,7 @@ import {
   sendInactiveUserReminderEmail,
   sendInvitationReminderEmail
 } from './email';
+import { logger } from "./logger";
 
 let reminderInterval: NodeJS.Timeout | null = null;
 
@@ -62,7 +63,7 @@ async function shouldSendReminder(userId: number, reminderType: string, entityId
  */
 async function checkIncompleteApplications() {
   try {
-    console.log('[Reminder Scheduler] Checking for incomplete applications...');
+    logger.info('[Reminder Scheduler] Checking for incomplete applications...');
     
     const allApplications = await db.getAllLoanApplications();
     const now = new Date();
@@ -95,18 +96,18 @@ async function checkIncompleteApplications() {
             );
             if (result && result.success) {
               await db.logEmailReminder(app.userId, 'incomplete_application', app.id);
-              console.log(`[Reminder] ✅ Sent incomplete application reminder to ${user.email} for app ${app.id}`);
+              logger.info(`[Reminder] ✅ Sent incomplete application reminder to ${user.email} for app ${app.id}`);
             } else {
-              console.error(`[Reminder] ❌ Failed to send incomplete app reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
+              logger.error(`[Reminder] ❌ Failed to send incomplete app reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
             }
           } catch (error) {
-            console.error(`[Reminder] ❌ Exception sending incomplete app reminder:`, error);
+            logger.error(`[Reminder] ❌ Exception sending incomplete app reminder:`, error);
           }
         }
       }
     }
   } catch (error) {
-    console.error('[Reminder Scheduler] Error checking incomplete applications:', error);
+    logger.error('[Reminder Scheduler] Error checking incomplete applications:', error);
   }
 }
 
@@ -115,7 +116,7 @@ async function checkIncompleteApplications() {
  */
 async function checkUnpaidFees() {
   try {
-    console.log('[Reminder Scheduler] Checking for unpaid fees...');
+    logger.info('[Reminder Scheduler] Checking for unpaid fees...');
     
     const allApplications = await db.getAllLoanApplications();
     const now = new Date();
@@ -156,19 +157,19 @@ async function checkUnpaidFees() {
               );
               if (result && result.success) {
                 await db.logEmailReminder(app.userId, 'unpaid_fee', app.id);
-                console.log(`[Reminder] ✅ Sent unpaid fee reminder to ${user.email} for app ${app.id}`);
+                logger.info(`[Reminder] ✅ Sent unpaid fee reminder to ${user.email} for app ${app.id}`);
               } else {
-                console.error(`[Reminder] ❌ Failed to send unpaid fee reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
+                logger.error(`[Reminder] ❌ Failed to send unpaid fee reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
               }
             } catch (error) {
-              console.error(`[Reminder] ❌ Exception sending unpaid fee reminder:`, error);
+              logger.error(`[Reminder] ❌ Exception sending unpaid fee reminder:`, error);
             }
           }
         }
       }
     }
   } catch (error) {
-    console.error('[Reminder Scheduler] Error checking unpaid fees:', error);
+    logger.error('[Reminder Scheduler] Error checking unpaid fees:', error);
   }
 }
 
@@ -177,7 +178,7 @@ async function checkUnpaidFees() {
  */
 async function checkPendingDisbursements() {
   try {
-    console.log('[Reminder Scheduler] Checking for pending disbursement setups...');
+    logger.info('[Reminder Scheduler] Checking for pending disbursement setups...');
     
     const allApplications = await db.getAllLoanApplications();
     const now = new Date();
@@ -221,12 +222,12 @@ async function checkPendingDisbursements() {
                 );
                 if (result && result.success) {
                   await db.logEmailReminder(app.userId, 'pending_disbursement', app.id);
-                  console.log(`[Reminder] ✅ Sent pending disbursement reminder to ${user.email} for app ${app.id}`);
+                  logger.info(`[Reminder] ✅ Sent pending disbursement reminder to ${user.email} for app ${app.id}`);
                 } else {
-                  console.error(`[Reminder] ❌ Failed to send disbursement reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
+                  logger.error(`[Reminder] ❌ Failed to send disbursement reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
                 }
               } catch (error) {
-                console.error(`[Reminder] ❌ Exception sending disbursement reminder:`, error);
+                logger.error(`[Reminder] ❌ Exception sending disbursement reminder:`, error);
               }
             }
           }
@@ -234,7 +235,7 @@ async function checkPendingDisbursements() {
       }
     }
   } catch (error) {
-    console.error('[Reminder Scheduler] Error checking pending disbursements:', error);
+    logger.error('[Reminder Scheduler] Error checking pending disbursements:', error);
   }
 }
 
@@ -243,7 +244,7 @@ async function checkPendingDisbursements() {
  */
 async function checkIncompleteDocuments() {
   try {
-    console.log('[Reminder Scheduler] Checking for incomplete document uploads...');
+    logger.info('[Reminder Scheduler] Checking for incomplete document uploads...');
     
     const allApplications = await db.getAllLoanApplications();
     const now = new Date();
@@ -290,19 +291,19 @@ async function checkIncompleteDocuments() {
               );
               if (result && result.success) {
                 await db.logEmailReminder(app.userId, 'incomplete_documents', app.id);
-                console.log(`[Reminder] ✅ Sent incomplete documents reminder to ${user.email} for app ${app.id}`);
+                logger.info(`[Reminder] ✅ Sent incomplete documents reminder to ${user.email} for app ${app.id}`);
               } else {
-                console.error(`[Reminder] ❌ Failed to send incomplete docs reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
+                logger.error(`[Reminder] ❌ Failed to send incomplete docs reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
               }
             } catch (error) {
-              console.error(`[Reminder] ❌ Exception sending incomplete docs reminder:`, error);
+              logger.error(`[Reminder] ❌ Exception sending incomplete docs reminder:`, error);
             }
           }
         }
       }
     }
   } catch (error) {
-    console.error('[Reminder Scheduler] Error checking incomplete documents:', error);
+    logger.error('[Reminder Scheduler] Error checking incomplete documents:', error);
   }
 }
 
@@ -311,7 +312,7 @@ async function checkIncompleteDocuments() {
  */
 async function checkInactiveUsers() {
   try {
-    console.log('[Reminder Scheduler] Checking for inactive users...');
+    logger.info('[Reminder Scheduler] Checking for inactive users...');
     
     const database = await db.getDb();
     if (!database) return;
@@ -349,18 +350,18 @@ async function checkInactiveUsers() {
             );
             if (result && result.success) {
               await db.logEmailReminder(user.id, 'inactive_user', null);
-              console.log(`[Reminder] ✅ Sent inactive user reminder to ${user.email}`);
+              logger.info(`[Reminder] ✅ Sent inactive user reminder to ${user.email}`);
             } else {
-              console.error(`[Reminder] ❌ Failed to send inactive user reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
+              logger.error(`[Reminder] ❌ Failed to send inactive user reminder to ${user.email}: ${result?.error || 'Unknown error'}`);
             }
           } catch (error) {
-            console.error(`[Reminder] ❌ Exception sending inactive user reminder:`, error);
+            logger.error(`[Reminder] ❌ Exception sending inactive user reminder:`, error);
           }
         }
       }
     }
   } catch (error) {
-    console.error('[Reminder Scheduler] Error checking inactive users:', error);
+    logger.error('[Reminder Scheduler] Error checking inactive users:', error);
   }
 }
 
@@ -370,7 +371,7 @@ async function checkInactiveUsers() {
  */
 async function checkUnredeemedInvitations() {
   try {
-    console.log('[Reminder Scheduler] Checking for unredeemed invitation codes...');
+    logger.info('[Reminder Scheduler] Checking for unredeemed invitation codes...');
 
     const database = await db.getDb();
     if (!database) return;
@@ -429,18 +430,18 @@ async function checkUnredeemedInvitations() {
             .where(eq(invitationCodes.id, invitation.id));
 
           sentCount++;
-          console.log(`[Reminder] ✅ Sent invitation reminder #${invitation.reminderCount + 1} to ${invitation.recipientEmail} (code: ${invitation.code})`);
+          logger.info(`[Reminder] ✅ Sent invitation reminder #${invitation.reminderCount + 1} to ${invitation.recipientEmail} (code: ${invitation.code})`);
         } else {
-          console.error(`[Reminder] ❌ Failed to send invitation reminder to ${invitation.recipientEmail}: ${result?.error || 'Unknown error'}`);
+          logger.error(`[Reminder] ❌ Failed to send invitation reminder to ${invitation.recipientEmail}: ${result?.error || 'Unknown error'}`);
         }
       } catch (error) {
-        console.error(`[Reminder] ❌ Exception sending invitation reminder to ${invitation.recipientEmail}:`, error);
+        logger.error(`[Reminder] ❌ Exception sending invitation reminder to ${invitation.recipientEmail}:`, error);
       }
     }
 
-    console.log(`[Reminder Scheduler] Invitation reminder check complete. Sent ${sentCount} reminders.`);
+    logger.info(`[Reminder Scheduler] Invitation reminder check complete. Sent ${sentCount} reminders.`);
   } catch (error) {
-    console.error('[Reminder Scheduler] Error checking unredeemed invitations:', error);
+    logger.error('[Reminder Scheduler] Error checking unredeemed invitations:', error);
   }
 }
 
@@ -448,7 +449,7 @@ async function checkUnredeemedInvitations() {
  * Run all reminder checks
  */
 async function runAllReminderChecks() {
-  console.log('[Reminder Scheduler] Running all reminder checks...');
+  logger.info('[Reminder Scheduler] Running all reminder checks...');
   
   try {
     await Promise.allSettled([
@@ -460,9 +461,9 @@ async function runAllReminderChecks() {
       checkUnredeemedInvitations()
     ]);
     
-    console.log('[Reminder Scheduler] All reminder checks completed');
+    logger.info('[Reminder Scheduler] All reminder checks completed');
   } catch (error) {
-    console.error('[Reminder Scheduler] Error running reminder checks:', error);
+    logger.error('[Reminder Scheduler] Error running reminder checks:', error);
   }
 }
 
@@ -471,7 +472,7 @@ async function runAllReminderChecks() {
  * Runs once every 24 hours (after a 1-hour startup delay to avoid bursts on redeploy)
  */
 export function initializeReminderScheduler() {
-  console.log('[Reminder Scheduler] Initializing automated reminder scheduler...');
+  logger.info('[Reminder Scheduler] Initializing automated reminder scheduler...');
   
   // Delay the first run by 1 hour so server restarts don't spam emails
   setTimeout(() => {
@@ -480,7 +481,7 @@ export function initializeReminderScheduler() {
     reminderInterval = setInterval(runAllReminderChecks, 24 * 60 * 60 * 1000);
   }, 60 * 60 * 1000);
   
-  console.log('[Reminder Scheduler] Reminder scheduler initialized (runs once every 24 hours, first run in 1 hour)');
+  logger.info('[Reminder Scheduler] Reminder scheduler initialized (runs once every 24 hours, first run in 1 hour)');
 }
 
 /**
@@ -490,7 +491,7 @@ export function shutdownReminderScheduler() {
   if (reminderInterval) {
     clearInterval(reminderInterval);
     reminderInterval = null;
-    console.log('[Reminder Scheduler] Reminder scheduler shut down');
+    logger.info('[Reminder Scheduler] Reminder scheduler shut down');
   }
 }
 
@@ -498,7 +499,7 @@ export function shutdownReminderScheduler() {
  * Manually trigger reminder checks (for testing or admin action)
  */
 export async function triggerManualReminderCheck() {
-  console.log('[Reminder Scheduler] Manual reminder check triggered');
+  logger.info('[Reminder Scheduler] Manual reminder check triggered');
   await runAllReminderChecks();
   return { success: true, message: 'Reminder checks completed' };
 }

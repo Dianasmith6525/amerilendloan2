@@ -3,6 +3,8 @@
  * Converts IP addresses to geographic location information
  */
 
+import { logger } from "./logger";
+
 export interface IPLocationData {
   country?: string;
   countryCode?: string;
@@ -75,7 +77,7 @@ export async function getIPLocation(ipAddress?: string): Promise<IPLocationData>
       timezone: data.timezone,
     };
   } catch (error) {
-    console.error('Error fetching IP geolocation:', error);
+    logger.error('Error fetching IP geolocation:', error);
     return { city: 'Unknown Location' };
   }
 }

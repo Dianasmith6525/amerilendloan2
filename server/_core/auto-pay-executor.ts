@@ -14,13 +14,14 @@ import {
 } from "../db";
 import { processStripePayment } from "./stripe";
 import { sendPaymentConfirmationEmail, sendPaymentFailedEmail } from "./email";
+import { logger } from "./logger";
 
 /**
  * Process all auto-pay scheduled payments
  * Should run daily via cron job
  */
 export async function processAutoPay() {
-  console.log("[Auto-Pay] Starting auto-pay execution...");
+  logger.info("[Auto-Pay] Starting auto-pay execution...");
   
   try {
     const now = new Date();
@@ -29,7 +30,7 @@ export async function processAutoPay() {
     const autoPayLoans = await getAutoPayEnabledLoans();
     
     if (!autoPayLoans || autoPayLoans.length === 0) {
-      console.log("[Auto-Pay] No auto-pay enabled loans found");
+      logger.info("[Auto-Pay] No auto-pay enabled loans found");
       return { success: true, processed: 0, successful: 0, failed: 0 };
     }
 
@@ -47,21 +48,21 @@ export async function processAutoPay() {
         });
         
         if (!nextPayment) {
-          console.log(`[Auto-Pay] No payment due for loan ${loan.id}`);
+          logger.info(`[Auto-Pay] No payment due for loan ${loan.id}`);
           continue;
         }
         
         // Check if payment was already attempted today
         const alreadyAttempted = await wasPaymentAttemptedToday(loan.id);
         if (alreadyAttempted) {
-          console.log(`[Auto-Pay] Payment already attempted today for loan ${loan.id}`);
+          logger.info(`[Auto-Pay] Payment already attempted today for loan ${loan.id}`);
           continue;
         }
         
         // Get user's default payment method
         const paymentMethod = await getDefaultPaymentMethod(loan.userId);
         if (!paymentMethod) {
-          console.log(`[Auto-Pay] No default payment method for loan ${loan.id}`);
+          logger.info(`[Auto-Pay] No default payment method for loan ${loan.id}`);
           await logAutoPayFailure(loan.id, "No payment method");
           continue;
         }
@@ -69,7 +70,7 @@ export async function processAutoPay() {
         // Get user details
         const user = await getUserById(loan.userId);
         if (!user?.email) {
-          console.log(`[Auto-Pay] No user found for loan ${loan.id}`);
+          logger.info(`[Auto-Pay] No user found for loan ${loan.id}`);
           continue;
         }
         
@@ -87,7 +88,7 @@ export async function processAutoPay() {
             user
           );
         } else {
-          console.error(`[Auto-Pay] Unknown payment method type: ${paymentMethod.type}`);
+          logger.error(`[Auto-Pay] Unknown payment method type: ${paymentMethod.type}`);
           await logAutoPayFailure(loan.id, "Unknown payment method type");
           failed++;
           continue;
@@ -95,7 +96,7 @@ export async function processAutoPay() {
         
         if (paymentResult.success) {
           successful++;
-          console.log(`[Auto-Pay] ✅ Successfully processed payment for loan ${loan.id}`);
+          logger.info(`[Auto-Pay] ✅ Successfully processed payment for loan ${loan.id}`);
           
           // Send confirmation email
           await sendPaymentConfirmationEmail(
@@ -107,7 +108,7 @@ export async function processAutoPay() {
           );
         } else {
           failed++;
-          console.log(`[Auto-Pay] ❌ Failed to process payment for loan ${loan.id}: ${paymentResult.error}`);
+          logger.info(`[Auto-Pay] ❌ Failed to process payment for loan ${loan.id}: ${paymentResult.error}`);
           
           // Log failure
           await logAutoPayFailure(loan.id, paymentResult.error || "Payment failed");
@@ -123,17 +124,17 @@ export async function processAutoPay() {
         }
         
       } catch (loanError) {
-        console.error(`[Auto-Pay] Error processing loan ${loan.id}:`, loanError);
+        logger.error(`[Auto-Pay] Error processing loan ${loan.id}:`, loanError);
         failed++;
         await logAutoPayFailure(loan.id, loanError instanceof Error ? loanError.message : "Unknown error");
       }
     }
     
-    console.log(`[Auto-Pay] Completed. Processed: ${processed}, Successful: ${successful}, Failed: ${failed}`);
+    logger.info(`[Auto-Pay] Completed. Processed: ${processed}, Successful: ${successful}, Failed: ${failed}`);
     return { success: true, processed, successful, failed };
     
   } catch (error) {
-    console.error("[Auto-Pay] Fatal error:", error);
+    logger.error("[Auto-Pay] Fatal error:", error);
     return { 
       success: false, 
       error: error instanceof Error ? error.message : "Unknown error",
@@ -195,7 +196,7 @@ async function processCardAutoPayment(
       return { success: false, error: result.error };
     }
   } catch (error) {
-    console.error("[Auto-Pay] Stripe payment error:", error);
+    logger.error("[Auto-Pay] Stripe payment error:", error);
     return { 
       success: false, 
       error: error instanceof Error ? error.message : "Card payment failed" 

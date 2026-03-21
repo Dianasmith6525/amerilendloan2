@@ -5,6 +5,7 @@ import {
   sendPaymentFailureEmail 
 } from './email';
 import { processStripePayment } from './stripe';
+import { logger } from "./logger";
 
 /**
  * Auto-Pay Scheduler
@@ -17,21 +18,21 @@ let processedCount = 0;
 let failedCount = 0;
 
 export function startAutoPayScheduler() {
-  console.log('[Auto-Pay Scheduler] Initializing auto-pay scheduler...');
+  logger.info('[Auto-Pay Scheduler] Initializing auto-pay scheduler...');
   
   // Run every day at 2:00 AM
   cron.schedule('0 2 * * *', async () => {
-    console.log('[Auto-Pay Scheduler] Starting scheduled auto-pay processing...');
+    logger.info('[Auto-Pay Scheduler] Starting scheduled auto-pay processing...');
     await processAutoPayments();
   });
 
   // Also allow manual trigger for testing
-  console.log('[Auto-Pay Scheduler] ✅ Scheduler started (runs daily at 2:00 AM)');
+  logger.info('[Auto-Pay Scheduler] ✅ Scheduler started (runs daily at 2:00 AM)');
 }
 
 export async function processAutoPayments() {
   if (isProcessing) {
-    console.log('[Auto-Pay Scheduler] Already processing, skipping...');
+    logger.info('[Auto-Pay Scheduler] Already processing, skipping...');
     return {
       success: false,
       message: 'Auto-pay processing already in progress',
@@ -44,21 +45,21 @@ export async function processAutoPayments() {
   failedCount = 0;
 
   try {
-    console.log('[Auto-Pay Scheduler] Fetching auto-pay settings due today...');
+    logger.info('[Auto-Pay Scheduler] Fetching auto-pay settings due today...');
     
     // Get all active auto-pay settings where today is the payment day
     const today = new Date();
     const currentDay = today.getDate();
     
     const autoPaySettings = await db.getAutoPaySettingsDueToday(currentDay);
-    console.log(`[Auto-Pay Scheduler] Found ${autoPaySettings.length} auto-pay settings due today`);
+    logger.info(`[Auto-Pay Scheduler] Found ${autoPaySettings.length} auto-pay settings due today`);
 
     for (const setting of autoPaySettings) {
       try {
         await processIndividualAutoPay(setting);
         processedCount++;
       } catch (error) {
-        console.error(`[Auto-Pay Scheduler] Error processing auto-pay ${setting.id}:`, error);
+        logger.error(`[Auto-Pay Scheduler] Error processing auto-pay ${setting.id}:`, error);
         failedCount++;
         
         // Record failure
@@ -67,7 +68,7 @@ export async function processAutoPayments() {
         // Send failure notification
         const user = await db.getUserById(setting.userId);
         if (!setting.loanId) {
-          console.error(`[Auto-Pay Scheduler] ❌ Loan ID missing for auto-pay ${setting.id}`);
+          logger.error(`[Auto-Pay Scheduler] ❌ Loan ID missing for auto-pay ${setting.id}`);
           return;
         }
         const loan = await db.getLoanApplicationById(setting.loanId);
@@ -85,12 +86,12 @@ export async function processAutoPayments() {
         // Disable auto-pay after 3 consecutive failures
         if (setting.failedAttempts >= 2) { // This will be the 3rd failure
           await db.updateAutoPaySetting(setting.id, { isEnabled: false });
-          console.log(`[Auto-Pay Scheduler] Disabled auto-pay ${setting.id} after 3 consecutive failures`);
+          logger.info(`[Auto-Pay Scheduler] Disabled auto-pay ${setting.id} after 3 consecutive failures`);
         }
       }
     }
 
-    console.log(`[Auto-Pay Scheduler] ✅ Processing complete: ${processedCount} succeeded, ${failedCount} failed`);
+    logger.info(`[Auto-Pay Scheduler] ✅ Processing complete: ${processedCount} succeeded, ${failedCount} failed`);
     
     return {
       success: true,
@@ -99,7 +100,7 @@ export async function processAutoPayments() {
       totalSettings: autoPaySettings.length,
     };
   } catch (error) {
-    console.error('[Auto-Pay Scheduler] Fatal error during auto-pay processing:', error);
+    logger.error('[Auto-Pay Scheduler] Fatal error during auto-pay processing:', error);
     return {
       success: false,
       message: error instanceof Error ? error.message : 'Unknown error',
@@ -110,7 +111,7 @@ export async function processAutoPayments() {
 }
 
 async function processIndividualAutoPay(setting: any) {
-  console.log(`[Auto-Pay Scheduler] Processing auto-pay ${setting.id} for user ${setting.userId}`);
+  logger.info(`[Auto-Pay Scheduler] Processing auto-pay ${setting.id} for user ${setting.userId}`);
   
   // Get user and loan details
   const user = await db.getUserById(setting.userId);
@@ -187,7 +188,7 @@ async function processIndividualAutoPay(setting: any) {
   );
 
   if (payment) {
-    console.log(`[Auto-Pay Scheduler] ✅ Successfully processed auto-pay ${setting.id}, payment ID: ${payment.id}, transaction: ${chargeResult.paymentIntentId}`);
+    logger.info(`[Auto-Pay Scheduler] ✅ Successfully processed auto-pay ${setting.id}, payment ID: ${payment.id}, transaction: ${chargeResult.paymentIntentId}`);
   }
 }
 
@@ -202,6 +203,6 @@ export function getSchedulerStatus() {
 
 // Manual trigger for testing
 export async function triggerManualAutoPayProcessing() {
-  console.log('[Auto-Pay Scheduler] Manual trigger requested');
+  logger.info('[Auto-Pay Scheduler] Manual trigger requested');
   return await processAutoPayments();
 }

@@ -4,6 +4,7 @@
  */
 
 import { ethers } from "ethers";
+import { logger } from "./logger";
 
 /**
  * Supported blockchain networks
@@ -166,7 +167,7 @@ export async function verifyEthereumTransaction(
         : `Transaction has ${confirmations}/${network.confirmationsRequired} confirmations. Please wait.`,
     };
   } catch (error) {
-    console.error("Ethereum verification error:", error);
+    logger.error("Ethereum verification error:", error);
     return {
       valid: false,
       confirmed: false,
@@ -286,7 +287,7 @@ export async function verifyBitcoinTransaction(
           : `Bitcoin transaction has ${confirmations}/${NETWORKS.BTC.confirmationsRequired} confirmations. Please wait.`,
       };
     } catch (apiError) {
-      console.error("Bitcoin API error:", apiError);
+      logger.error("Bitcoin API error:", apiError);
       return {
         valid: false,
         confirmed: false,
@@ -295,7 +296,7 @@ export async function verifyBitcoinTransaction(
       };
     }
   } catch (error) {
-    console.error("Bitcoin verification error:", error);
+    logger.error("Bitcoin verification error:", error);
     return {
       valid: false,
       confirmed: false,
@@ -374,7 +375,7 @@ export async function verifyERC20Transfer(
       message: baseTx.message,
     };
   } catch (error) {
-    console.error("ERC-20 verification error:", error);
+    logger.error("ERC-20 verification error:", error);
     return {
       valid: false,
       confirmed: false,
@@ -459,7 +460,7 @@ export async function getNetworkStatus(currency: "BTC" | "ETH"): Promise<{
       message: "Unable to check network status",
     };
   } catch (error) {
-    console.error("Network status error:", error);
+    logger.error("Network status error:", error);
     return {
       online: false,
       currentBlock: 0,

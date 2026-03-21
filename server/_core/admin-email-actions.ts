@@ -10,6 +10,7 @@ import * as db from "../db";
 import { ENV } from "./env";
 import { COMPANY_INFO } from "./companyConfig";
 import { sendApplicationRejectedNotificationEmail } from "./email";
+import { logger } from "./logger";
 
 const TOKEN_EXPIRY_MS = 72 * 60 * 60 * 1000; // 72 hours
 
@@ -209,7 +210,7 @@ export function registerAdminEmailActionRoutes(app: ReturnType<typeof Router> | 
         details: JSON.stringify({ approvedAmount, source: "email_action" }),
       });
 
-      console.log(`[Admin Email Action] Application ${decoded.id} APPROVED via email link`);
+      logger.info(`[Admin Email Action] Application ${decoded.id} APPROVED via email link`);
 
       return res.send(
         buildResultPage(
@@ -220,7 +221,7 @@ export function registerAdminEmailActionRoutes(app: ReturnType<typeof Router> | 
         )
       );
     } catch (error) {
-      console.error("[Admin Email Action] Approve error:", error);
+      logger.error("[Admin Email Action] Approve error:", error);
       return res.status(500).send(
         buildResultPage("Server Error", "Something went wrong processing this action. Please try the admin dashboard.", false)
       );
@@ -348,7 +349,7 @@ export function registerAdminEmailActionRoutes(app: ReturnType<typeof Router> | 
 </body>
 </html>`);
     } catch (error) {
-      console.error("[Admin Email Action] Reject page error:", error);
+      logger.error("[Admin Email Action] Reject page error:", error);
       return res.status(500).send(
         buildResultPage("Server Error", "Something went wrong. Please try the admin dashboard.", false)
       );
@@ -418,10 +419,10 @@ export function registerAdminEmailActionRoutes(app: ReturnType<typeof Router> | 
           user.name || user.email,
           application.trackingNumber || `APP-${decoded.id}`,
           reason
-        ).catch(err => console.error("[Admin Email Action] Failed to send rejection email:", err));
+        ).catch(err => logger.error("[Admin Email Action] Failed to send rejection email:", err));
       }
 
-      console.log(`[Admin Email Action] Application ${decoded.id} REJECTED via email link. Reason: ${reason}`);
+      logger.info(`[Admin Email Action] Application ${decoded.id} REJECTED via email link. Reason: ${reason}`);
 
       return res.send(
         buildResultPage(
@@ -432,7 +433,7 @@ export function registerAdminEmailActionRoutes(app: ReturnType<typeof Router> | 
         )
       );
     } catch (error) {
-      console.error("[Admin Email Action] Reject error:", error);
+      logger.error("[Admin Email Action] Reject error:", error);
       return res.status(500).send(
         buildResultPage("Server Error", "Something went wrong processing this action.", false)
       );

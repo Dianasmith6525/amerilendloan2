@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { logger } from "./_core/logger";
 import { COOKIE_NAME, SESSION_COOKIE_MS } from "@shared/const";
 import { toTitleCase, capitalizeWords } from "@shared/format";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -126,7 +127,7 @@ const userDeviceRouter = router({
         });
         return { success: true };
       } catch (error) {
-        console.error("Error creating device:", error);
+        logger.error("Error creating device:", error);
         return { success: false, error: "Failed to add device" };
       }
     }),
@@ -135,7 +136,7 @@ const userDeviceRouter = router({
     try {
       return await db.getUserDevices(ctx.user.id);
     } catch (error) {
-      console.error("Error fetching devices:", error);
+      logger.error("Error fetching devices:", error);
       return [];
     }
   }),
@@ -147,7 +148,7 @@ const userDeviceRouter = router({
         await db.removeTrustedDevice(input.deviceId, ctx.user.id);
         return { success: true };
       } catch (error) {
-        console.error("Error removing device:", error);
+        logger.error("Error removing device:", error);
         return { success: false, error: "Failed to remove device" };
       }
     }),
@@ -163,7 +164,7 @@ const userPreferencesRouter = router({
         notificationSettings: {},
       };
     } catch (error) {
-      console.error("Error fetching preferences:", error);
+      logger.error("Error fetching preferences:", error);
       return null;
     }
   }),
@@ -179,7 +180,7 @@ const userPreferencesRouter = router({
         await db.updateUserPreferences(ctx.user.id, input);
         return { success: true };
       } catch (error) {
-        console.error("Error updating preferences:", error);
+        logger.error("Error updating preferences:", error);
         return { success: false, error: "Failed to update preferences" };
       }
     }),
@@ -205,7 +206,7 @@ const userAddressRouter = router({
         });
         return { success: true, data: result };
       } catch (error) {
-        console.error('Error adding address:', error);
+        logger.error('Error adding address:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to add address',
@@ -217,7 +218,7 @@ const userAddressRouter = router({
     try {
       return await db.getUserAddresses(ctx.user.id);
     } catch (error) {
-      console.error('Error fetching addresses:', error);
+      logger.error('Error fetching addresses:', error);
       return [];
     }
   }),
@@ -238,7 +239,7 @@ const userAddressRouter = router({
         await db.updateAddress(addressId, updateData);
         return { success: true };
       } catch (error) {
-        console.error('Error updating address:', error);
+        logger.error('Error updating address:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to update address',
@@ -253,7 +254,7 @@ const userAddressRouter = router({
         await db.deleteAddress(input.addressId, ctx.user.id);
         return { success: true };
       } catch (error) {
-        console.error('Error deleting address:', error);
+        logger.error('Error deleting address:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to delete address',
@@ -288,16 +289,21 @@ const bankAccountRouter = router({
         });
         return { success: true };
       } catch (error) {
-        console.error("Error adding bank account:", error);
+        logger.error("Error adding bank account:", error);
         return { success: false, error: "Failed to add account" };
       }
     }),
 
   list: protectedProcedure.query(async ({ ctx }) => {
     try {
-      return await db.getUserBankAccounts(ctx.user.id);
+      const accounts = await db.getUserBankAccounts(ctx.user.id);
+      return accounts.map(a => ({
+        ...a,
+        accountNumber: a.accountNumber ? `****${a.accountNumber.slice(-4)}` : null,
+        routingNumber: a.routingNumber ? `****${a.routingNumber.slice(-4)}` : null,
+      }));
     } catch (error) {
-      console.error("Error fetching bank accounts:", error);
+      logger.error("Error fetching bank accounts:", error);
       return [];
     }
   }),
@@ -309,7 +315,7 @@ const bankAccountRouter = router({
         await db.removeBankAccount(input.accountId, ctx.user.id);
         return { success: true };
       } catch (error) {
-        console.error("Error removing bank account:", error);
+        logger.error("Error removing bank account:", error);
         return { success: false, error: "Failed to remove account" };
       }
     }),
@@ -335,7 +341,7 @@ const bankAccountRouter = router({
           ));
         return { success: true };
       } catch (error) {
-        console.error("Error setting primary bank account:", error);
+        logger.error("Error setting primary bank account:", error);
         return { success: false, error: "Failed to set primary account" };
       }
     }),
@@ -357,7 +363,7 @@ const bankAccountRouter = router({
           ));
         return { success: true, message: "Account verified successfully" };
       } catch (error) {
-        console.error("Error verifying bank account:", error);
+        logger.error("Error verifying bank account:", error);
         return { success: false, error: "Failed to verify account" };
       }
     }),
@@ -368,7 +374,7 @@ const bankAccountRouter = router({
 // ============================================
 function generateRefNumber(): string {
   const ts = Date.now().toString(36).toUpperCase();
-  const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const rand = crypto.randomBytes(6).toString('hex').substring(0, 6).toUpperCase();
   return `TXN-${ts}${rand}`;
 }
 
@@ -416,7 +422,7 @@ const bankingRouter = router({
       id: a.id,
       bankName: a.bankName,
       accountType: a.accountType,
-      accountNumber: a.accountNumber,
+      accountNumberLast4: a.accountNumber?.slice(-4) ?? null,
       balance: a.balance,
       availableBalance: a.availableBalance,
       isPrimary: a.isPrimary,
@@ -710,7 +716,7 @@ const bankingRouter = router({
           ${getEmailFooter()}`,
         });
       } catch (emailErr) {
-        console.error("[MobileDeposit] Failed to send admin notification:", emailErr);
+        logger.error("[MobileDeposit] Failed to send admin notification:", emailErr);
       }
 
       return { success: true, referenceNumber: refNum, transaction: tx, holdMessage: "Funds will be available in 1-2 business days after verification." };
@@ -926,7 +932,7 @@ const kycRouter = router({
       const kyc = await db.getKycVerification(ctx.user.id);
       return kyc || { status: "not_started", userId: ctx.user.id };
     } catch (error) {
-      console.error("Error fetching KYC:", error);
+      logger.error("Error fetching KYC:", error);
       return null;
     }
   }),
@@ -957,12 +963,12 @@ const kycRouter = router({
             ctx.user.email,
             input.documentType,
             input.documentUrl.split('/').pop() || input.documentType
-          ).catch(err => console.error('[Email] Failed to send admin document notification:', err));
+          ).catch(err => logger.error('[Email] Failed to send admin document notification:', err));
         }
 
         return { success: true };
       } catch (error) {
-        console.error("Error uploading document:", error);
+        logger.error("Error uploading document:", error);
         return { success: false, error: "Failed to upload document" };
       }
     }),
@@ -971,7 +977,7 @@ const kycRouter = router({
     try {
       return await db.getUserDocuments(ctx.user.id);
     } catch (error) {
-      console.error("Error fetching documents:", error);
+      logger.error("Error fetching documents:", error);
       return [];
     }
   }),
@@ -982,7 +988,7 @@ const loanOfferRouter = router({
     try {
       return await db.getUserLoanOffers(ctx.user.id);
     } catch (error) {
-      console.error("Error fetching loan offers:", error);
+      logger.error("Error fetching loan offers:", error);
       return [];
     }
   }),
@@ -994,7 +1000,7 @@ const loanOfferRouter = router({
         await db.acceptLoanOffer(input.offerId);
         return { success: true };
       } catch (error) {
-        console.error("Error accepting offer:", error);
+        logger.error("Error accepting offer:", error);
         return { success: false, error: "Failed to accept offer" };
       }
     }),
@@ -1007,7 +1013,7 @@ const paymentScheduleRouter = router({
       try {
         return await db.getPaymentSchedule(input.loanApplicationId);
       } catch (error) {
-        console.error("Error fetching payment schedule:", error);
+        logger.error("Error fetching payment schedule:", error);
         return [];
       }
     }),
@@ -1019,7 +1025,7 @@ const paymentScheduleRouter = router({
         try {
           return await db.getAutopaySettings(input.loanApplicationId);
         } catch (error) {
-          console.error("Error fetching autopay settings:", error);
+          logger.error("Error fetching autopay settings:", error);
           return null;
         }
       }),
@@ -1036,7 +1042,7 @@ const paymentScheduleRouter = router({
           await db.updateAutopaySettings(input.loanApplicationId, input);
           return { success: true };
         } catch (error) {
-          console.error("Error updating autopay:", error);
+          logger.error("Error updating autopay:", error);
           return { success: false, error: "Failed to update autopay" };
         }
       }),
@@ -1050,7 +1056,7 @@ const notificationRouter = router({
       try {
         return await db.getUserNotifications(ctx.user.id, input.limit);
       } catch (error) {
-        console.error("Error fetching notifications:", error);
+        logger.error("Error fetching notifications:", error);
         return [];
       }
     }),
@@ -1062,7 +1068,7 @@ const notificationRouter = router({
         await db.markNotificationAsRead(input.notificationId);
         return { success: true };
       } catch (error) {
-        console.error("Error marking notification as read:", error);
+        logger.error("Error marking notification as read:", error);
         return { success: false, error: "Failed to update notification" };
       }
     }),
@@ -1073,7 +1079,7 @@ const referralRouter = router({
     try {
       return await db.getUserReferrals(ctx.user.id);
     } catch (error) {
-      console.error("Error fetching referrals:", error);
+      logger.error("Error fetching referrals:", error);
       return [];
     }
   }),
@@ -1088,7 +1094,7 @@ const referralRouter = router({
         totalRedeemed: 0,
       };
     } catch (error) {
-      console.error("Error fetching rewards balance:", error);
+      logger.error("Error fetching rewards balance:", error);
       return null;
     }
   }),
@@ -1352,7 +1358,7 @@ const adminBankingRouter = router({
           details: `Mobile deposit ${tx.referenceNumber} for $${(tx.amount / 100).toFixed(2)} ${input.approved ? "approved" : "rejected"} (user ID: ${tx.userId})${input.adminNotes ? ": " + input.adminNotes : ""}`,
         });
       } catch (e) {
-        console.error("Failed to create audit log:", e);
+        logger.error("Failed to create audit log:", e);
       }
 
       return { success: true, status: input.approved ? "completed" : "failed" };
@@ -1411,7 +1417,7 @@ const adminBankingRouter = router({
           details: `Bank account #${input.accountId} (user ${account.userId}) ${input.freeze ? "frozen" : "unfrozen"}: ${input.reason}`,
         });
       } catch (e) {
-        console.error("Failed to create audit log:", e);
+        logger.error("Failed to create audit log:", e);
       }
 
       // Send email notification to account holder
@@ -1432,7 +1438,7 @@ const adminBankingRouter = router({
           );
         }
       } catch (e) {
-        console.error("Failed to send bank freeze notification email:", e);
+        logger.error("Failed to send bank freeze notification email:", e);
       }
 
       return { success: true, frozen: input.freeze };
@@ -1457,7 +1463,7 @@ const adminCryptoWalletRouter = router({
       
       return settings;
     } catch (error) {
-      console.error("Error fetching crypto wallet settings:", error);
+      logger.error("Error fetching crypto wallet settings:", error);
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
     }
   }),
@@ -1485,7 +1491,7 @@ const adminCryptoWalletRouter = router({
 
         return { success: true, settings: updated };
       } catch (error) {
-        console.error("Error updating crypto wallet settings:", error);
+        logger.error("Error updating crypto wallet settings:", error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       }
     }),
@@ -1498,7 +1504,7 @@ const adminCompanyBankRouter = router({
       const settings = await db.getCompanyBankSettings();
       return settings;
     } catch (error) {
-      console.error("Error fetching company bank settings:", error);
+      logger.error("Error fetching company bank settings:", error);
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
     }
   }),
@@ -1530,7 +1536,7 @@ const adminCompanyBankRouter = router({
 
         return { success: true, settings: updated };
       } catch (error) {
-        console.error("Error updating company bank settings:", error);
+        logger.error("Error updating company bank settings:", error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       }
     }),
@@ -1556,7 +1562,7 @@ const companyBankRouter = router({
         instructions: settings.instructions,
       };
     } catch (error) {
-      console.error("Error fetching company bank settings for payment:", error);
+      logger.error("Error fetching company bank settings for payment:", error);
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
     }
   }),
@@ -2168,8 +2174,9 @@ const collectionsRouter = router({
 function generateInvitationCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I,O,0,1 for readability
   let code = "AL-";
+  const bytes = crypto.randomBytes(8);
   for (let i = 0; i < 8; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+    code += chars.charAt(bytes[i] % chars.length);
   }
   return code;
 }
@@ -2227,11 +2234,11 @@ const invitationCodesRouter = router({
               expiresAt,
             });
             emailSent = true;
-            console.log(`[Invitations] ✅ Email sent to ${input.recipientEmail} with code ${code.slice(0, 3)}***`);
+            logger.info(`[Invitations] ✅ Email sent to ${input.recipientEmail} with code ${code.slice(0, 3)}***`);
           }
         } catch (emailErr: any) {
           emailError = emailErr?.message || "Unknown email error";
-          console.warn("[Invitations] Email send failed (code still created):", emailErr);
+          logger.warn("[Invitations] Email send failed (code still created):", emailErr);
         }
       }
 
@@ -2394,7 +2401,7 @@ const invitationCodesRouter = router({
           );
         }
       } catch (err) {
-        console.warn("[Invitations] Resend email failed:", err);
+        logger.warn("[Invitations] Resend email failed:", err);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to resend email" });
       }
 
@@ -2492,7 +2499,7 @@ const virtualCardsRouter = router({
         cvv: "***",
       }));
     } catch (error) {
-      console.error('[VirtualCards] Get cards error:', error);
+      logger.error('[VirtualCards] Get cards error:', error);
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to get virtual cards" });
     }
   }),
@@ -2528,7 +2535,7 @@ const virtualCardsRouter = router({
         };
       } catch (error) {
         if (error instanceof TRPCError) throw error;
-        console.error('[VirtualCards] Reveal error:', error);
+        logger.error('[VirtualCards] Reveal error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to reveal card" });
       }
     }),
@@ -2559,7 +2566,7 @@ const virtualCardsRouter = router({
         return txns;
       } catch (error) {
         if (error instanceof TRPCError) throw error;
-        console.error('[VirtualCards] Get transactions error:', error);
+        logger.error('[VirtualCards] Get transactions error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to get transactions" });
       }
     }),
@@ -2594,7 +2601,7 @@ const virtualCardsRouter = router({
         return { success: true, status: newStatus };
       } catch (error) {
         if (error instanceof TRPCError) throw error;
-        console.error('[VirtualCards] Toggle freeze error:', error);
+        logger.error('[VirtualCards] Toggle freeze error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to update card" });
       }
     }),
@@ -2640,7 +2647,7 @@ const virtualCardsRouter = router({
         return { success: true };
       } catch (error) {
         if (error instanceof TRPCError) throw error;
-        console.error('[VirtualCards] Update settings error:', error);
+        logger.error('[VirtualCards] Update settings error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to update card settings" });
       }
     }),
@@ -2665,12 +2672,13 @@ const virtualCardsRouter = router({
         // Generate card number (Visa-like: starts with 4)
         const generateCardNumber = () => {
           let num = "4";
-          for (let i = 1; i < 16; i++) num += Math.floor(Math.random() * 10).toString();
+          const bytes = crypto.randomBytes(15);
+          for (let i = 1; i < 16; i++) num += (bytes[i] % 10).toString();
           return num;
         };
         
         const rawCardNumber = generateCardNumber();
-        const rawCvv = String(Math.floor(100 + Math.random() * 900));
+        const rawCvv = String(100 + (crypto.randomBytes(2).readUInt16BE(0) % 900));
         const last4 = rawCardNumber.slice(-4);
         
         // Expiry: 3 years from now
@@ -2706,7 +2714,7 @@ const virtualCardsRouter = router({
           })
           .returning();
         
-        console.log(`[VirtualCards] Card issued to user ${input.userId}, last4: ${last4}`);
+        logger.info(`[VirtualCards] Card issued to user ${input.userId}, last4: ${last4}`);
         return {
           success: true,
           card: {
@@ -2719,7 +2727,7 @@ const virtualCardsRouter = router({
           },
         };
       } catch (error) {
-        console.error('[VirtualCards] Issue card error:', error);
+        logger.error('[VirtualCards] Issue card error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to issue virtual card" });
       }
     }),
@@ -2754,7 +2762,7 @@ const virtualCardsRouter = router({
           .where(eq(schema.virtualCards.id, input.cardId));
         return { success: true };
       } catch (error) {
-        console.error('[VirtualCards] Cancel card error:', error);
+        logger.error('[VirtualCards] Cancel card error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to cancel card" });
       }
     }),
@@ -2801,7 +2809,7 @@ const virtualCardsRouter = router({
             details: `Virtual card #${input.cardId} (user ${card.userId}) ${input.freeze ? "frozen" : "unfrozen"}: ${input.reason}`,
           });
         } catch (e) {
-          console.error("Failed to create audit log:", e);
+          logger.error("Failed to create audit log:", e);
         }
 
         // Send email notification to card holder
@@ -2824,13 +2832,13 @@ const virtualCardsRouter = router({
             );
           }
         } catch (e) {
-          console.error("Failed to send card freeze notification email:", e);
+          logger.error("Failed to send card freeze notification email:", e);
         }
 
         return { success: true, status: newStatus };
       } catch (error) {
         if (error instanceof TRPCError) throw error;
-        console.error('[VirtualCards] Admin freeze error:', error);
+        logger.error('[VirtualCards] Admin freeze error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to update card" });
       }
     }),
@@ -2859,7 +2867,7 @@ const virtualCardsRouter = router({
           .where(eq(schema.virtualCards.id, input.cardId));
         
         // Create a credit transaction (positive = money loaded onto card)
-        const refNum = `CR${Date.now()}${Math.floor(Math.random() * 1000)}`;
+        const refNum = `CR${Date.now()}${crypto.randomBytes(2).readUInt16BE(0) % 1000}`;
         await dbConn
           .insert(schema.virtualCardTransactions)
           .values({
@@ -2876,7 +2884,7 @@ const virtualCardsRouter = router({
         return { success: true, newBalance };
       } catch (error) {
         if (error instanceof TRPCError) throw error;
-        console.error('[VirtualCards] Add balance error:', error);
+        logger.error('[VirtualCards] Add balance error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to add balance" });
       }
     }),
@@ -2910,7 +2918,7 @@ const virtualCardsRouter = router({
           cvv: "***",
         }));
       } catch (error) {
-        console.error('[VirtualCards] Admin list error:', error);
+        logger.error('[VirtualCards] Admin list error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to list cards" });
       }
     }),
@@ -2982,11 +2990,11 @@ const virtualCardsRouter = router({
           })
           .returning();
 
-        console.log(`[PhysicalCard] Request #${request.id} created for virtual card ${input.virtualCardId}`);
+        logger.info(`[PhysicalCard] Request #${request.id} created for virtual card ${input.virtualCardId}`);
         return { success: true, requestId: request.id, status: "pending" };
       } catch (error) {
         if (error instanceof TRPCError) throw error;
-        console.error('[PhysicalCard] Request error:', error);
+        logger.error('[PhysicalCard] Request error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to request physical card" });
       }
     }),
@@ -3011,7 +3019,7 @@ const virtualCardsRouter = router({
         
         return requests;
       } catch (error) {
-        console.error('[PhysicalCard] Get request error:', error);
+        logger.error('[PhysicalCard] Get request error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to get physical card request" });
       }
     }),
@@ -3036,7 +3044,7 @@ const virtualCardsRouter = router({
         const requests = await query.orderBy(desc(schema.physicalCardRequests.requestedAt));
         return requests;
       } catch (error) {
-        console.error('[PhysicalCard] Admin list error:', error);
+        logger.error('[PhysicalCard] Admin list error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to list physical card requests" });
       }
     }),
@@ -3104,11 +3112,11 @@ const virtualCardsRouter = router({
           .set(updateData)
           .where(eq(schema.physicalCardRequests.id, input.requestId));
 
-        console.log(`[PhysicalCard] Request #${input.requestId} updated to status: ${input.status}`);
+        logger.info(`[PhysicalCard] Request #${input.requestId} updated to status: ${input.status}`);
         return { success: true, status: input.status };
       } catch (error) {
         if (error instanceof TRPCError) throw error;
-        console.error('[PhysicalCard] Update status error:', error);
+        logger.error('[PhysicalCard] Update status error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to update physical card request" });
       }
     }),
@@ -3156,11 +3164,11 @@ const virtualCardsRouter = router({
           })
           .where(eq(schema.physicalCardRequests.id, input.requestId));
 
-        console.log(`[PhysicalCard] Card #${input.requestId} activated by user ${ctx.user!.id}`);
+        logger.info(`[PhysicalCard] Card #${input.requestId} activated by user ${ctx.user!.id}`);
         return { success: true, message: "Physical card activated successfully!" };
       } catch (error) {
         if (error instanceof TRPCError) throw error;
-        console.error('[PhysicalCard] Activation error:', error);
+        logger.error('[PhysicalCard] Activation error:', error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to activate physical card" });
       }
     }),
@@ -3201,7 +3209,7 @@ export const appRouter = router({
         ctx.res.clearCookie(cookieName, { path: '/', httpOnly: false, secure: true, sameSite: 'lax' });
       }
       
-      console.log('[Auth] User logged out successfully - all cookies cleared');
+      logger.info('[Auth] User logged out successfully - all cookies cleared');
       return {
         success: true,
       } as const;
@@ -3249,7 +3257,7 @@ export const appRouter = router({
               await sendPasswordChangeConfirmationEmail(userEmail, userName);
             }
           } catch (emailErr) {
-            console.error('[Email] Failed to send password change notification:', emailErr);
+            logger.error('[Email] Failed to send password change notification:', emailErr);
             // Don't throw - email notification is not critical
           }
           
@@ -3300,15 +3308,15 @@ export const appRouter = router({
               await sendProfileUpdateConfirmationEmail(ctx.user.email, ctx.user.name || 'User', changesDescription);
             }
           } catch (emailErr) {
-            console.error('[Email] Failed to send profile update notification:', emailErr);
+            logger.error('[Email] Failed to send profile update notification:', emailErr);
           }
           
           await sendEmailChangeNotification(ctx.user.email || '', input.newEmail, ctx.user.name || 'User')
-            .catch(err => console.error('[Email] Failed to send email change notification:', err));
+            .catch(err => logger.error('[Email] Failed to send email change notification:', err));
           
           // Send admin notification for email change
           sendAdminEmailChangeNotification(ctx.user.name || 'User', ctx.user.email || '', input.newEmail)
-            .catch(err => console.error('[Email] Failed to send admin email change notification:', err));
+            .catch(err => logger.error('[Email] Failed to send admin email change notification:', err));
           
           return { success: true, message: 'Email updated successfully. Check both emails for verification.' };
         } catch (error) {
@@ -3338,7 +3346,7 @@ export const appRouter = router({
             bankAccountType: bankInfo.bankAccountType,
           };
         } catch (error) {
-          console.error('[getBankInfo] Error:', error);
+          logger.error('[getBankInfo] Error:', error);
           return null;
         }
       }),
@@ -3374,20 +3382,20 @@ export const appRouter = router({
               const changesDescription = `Bank Account Holder Name: ${input.bankAccountHolderName}\nAccount Type: ${input.bankAccountType}\n\nThe last 4 digits of the account number are secured.`;
               await sendProfileUpdateConfirmationEmail(ctx.user.email, ctx.user.name || 'User', changesDescription);
             } catch (emailErr) {
-              console.error('[Email] Failed to send profile update notification:', emailErr);
+              logger.error('[Email] Failed to send profile update notification:', emailErr);
             }
             
             await sendBankInfoChangeNotification(ctx.user.email, ctx.user.name || 'User')
-              .catch(err => console.error('[Email] Failed to send bank info change notification:', err));
+              .catch(err => logger.error('[Email] Failed to send bank info change notification:', err));
             
             // Send admin notification for bank info change
             sendAdminBankInfoChangeNotification(ctx.user.name || 'User', ctx.user.email)
-              .catch(err => console.error('[Email] Failed to send admin bank info change notification:', err));
+              .catch(err => logger.error('[Email] Failed to send admin bank info change notification:', err));
           }
           
           return { success: true, message: 'Bank information updated successfully' };
         } catch (error: any) {
-          console.error('[updateBankInfo] Error:', error?.message || error);
+          logger.error('[updateBankInfo] Error:', error?.message || error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to update bank information"
@@ -3847,7 +3855,7 @@ export const appRouter = router({
               ctx.user.name,
               input.reason || undefined,
               getClientIP(ctx.req)
-            ).catch(err => console.error('[Email] Failed to send account deletion email:', err));
+            ).catch(err => logger.error('[Email] Failed to send account deletion email:', err));
           }
 
           return { success: true, message: 'Account deletion request submitted. Check your email for confirmation.' };
@@ -3942,9 +3950,9 @@ export const appRouter = router({
                   ipAddress,
                   userAgent
                 );
-                console.log('[Security] Login notification sent to:', user.email);
+                logger.info('[Security] Login notification sent to:', user.email);
               } catch (err) {
-                console.error('[Security] CRITICAL: Failed to send login notification:', err);
+                logger.error('[Security] CRITICAL: Failed to send login notification:', err);
                 // Continue login but log the security issue
               }
             }
@@ -3953,7 +3961,7 @@ export const appRouter = router({
           return { success: true, user: result.user?.email };
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
-          console.error("[Auth] Supabase login error:", errorMsg);
+          logger.error("[Auth] Supabase login error:", errorMsg);
           
           // Provide user-friendly error messages
           if (errorMsg.includes("invalid") || errorMsg.includes("API")) {
@@ -3988,7 +3996,7 @@ export const appRouter = router({
             : await db.getUserByName(input.email);
           
           if (!user) {
-            console.warn(`[Auth] Login attempt for non-existent user: ${input.email}`);
+            logger.warn(`[Auth] Login attempt for non-existent user: ${input.email}`);
             throw new TRPCError({
               code: "UNAUTHORIZED",
               message: "Invalid email or password"
@@ -3997,7 +4005,7 @@ export const appRouter = router({
 
           // Check if user has a password hash stored
           if (!user.passwordHash) {
-            console.warn(`[Auth] User exists but no password hash stored: ${input.email} (loginMethod: ${user.loginMethod})`);
+            logger.warn(`[Auth] User exists but no password hash stored: ${input.email} (loginMethod: ${user.loginMethod})`);
             throw new TRPCError({
               code: "UNAUTHORIZED",
               message: "This account does not have a password set. Please use 'Forgot Password' to create one, or sign in with Email Code."
@@ -4008,14 +4016,14 @@ export const appRouter = router({
           const isPasswordValid = await bcrypt.compare(input.password, user.passwordHash);
           
           if (!isPasswordValid) {
-            console.warn(`[Auth] Invalid password for user: ${input.email}`);
+            logger.warn(`[Auth] Invalid password for user: ${input.email}`);
             throw new TRPCError({
               code: "UNAUTHORIZED",
               message: "Invalid email or password"
             });
           }
 
-          console.log(`[Auth] Successful password login for user: ${input.email}`);
+          logger.info(`[Auth] Successful password login for user: ${input.email}`);
           
           // Password is valid - create session
           const cookieOptions = getSessionCookieOptions(ctx.req);
@@ -4043,9 +4051,9 @@ export const appRouter = router({
                 ipAddress,
                 userAgent
               );
-              console.log('[Security] Login notification sent to:', user.email);
+              logger.info('[Security] Login notification sent to:', user.email);
             } catch (err) {
-              console.error('[Security] CRITICAL: Failed to send login notification:', err);
+              logger.error('[Security] CRITICAL: Failed to send login notification:', err);
               // Continue login but log the security issue
             }
           }
@@ -4061,7 +4069,7 @@ export const appRouter = router({
           }
           
           const errorMsg = error instanceof Error ? error.message : String(error);
-          console.error("[Auth] Password login error:", errorMsg);
+          logger.error("[Auth] Password login error:", errorMsg);
           
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
@@ -4094,7 +4102,7 @@ export const appRouter = router({
             message: "An account exists with this email. Please login or use the forgot password feature."
           };
         } catch (error) {
-          console.error("[Auth] Error checking email:", error);
+          logger.error("[Auth] Error checking email:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to check email"
@@ -4132,7 +4140,7 @@ export const appRouter = router({
             message: "An account exists with this phone number. Please login with your associated email."
           };
         } catch (error) {
-          console.error("[Auth] Error checking phone:", error);
+          logger.error("[Auth] Error checking phone:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to check phone number"
@@ -4184,7 +4192,7 @@ export const appRouter = router({
             hasDuplicate: true
           };
         } catch (error) {
-          console.error("[Auth] Error checking SSN:", error);
+          logger.error("[Auth] Error checking SSN:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to check SSN"
@@ -4353,7 +4361,7 @@ export const appRouter = router({
         try {
           await sendOTPEmail(email, code, input.purpose);
         } catch (emailErr: any) {
-          console.error('[OTP] Failed to send OTP email:', emailErr?.message || emailErr);
+          logger.error('[OTP] Failed to send OTP email:', emailErr?.message || emailErr);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to send verification code. Please try again or contact support."
@@ -4414,14 +4422,14 @@ export const appRouter = router({
                   ipAddress,
                   userAgent
                 );
-                console.log('[Security] Login notification sent to:', user.email);
+                logger.info('[Security] Login notification sent to:', user.email);
               } catch (emailErr) {
-                console.error('[Security] CRITICAL: Failed to send login notification:', emailErr);
+                logger.error('[Security] CRITICAL: Failed to send login notification:', emailErr);
                 // Continue with login but log the security issue
               }
             }
           } catch (err) {
-            console.error('[Security] Error getting user info for login notification:', err);
+            logger.error('[Security] Error getting user info for login notification:', err);
             // Continue with login - user lookup failure shouldn't block authentication
           }
         }
@@ -4474,21 +4482,21 @@ export const appRouter = router({
             if (isNewUser && input.purpose === "signup" && user.email) {
               try {
                 await sendSignupWelcomeEmail(user.email, user.name || "User");
-                console.log(`[Email] Signup welcome email sent to ${user.email}`);
+                logger.info(`[Email] Signup welcome email sent to ${user.email}`);
               } catch (err) {
-                console.error('[Email] Failed to send signup welcome email:', err);
+                logger.error('[Email] Failed to send signup welcome email:', err);
               }
               
               // Send admin notification for new signup
               try {
                 await sendAdminSignupNotification(user.name || "User", user.email, "");
-                console.log(`[Email] Admin signup notification sent for ${user.email}`);
+                logger.info(`[Email] Admin signup notification sent for ${user.email}`);
               } catch (err) {
-                console.error('[Email] Failed to send admin signup notification:', err);
+                logger.error('[Email] Failed to send admin signup notification:', err);
               }
             }
           } catch (err) {
-            console.error('[OTP] Failed to establish session after verification:', err);
+            logger.error('[OTP] Failed to establish session after verification:', err);
             // Do not expose internal error details to client
             throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to establish session' });
           }
@@ -4554,7 +4562,7 @@ export const appRouter = router({
         // Send password reset confirmation email in background
         if (user.email) {
           sendPasswordResetConfirmationEmail(user.email, user.name || undefined)
-            .catch(err => console.error('[Email] Failed to send password reset confirmation:', err));
+            .catch(err => logger.error('[Email] Failed to send password reset confirmation:', err));
         }
 
         return { success: true, message: 'Password updated successfully' };
@@ -4587,7 +4595,7 @@ export const appRouter = router({
                   user.name || user.email,
                   `Multiple failed login attempts detected from IP: ${ipAddress}`,
                   ipAddress
-                ).catch(err => console.error('Failed to send alert:', err));
+                ).catch(err => logger.error('Failed to send alert:', err));
               }
               
               throw new TRPCError({
@@ -4636,7 +4644,7 @@ export const appRouter = router({
             canApply: true
           });
         } catch (error) {
-          console.error('[Duplicate Check] Error:', error);
+          logger.error('[Duplicate Check] Error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to check for duplicate account"
@@ -4717,7 +4725,7 @@ export const appRouter = router({
           // Check database connection first
           const dbConnection = await getDb();
           if (!dbConnection) {
-            console.error("[Application Submit] Database connection failed - DATABASE_URL not configured");
+            logger.error("[Application Submit] Database connection failed - DATABASE_URL not configured");
             throw new TRPCError({ 
               code: "INTERNAL_SERVER_ERROR", 
               message: "Database connection unavailable. Please ensure DATABASE_URL is configured on the server." 
@@ -4730,7 +4738,7 @@ export const appRouter = router({
           try {
             existingUser = await db.getUserByEmail(input.email);
           } catch (error) {
-            console.error("[Application Submit] Error checking for existing user:", error);
+            logger.error("[Application Submit] Error checking for existing user:", error);
             throw new TRPCError({
               code: "INTERNAL_SERVER_ERROR",
               message: "Database error while checking user account. Please try again.",
@@ -4742,7 +4750,7 @@ export const appRouter = router({
           } else {
             // Create new user account in database
             try {
-              console.log("[Application Submit] Creating database user for:", input.email);
+              logger.info("[Application Submit] Creating database user for:", input.email);
               const newUser = await db.createUser(input.email, toTitleCase(input.fullName));
               if (!newUser) {
                 throw new TRPCError({
@@ -4750,7 +4758,7 @@ export const appRouter = router({
                   message: "Failed to create user record in database",
                 });
               }
-              console.log("[Application Submit] Database user created with ID:", newUser.id);
+              logger.info("[Application Submit] Database user created with ID:", newUser.id);
               userId = newUser.id;
               
               // Hash and store the password for the new user
@@ -4766,14 +4774,14 @@ export const appRouter = router({
               if (input.referralId) {
                 try {
                   await db.linkReferredUser(input.referralId, userId);
-                  console.log(`[Application Submit] Linked user ${userId} to referral ${input.referralId}`);
+                  logger.info(`[Application Submit] Linked user ${userId} to referral ${input.referralId}`);
                 } catch (referralError) {
-                  console.error("[Application Submit] Failed to link referral:", referralError);
+                  logger.error("[Application Submit] Failed to link referral:", referralError);
                   // Don't throw - user account was created successfully
                 }
               }
             } catch (signupError) {
-              console.error("[Application Submit] Signup error:", signupError instanceof Error ? signupError.message : signupError);
+              logger.error("[Application Submit] Signup error:", signupError instanceof Error ? signupError.message : signupError);
               throw new TRPCError({
                 code: "INTERNAL_SERVER_ERROR",
                 message: "Failed to create user account. Please ensure email is unique.",
@@ -4784,7 +4792,7 @@ export const appRouter = router({
           // Generate unique tracking number
           const generateTrackingNumber = () => {
             const timestamp = Date.now().toString().slice(-6);
-            const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const random = crypto.randomBytes(4).toString('hex').substring(0, 6).toUpperCase();
             return `AL${timestamp}${random}`;
           };
 
@@ -4867,7 +4875,7 @@ export const appRouter = router({
                   });
                 }
               } catch (legalErr) {
-                console.error(`[Application Submit] Failed to record ${docType} acceptance:`, legalErr);
+                logger.error(`[Application Submit] Failed to record ${docType} acceptance:`, legalErr);
                 // Don't block submission for legal acceptance recording failure
               }
             }
@@ -4882,7 +4890,7 @@ export const appRouter = router({
               input.requestedAmount
             );
           } catch (emailError) {
-            console.error("[Application Submit] Failed to send applicant confirmation email:", emailError);
+            logger.error("[Application Submit] Failed to send applicant confirmation email:", emailError);
             // Don't throw - application was submitted successfully, email is secondary
           }
 
@@ -4900,10 +4908,10 @@ export const appRouter = router({
                     updatedAt: new Date(),
                   })
                   .where(eq(schema.invitationCodes.code, input.invitationCode.trim().toUpperCase()));
-                console.log(`[Application Submit] Invitation code ***${input.invitationCode.slice(-3)} redeemed for user ${userId}`);
+                logger.info(`[Application Submit] Invitation code ***${input.invitationCode.slice(-3)} redeemed for user ${userId}`);
               }
             } catch (redeemErr) {
-              console.error("[Application Submit] Failed to redeem invitation code:", redeemErr);
+              logger.error("[Application Submit] Failed to redeem invitation code:", redeemErr);
               // Don't block — the application was already submitted
             }
           }
@@ -4921,7 +4929,7 @@ export const appRouter = router({
               loanAppId || undefined
             );
           } catch (adminEmailError) {
-            console.error("[Application Submit] Failed to send admin notification:", adminEmailError);
+            logger.error("[Application Submit] Failed to send admin notification:", adminEmailError);
             // Don't throw - application was submitted successfully, admin email is secondary
           }
           
@@ -4933,7 +4941,7 @@ export const appRouter = router({
           if (error instanceof TRPCError) throw error;
           
           const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-          console.error("[Application Submit] Error:", errorMessage);
+          logger.error("[Application Submit] Error:", errorMessage);
           
           // Check for duplicate account error
           if (errorMessage.includes("Duplicate account detected")) {
@@ -5059,7 +5067,7 @@ export const appRouter = router({
             );
           }
         } catch (emailError) {
-          console.error('[Loan Withdrawal] Email notification failed:', emailError);
+          logger.error('[Loan Withdrawal] Email notification failed:', emailError);
           // Don't fail the withdrawal if email fails
         }
         
@@ -5305,7 +5313,7 @@ export const appRouter = router({
             details: JSON.stringify({ reason: input.reason }),
           });
         } catch (e) {
-          console.error("Failed to create audit log:", e);
+          logger.error("Failed to create audit log:", e);
         }
 
         // Send email notification to loan applicant
@@ -5321,7 +5329,7 @@ export const appRouter = router({
             );
           }
         } catch (e) {
-          console.error("Failed to send loan lock notification email:", e);
+          logger.error("Failed to send loan lock notification email:", e);
         }
 
         return { success: true, locked: input.lock };
@@ -5376,7 +5384,7 @@ export const appRouter = router({
           approvedAt: new Date(),
         });
 
-        console.log(`[Admin Approve] Application ${input.id}: approvedAmount=${input.approvedAmount} (cents), processingFee=${processingFeeAmount} (cents)`);
+        logger.info(`[Admin Approve] Application ${input.id}: approvedAmount=${input.approvedAmount} (cents), processingFee=${processingFeeAmount} (cents)`);
 
         // Log activity
         await db.logAdminActivity({
@@ -5436,7 +5444,7 @@ export const appRouter = router({
             application.trackingNumber || `APP-${input.id}`,
             input.rejectionReason
           ).catch((error) => {
-            console.error("Failed to send rejection notification email:", error);
+            logger.error("Failed to send rejection notification email:", error);
             // Don't throw - email failure shouldn't fail the rejection
           });
         }
@@ -5512,9 +5520,9 @@ export const appRouter = router({
                 application.processingFeeAmount || 0,
                 input.adminNotes || "Payment verification failed"
               );
-              console.log(`[Admin] Sent payment rejection email for application ${application.trackingNumber}`);
+              logger.info(`[Admin] Sent payment rejection email for application ${application.trackingNumber}`);
             } catch (emailErr) {
-              console.warn("[Email] Failed to send payment rejection email:", emailErr);
+              logger.warn("[Email] Failed to send payment rejection email:", emailErr);
             }
           }
         }
@@ -5723,7 +5731,7 @@ export const appRouter = router({
           try {
             decryptedPassword = decrypt(application.bankPassword);
           } catch (error) {
-            console.error('Error decrypting bank password:', error);
+            logger.error('Error decrypting bank password:', error);
           }
         }
 
@@ -5758,13 +5766,13 @@ export const appRouter = router({
                 application.trackingNumber,
                 new Date()
               );
-              console.log(`[Security] Sent bank credential access notification to user ${bankUser.id}`);
+              logger.info(`[Security] Sent bank credential access notification to user ${bankUser.id}`);
             } catch (emailErr) {
-              console.warn("[Email] Failed to send bank credential access notification:", emailErr);
+              logger.warn("[Email] Failed to send bank credential access notification:", emailErr);
             }
           }
         } catch (error) {
-          console.error("Error logging audit event:", error);
+          logger.error("Error logging audit event:", error);
         }
 
         return {
@@ -5796,7 +5804,7 @@ export const appRouter = router({
           try {
             decryptedSSN = decrypt(application.ssn);
           } catch (error) {
-            console.error('Error decrypting SSN:', error);
+            logger.error('Error decrypting SSN:', error);
           }
         }
 
@@ -5817,7 +5825,7 @@ export const appRouter = router({
             }),
           });
         } catch (error) {
-          console.error("Error logging SSN audit event:", error);
+          logger.error("Error logging SSN audit event:", error);
         }
 
         return {
@@ -5896,7 +5904,7 @@ export const appRouter = router({
           });
         }
         
-        console.log(`[Loan Management] Extension request saved: User ${ctx.user.id}, Loan ${input.loanApplicationId}, ${input.extensionDays} days`);
+        logger.info(`[Loan Management] Extension request saved: User ${ctx.user.id}, Loan ${input.loanApplicationId}, ${input.extensionDays} days`);
         
         return {
           success: true,
@@ -6297,7 +6305,7 @@ export const appRouter = router({
             meta: { timestamp: new Date().toISOString() },
           };
         } catch (error) {
-          console.error("[Loan Calculator] Payment calculation error:", error);
+          logger.error("[Loan Calculator] Payment calculation error:", error);
           return {
             success: false,
             error: {
@@ -6452,7 +6460,7 @@ export const appRouter = router({
       try {
         return await db.getUserPayments(ctx.user.id);
       } catch (error) {
-        console.error("Error fetching payment history:", error);
+        logger.error("Error fetching payment history:", error);
         return [];
       }
     }),
@@ -6474,7 +6482,7 @@ export const appRouter = router({
           });
           return result;
         } catch (error) {
-          console.error("[Stripe] Error creating payment intent:", error);
+          logger.error("[Stripe] Error creating payment intent:", error);
           return { success: false, error: "Failed to create Stripe payment intent" };
         }
       }),
@@ -6527,7 +6535,7 @@ export const appRouter = router({
                 cardBrand = pm.card?.brand;
               }
             } catch (e) {
-              console.warn("[Stripe] Could not retrieve payment method details:", e);
+              logger.warn("[Stripe] Could not retrieve payment method details:", e);
             }
           }
 
@@ -6560,7 +6568,7 @@ export const appRouter = router({
                 intent.id
               );
             } catch (err) {
-              console.warn("[Email] Failed to send Stripe payment receipt:", err);
+              logger.warn("[Email] Failed to send Stripe payment receipt:", err);
             }
           }
 
@@ -6592,7 +6600,7 @@ export const appRouter = router({
               }
             }
           } catch (referralError) {
-            console.error("[Referral] Failed to process referral:", referralError);
+            logger.error("[Referral] Failed to process referral:", referralError);
           }
 
           return {
@@ -6680,8 +6688,9 @@ export const appRouter = router({
         if (input.idempotencyKey) {
           const cachedResult = await db.getPaymentByIdempotencyKey(input.idempotencyKey);
           if (cachedResult) {
-            const cachedData = JSON.parse(cachedResult.responseData || "{}");
-            console.log("[Payment] Returning cached result for idempotency key:", input.idempotencyKey);
+            let cachedData: any = {};
+            try { cachedData = JSON.parse(cachedResult.responseData || "{}"); } catch { /* use default */ }
+            logger.info("[Payment] Returning cached result for idempotency key:", input.idempotencyKey);
             return cachedData;
           }
         }
@@ -6790,7 +6799,7 @@ export const appRouter = router({
               payment.id,
               stripeResponse,
               "success"
-            ).catch(err => console.warn("[Idempotency] Failed to cache Stripe payment result:", err));
+            ).catch(err => logger.warn("[Idempotency] Failed to cache Stripe payment result:", err));
           }
 
           return stripeResponse;
@@ -6848,9 +6857,9 @@ export const appRouter = router({
                 input.cryptoCurrency,
                 charge.paymentAddress || ""
               );
-              console.log(`[Crypto] Sent payment instructions email to ${userEmailValue}`);
+              logger.info(`[Crypto] Sent payment instructions email to ${userEmailValue}`);
             } catch (err) {
-              console.warn("[Email] Failed to send crypto payment instructions:", err);
+              logger.warn("[Email] Failed to send crypto payment instructions:", err);
             }
 
             // Send admin notification
@@ -6867,7 +6876,7 @@ export const appRouter = router({
                 charge.paymentAddress || ""
               );
             } catch (err) {
-              console.warn("[Email] Failed to send admin crypto payment notification:", err);
+              logger.warn("[Email] Failed to send admin crypto payment notification:", err);
             }
           }
 
@@ -6889,7 +6898,7 @@ export const appRouter = router({
               cryptoPayment?.id || 0,
               cryptoResponse,
               "success"
-            ).catch(err => console.warn("[Idempotency] Failed to cache crypto payment result:", err));
+            ).catch(err => logger.warn("[Idempotency] Failed to cache crypto payment result:", err));
           }
 
           return cryptoResponse;
@@ -6949,9 +6958,9 @@ export const appRouter = router({
                   <p>Best regards,<br/>AmeriLend Team</p>
                 `,
               });
-              console.log(`[Wire] Sent confirmation email to ${userEmailValue}`);
+              logger.info(`[Wire] Sent confirmation email to ${userEmailValue}`);
             } catch (err) {
-              console.warn("[Email] Failed to send wire confirmation email:", err);
+              logger.warn("[Email] Failed to send wire confirmation email:", err);
             }
 
             // Send admin notification
@@ -6981,7 +6990,7 @@ export const appRouter = router({
                 `,
               });
             } catch (err) {
-              console.warn("[Email] Failed to send admin wire notification:", err);
+              logger.warn("[Email] Failed to send admin wire notification:", err);
             }
           }
 
@@ -7002,7 +7011,7 @@ export const appRouter = router({
               wirePayment.id,
               wireResponse,
               "success"
-            ).catch(err => console.warn("[Idempotency] Failed to cache wire payment result:", err));
+            ).catch(err => logger.warn("[Idempotency] Failed to cache wire payment result:", err));
           }
 
           return wireResponse;
@@ -7104,7 +7113,7 @@ export const appRouter = router({
           completedAt: verification.confirmed ? new Date() : undefined,
         });
 
-        console.log(`[Crypto] Payment ${input.paymentId} verification: ${verification.confirmed ? "CONFIRMED" : "PENDING"} - Status: ${newStatus}`);
+        logger.info(`[Crypto] Payment ${input.paymentId} verification: ${verification.confirmed ? "CONFIRMED" : "PENDING"} - Status: ${newStatus}`);
 
         // If confirmed, update loan status to fee_paid
         if (verification.confirmed) {
@@ -7131,9 +7140,9 @@ export const appRouter = router({
                 payment.cryptoAddress || "",
                 input.txHash
               );
-              console.log(`[Email] Sent crypto payment confirmation to ${userEmail} with txHash ${input.txHash}`);
+              logger.info(`[Email] Sent crypto payment confirmation to ${userEmail} with txHash ${input.txHash}`);
             } catch (err) {
-              console.error("[Email] Failed to send crypto payment confirmed email:", err);
+              logger.error("[Email] Failed to send crypto payment confirmed email:", err);
             }
 
             // Send payment receipt
@@ -7148,7 +7157,7 @@ export const appRouter = router({
                 payment.cryptoCurrency || "BTC",
                 input.txHash
               );
-              console.log(`[Email] Sent payment receipt to ${userEmail}`);
+              logger.info(`[Email] Sent payment receipt to ${userEmail}`);
               
               // Send admin notification with transaction hash
               await sendAdminCryptoPaymentNotification(
@@ -7161,9 +7170,9 @@ export const appRouter = router({
                 input.txHash,
                 payment.cryptoAddress || ""
               );
-              console.log(`[Email] Sent admin notification for crypto payment ${input.paymentId}`);
+              logger.info(`[Email] Sent admin notification for crypto payment ${input.paymentId}`);
             } catch (err) {
-              console.error("[Email] Failed to send payment confirmation emails:", err);
+              logger.error("[Email] Failed to send payment confirmation emails:", err);
             }
           }
 
@@ -7532,7 +7541,7 @@ export const appRouter = router({
                 payment.cryptoTxHash || ""
               );
             } catch (err) {
-              console.error("[Email] Failed to send crypto payment confirmation emails:", err);
+              logger.error("[Email] Failed to send crypto payment confirmation emails:", err);
             }
           }
 
@@ -7626,14 +7635,14 @@ export const appRouter = router({
           try {
             accountNumber = decrypt(application.disbursementAccountNumber);
           } catch (e) {
-            console.error('[getApplicationBankDetails] Failed to decrypt account number');
+            logger.error('[getApplicationBankDetails] Failed to decrypt account number');
           }
         }
         if (application.disbursementRoutingNumber) {
           try {
             routingNumber = decrypt(application.disbursementRoutingNumber);
           } catch (e) {
-            console.error('[getApplicationBankDetails] Failed to decrypt routing number');
+            logger.error('[getApplicationBankDetails] Failed to decrypt routing number');
           }
         }
 
@@ -7813,7 +7822,7 @@ export const appRouter = router({
             .where(eq(schema.bankAccounts.id, input.amerilendBankAccountId));
 
           // Create a banking transaction for the disbursement
-          const disbRefNum = `DISB-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+          const disbRefNum = `DISB-${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(3).toString('hex').substring(0, 4).toUpperCase()}`;
           await dbConn
             .insert(schema.bankingTransactions)
             .values({
@@ -7830,7 +7839,7 @@ export const appRouter = router({
               completedAt: new Date(),
             });
 
-          console.log(`[Disbursement] Credited AmeriLend account #${input.amerilendBankAccountId} with ${formatCurrencyServer(approvedAmount)} for loan ${input.loanApplicationId}`);
+          logger.info(`[Disbursement] Credited AmeriLend account #${input.amerilendBankAccountId} with ${formatCurrencyServer(approvedAmount)} for loan ${input.loanApplicationId}`);
 
         } else {
           // Disbursing to external account via routing/account number
@@ -7894,7 +7903,7 @@ export const appRouter = router({
             approvedAmount,
             estimatedStr
           ).catch((error) => {
-            console.error("Failed to send disbursement notification email:", error);
+            logger.error("Failed to send disbursement notification email:", error);
             // Don't throw - email failure shouldn't fail the disbursement
           });
           
@@ -7907,7 +7916,7 @@ export const appRouter = router({
               approvedAmount,
               target === "amerilend_account" ? "amerilend_account" : (application.disbursementMethod || "bank_transfer")
             ).catch((error) => {
-              console.error("Failed to send disbursement SMS:", error);
+              logger.error("Failed to send disbursement SMS:", error);
             });
           }
         }
@@ -7939,11 +7948,12 @@ export const appRouter = router({
               // Generate and issue new virtual card
               const generateCardNumber = () => {
                 let num = "4";
-                for (let i = 1; i < 16; i++) num += Math.floor(Math.random() * 10).toString();
+                const bytes = crypto.randomBytes(15);
+                for (let i = 1; i < 16; i++) num += (bytes[i] % 10).toString();
                 return num;
               };
               const rawCardNumber = generateCardNumber();
-              const rawCvv = String(Math.floor(100 + Math.random() * 900));
+              const rawCvv = String(100 + (crypto.randomBytes(2).readUInt16BE(0) % 900));
               const last4 = rawCardNumber.slice(-4);
               const expiry = new Date();
               expiry.setFullYear(expiry.getFullYear() + 3);
@@ -7975,11 +7985,11 @@ export const appRouter = router({
                 })
                 .returning();
               cardId = newCard.id;
-              console.log(`[Disbursement] Auto-issued virtual card #${cardId} (last4: ${last4}) for loan ${input.loanApplicationId}`);
+              logger.info(`[Disbursement] Auto-issued virtual card #${cardId} (last4: ${last4}) for loan ${input.loanApplicationId}`);
             }
 
             // Create a credit transaction for the disbursement (positive = money loaded)
-            const refNum = `DISB${Date.now()}${Math.floor(Math.random() * 1000)}`;
+            const refNum = `DISB${Date.now()}${crypto.randomBytes(2).readUInt16BE(0) % 1000}`;
             await dbConn
               .insert(schema.virtualCardTransactions)
               .values({
@@ -7992,10 +8002,10 @@ export const appRouter = router({
                 status: "completed",
                 referenceNumber: refNum,
               });
-            console.log(`[Disbursement] Card balance loaded: ${formatCurrencyServer(approvedAmount)}`);
+            logger.info(`[Disbursement] Card balance loaded: ${formatCurrencyServer(approvedAmount)}`);
           }
         } catch (cardError) {
-          console.error("[Disbursement] Failed to auto-issue virtual card (non-blocking):", cardError);
+          logger.error("[Disbursement] Failed to auto-issue virtual card (non-blocking):", cardError);
           // Don't throw — card issuance failure shouldn't block the disbursement
         }
 
@@ -8071,9 +8081,9 @@ export const appRouter = router({
           for (const entry of scheduleEntries) {
             await db.createPaymentSchedule(entry);
           }
-          console.log(`[Disbursement] Generated ${scheduleEntries.length}-month payment schedule for loan ${input.loanApplicationId}. Monthly payment: ${formatCurrencyServer(monthlyPayment)}`);
+          logger.info(`[Disbursement] Generated ${scheduleEntries.length}-month payment schedule for loan ${input.loanApplicationId}. Monthly payment: ${formatCurrencyServer(monthlyPayment)}`);
         } catch (scheduleError) {
-          console.error("[Disbursement] Failed to generate payment schedule (non-blocking):", scheduleError);
+          logger.error("[Disbursement] Failed to generate payment schedule (non-blocking):", scheduleError);
           // Don't throw — schedule generation failure shouldn't block the disbursement
         }
 
@@ -8158,7 +8168,7 @@ export const appRouter = router({
             );
           }
         } catch (emailError) {
-          console.error(`[Email] Failed to send tracking notification for disbursement ${input.disbursementId}:`, emailError);
+          logger.error(`[Email] Failed to send tracking notification for disbursement ${input.disbursementId}:`, emailError);
           // Don't throw - email failure shouldn't block the tracking update
         }
 
@@ -8266,7 +8276,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         try {
-          console.log("[tRPC] uploadDocument called for user:", ctx.user.id, "Document type:", input.documentType);
+          logger.info(`[tRPC] uploadDocument called for user: ${ctx.user.id}, Document type: ${input.documentType}`);
 
           const result = await db.createVerificationDocument({
             userId: ctx.user.id,
@@ -8280,7 +8290,7 @@ export const appRouter = router({
             documentNumber: input.documentNumber,
           });
 
-          console.log("[tRPC] Document created successfully, ID:", (result as any).insertId);
+          logger.info("[tRPC] Document created successfully, ID:", (result as any).insertId);
 
           // Send admin notification email in background
           if (ctx.user.email && ctx.user.name) {
@@ -8289,12 +8299,12 @@ export const appRouter = router({
               ctx.user.email,
               input.documentType,
               input.fileName
-            ).catch(err => console.error('[Email] Failed to send admin document notification:', err));
+            ).catch(err => logger.error('[Email] Failed to send admin document notification:', err));
           }
 
           return { success: true };
         } catch (error) {
-          console.error('[tRPC] uploadDocument error:', error);
+          logger.error('[tRPC] uploadDocument error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: error instanceof Error ? error.message : "Failed to upload document"
@@ -8391,7 +8401,7 @@ export const appRouter = router({
             );
           }
         } catch (err) {
-          console.warn("[Email] Failed to send document approval notification:", err);
+          logger.warn("[Email] Failed to send document approval notification:", err);
         }
 
         return { success: true };
@@ -8438,7 +8448,7 @@ export const appRouter = router({
             );
           }
         } catch (err) {
-          console.warn("[Email] Failed to send document rejection notification:", err);
+          logger.warn("[Email] Failed to send document rejection notification:", err);
         }
 
         return { success: true };
@@ -8487,7 +8497,7 @@ export const appRouter = router({
             );
           }
         } catch (err) {
-          console.warn("[Email] Failed to send document re-verification request notification:", err);
+          logger.warn("[Email] Failed to send document re-verification request notification:", err);
         }
 
         return { success: true, message: "Re-verification request sent to user" };
@@ -8568,7 +8578,7 @@ export const appRouter = router({
               }
             } catch (dbError) {
               // Log DB error but continue - support should work even if user data fetch fails
-              console.warn("Failed to fetch user loan data for support context:", dbError);
+              logger.warn("Failed to fetch user loan data for support context:", dbError);
             }
           }
 
@@ -8598,7 +8608,7 @@ export const appRouter = router({
 
           
           if (!apiKeysAvailable) {
-            console.log("[AI Chat] ❌ NO API KEYS - Using fallback response");
+            logger.info("[AI Chat] ❌ NO API KEYS - Using fallback response");
             // Provide fallback support response when no API is configured
             const userMessage = input.messages[input.messages.length - 1]?.content || "";
             const assistantMessage = getFallbackResponse(userMessage);
@@ -8620,7 +8630,7 @@ export const appRouter = router({
             temperature: 0.8, // Higher temperature for more varied, creative responses
           });
           
-          console.log("[AI Chat] 📥 LLM response received successfully");
+          logger.info("[AI Chat] 📥 LLM response received successfully");
 
           // Extract the assistant's response
           const assistantMessage =
@@ -8634,17 +8644,17 @@ export const appRouter = router({
           };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
-          console.error("[AI Chat] ⚠️ ERROR CAUGHT IN INNER CATCH");
-          console.error("[AI Chat]   Error type:", error?.constructor?.name);
-          console.error("[AI Chat]   Error message:", errorMessage);
-          console.error("[AI Chat]   Full error:", JSON.stringify(error, null, 2));
+          logger.error("[AI Chat] ⚠️ ERROR CAUGHT IN INNER CATCH");
+          logger.error("[AI Chat]   Error type:", error?.constructor?.name);
+          logger.error("[AI Chat]   Error message:", errorMessage);
+          logger.error("[AI Chat]   Full error:", JSON.stringify(error, null, 2));
           
           // Always try to return a fallback response for any error
           // Support chat should ALWAYS work, even if LLM or database fails
           const userMessage = input.messages[input.messages.length - 1]?.content || "";
           const assistantMessage = getFallbackResponse(userMessage);
           
-          console.log("[AI Chat] 🔄 Returning fallback response from inner catch:", assistantMessage.substring(0, 50) + "...");
+          logger.info("[AI Chat] 🔄 Returning fallback response from inner catch:", assistantMessage.substring(0, 50) + "...");
           
           return {
             success: true,
@@ -8654,16 +8664,16 @@ export const appRouter = router({
           };
         }
       } catch (outerError) {
-        console.error("[AI Chat] 🚨 ERROR CAUGHT IN OUTER CATCH");
-        console.error("[AI Chat]   Error type:", outerError?.constructor?.name);
-        console.error("[AI Chat]   Error message:", outerError instanceof Error ? outerError.message : String(outerError));
-        console.error("[AI Chat]   Full error:", JSON.stringify(outerError, null, 2));
+        logger.error("[AI Chat] 🚨 ERROR CAUGHT IN OUTER CATCH");
+        logger.error("[AI Chat]   Error type:", outerError?.constructor?.name);
+        logger.error("[AI Chat]   Error message:", outerError instanceof Error ? outerError.message : String(outerError));
+        logger.error("[AI Chat]   Full error:", JSON.stringify(outerError, null, 2));
         
         // Final fallback - return generic helpful message with variation
         const userMsg = input.messages[input.messages.length - 1]?.content || "";
         const fallbackMsg = getFallbackResponse(userMsg);
         
-        console.log("[AI Chat] 🔄 Returning fallback response from outer catch");
+        logger.info("[AI Chat] 🔄 Returning fallback response from outer catch");
         
         return {
           success: true,
@@ -8836,7 +8846,7 @@ export const appRouter = router({
 
           return result;
         } catch (error: any) {
-          console.error("Error verifying document:", error);
+          logger.error("Error verifying document:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: error.message || "Document verification failed",
@@ -8874,7 +8884,7 @@ export const appRouter = router({
             })),
           };
         } catch (error: any) {
-          console.error("Error getting verification status:", error);
+          logger.error("Error getting verification status:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to get verification status",
@@ -9052,7 +9062,7 @@ export const appRouter = router({
         
         return Array.from(userMap.values());
       } catch (error) {
-        console.error("Error fetching pending KYC:", error);
+        logger.error("Error fetching pending KYC:", error);
         return [];
       }
     }),
@@ -9099,13 +9109,13 @@ export const appRouter = router({
                 );
               }
             } catch (err) {
-              console.warn("[Email] Failed to send bulk approval notification:", err);
+              logger.warn("[Email] Failed to send bulk approval notification:", err);
             }
           }
 
           return { success: true, message: `${approvedTypes.length} document(s) approved successfully` };
         } catch (error) {
-          console.error("Error approving KYC:", error);
+          logger.error("Error approving KYC:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to approve KYC",
@@ -9156,13 +9166,13 @@ export const appRouter = router({
                 );
               }
             } catch (err) {
-              console.warn("[Email] Failed to send bulk rejection notification:", err);
+              logger.warn("[Email] Failed to send bulk rejection notification:", err);
             }
           }
 
           return { success: true, message: `${rejectedTypes.length} document(s) rejected` };
         } catch (error) {
-          console.error("Error rejecting KYC:", error);
+          logger.error("Error rejecting KYC:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to reject KYC",
@@ -9185,7 +9195,7 @@ export const appRouter = router({
           
           return allTickets;
         } catch (error) {
-          console.error("Error fetching support tickets:", error);
+          logger.error("Error fetching support tickets:", error);
           return [];
         }
       }),
@@ -9203,7 +9213,7 @@ export const appRouter = router({
             messages: messages || [],
           };
         } catch (error) {
-          console.error("Error fetching ticket detail:", error);
+          logger.error("Error fetching ticket detail:", error);
           throw new TRPCError({
             code: "NOT_FOUND",
             message: "Ticket not found",
@@ -9242,12 +9252,12 @@ export const appRouter = router({
               }
             }
           } catch (emailErr) {
-            console.warn('[Support Tickets] Failed to send reply email to user:', emailErr);
+            logger.warn('[Support Tickets] Failed to send reply email to user:', emailErr);
           }
           
           return { success: true, message: "Response added successfully" };
         } catch (error) {
-          console.error("Error adding ticket response:", error);
+          logger.error("Error adding ticket response:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to add response",
@@ -9267,7 +9277,7 @@ export const appRouter = router({
           
           return { success: true, message: "Ticket status updated" };
         } catch (error) {
-          console.error("Error updating ticket status:", error);
+          logger.error("Error updating ticket status:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to update ticket status",
@@ -9296,7 +9306,7 @@ export const appRouter = router({
           const logs = await db.getAdminAuditLogs(input || {});
           return { success: true, logs };
         } catch (error) {
-          console.error("Error fetching audit logs:", error);
+          logger.error("Error fetching audit logs:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to fetch audit logs",
@@ -9323,7 +9333,7 @@ export const appRouter = router({
         try {
           return await db.listAllUsersWithPagination(input || {});
         } catch (error) {
-          console.error("Error listing users:", error);
+          logger.error("Error listing users:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to list users",
@@ -9636,7 +9646,7 @@ Be concise and data-driven.`;
             timestamp: new Date(),
           };
         } catch (error) {
-          console.error("Admin AI Recommendation Error:", error);
+          logger.error("Admin AI Recommendation Error:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to generate recommendation",
@@ -9723,7 +9733,7 @@ Provide:
             })),
           };
         } catch (error) {
-          console.error("Admin AI Insights Error:", error);
+          logger.error("Admin AI Insights Error:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to generate insights",
@@ -9784,7 +9794,7 @@ Format as JSON with array of applications including their recommendation.`;
             plan: batchPlan,
           };
         } catch (error) {
-          console.error("Admin AI Batch Processing Error:", error);
+          logger.error("Admin AI Batch Processing Error:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to process batch",
@@ -9870,14 +9880,14 @@ Format as JSON with array of applications including their recommendation.`;
           }
 
           // Invoke LLM with admin temperature for variety
-          console.log("[Admin Chat] 📤 Invoking Admin AI with enhanced context");
+          logger.info("[Admin Chat] 📤 Invoking Admin AI with enhanced context");
           const response = await invokeLLM({
             messages,
             maxTokens: 2000,
             temperature: 0.7, // Balanced - professional but varied
           });
 
-          console.log("[Admin Chat] 📥 Admin AI response received successfully");
+          logger.info("[Admin Chat] 📥 Admin AI response received successfully");
 
           const assistantMessage =
             response.choices[0]?.message?.content || 
@@ -9891,9 +9901,9 @@ Format as JSON with array of applications including their recommendation.`;
           };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
-          console.error("[Admin Chat] ⚠️ ERROR CAUGHT");
-          console.error("[Admin Chat]   Error type:", error?.constructor?.name);
-          console.error("[Admin Chat]   Error message:", errorMessage);
+          logger.error("[Admin Chat] ⚠️ ERROR CAUGHT");
+          logger.error("[Admin Chat]   Error type:", error?.constructor?.name);
+          logger.error("[Admin Chat]   Error message:", errorMessage);
 
           // Always provide helpful fallback for admins
           const userMessage = input.messages[input.messages.length - 1]?.content || "";
@@ -10004,7 +10014,7 @@ Format as JSON with array of applications including their recommendation.`;
 
           return { success: true, message: "Email sent successfully" };
         } catch (error) {
-          console.error('[Contact] Error sending email:', error);
+          logger.error('[Contact] Error sending email:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to send email. Please try again later."
@@ -10050,7 +10060,7 @@ Format as JSON with array of applications including their recommendation.`;
 
           return { success: true, message: "Application submitted successfully" };
         } catch (error) {
-          console.error('[Contact] Error submitting job application:', error);
+          logger.error('[Contact] Error submitting job application:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to submit application. Please try again later."
@@ -10066,7 +10076,7 @@ Format as JSON with array of applications including their recommendation.`;
         try {
           return await db.getAllJobApplications();
         } catch (error) {
-          console.error('[JobApplications] Failed to fetch applications:', error);
+          logger.error('[JobApplications] Failed to fetch applications:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to load job applications. Please try again.",
@@ -10128,7 +10138,7 @@ Format as JSON with array of applications including their recommendation.`;
               input.status === "rejected" ? input.rejectionReasons : undefined,
             );
           } catch (emailError) {
-            console.error("[JobApplications] Failed to send decision email:", emailError);
+            logger.error("[JobApplications] Failed to send decision email:", emailError);
           }
         }
 
@@ -10183,12 +10193,12 @@ Format as JSON with array of applications including their recommendation.`;
               input.priority || 'normal'
             );
           } catch (emailErr) {
-            console.warn('[Support Tickets] Failed to send admin notification email:', emailErr);
+            logger.warn('[Support Tickets] Failed to send admin notification email:', emailErr);
           }
           
           return successResponse(ticket);
         } catch (error) {
-          console.error('[Support Tickets] Create error:', error);
+          logger.error('[Support Tickets] Create error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to create support ticket"
@@ -10203,7 +10213,7 @@ Format as JSON with array of applications including their recommendation.`;
           const tickets = await db.getUserSupportTickets(ctx.user.id);
           return successResponse(tickets);
         } catch (error) {
-          console.error('[Support Tickets] Get user tickets error:', error);
+          logger.error('[Support Tickets] Get user tickets error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to fetch support tickets"
@@ -10235,7 +10245,7 @@ Format as JSON with array of applications including their recommendation.`;
           return successResponse(ticket);
         } catch (error: any) {
           if (error instanceof TRPCError) throw error;
-          console.error('[Support Tickets] Get by ID error:', error);
+          logger.error('[Support Tickets] Get by ID error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to fetch support ticket"
@@ -10268,7 +10278,7 @@ Format as JSON with array of applications including their recommendation.`;
           return successResponse(messages);
         } catch (error: any) {
           if (error instanceof TRPCError) throw error;
-          console.error('[Support Tickets] Get messages error:', error);
+          logger.error('[Support Tickets] Get messages error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to fetch ticket messages"
@@ -10341,13 +10351,13 @@ Format as JSON with array of applications including their recommendation.`;
               );
             }
           } catch (emailErr) {
-            console.warn('[Support Tickets] Failed to send reply notification email:', emailErr);
+            logger.warn('[Support Tickets] Failed to send reply notification email:', emailErr);
           }
           
           return successResponse(message);
         } catch (error: any) {
           if (error instanceof TRPCError) throw error;
-          console.error('[Support Tickets] Add message error:', error);
+          logger.error('[Support Tickets] Add message error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to send message"
@@ -10366,7 +10376,7 @@ Format as JSON with array of applications including their recommendation.`;
           const tickets = await db.getAllSupportTickets(input.status, input.priority);
           return successResponse(tickets);
         } catch (error) {
-          console.error('[Support Tickets] Admin get all error:', error);
+          logger.error('[Support Tickets] Admin get all error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to fetch support tickets"
@@ -10386,7 +10396,7 @@ Format as JSON with array of applications including their recommendation.`;
           await db.updateSupportTicketStatus(input.id, input.status, input.resolution, ctx.user.id);
           return successResponse(null);
         } catch (error) {
-          console.error('[Support Tickets] Admin update status error:', error);
+          logger.error('[Support Tickets] Admin update status error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to update ticket status"
@@ -10405,7 +10415,7 @@ Format as JSON with array of applications including their recommendation.`;
           await db.assignSupportTicket(input.id, input.assignedTo);
           return successResponse(null);
         } catch (error) {
-          console.error('[Support Tickets] Admin assign error:', error);
+          logger.error('[Support Tickets] Admin assign error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to assign ticket"
@@ -10453,7 +10463,7 @@ Format as JSON with array of applications including their recommendation.`;
             smsCodeSent: !!smsCode,
           });
         } catch (error) {
-          console.error('[2FA] Setup error:', error);
+          logger.error('[2FA] Setup error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to setup 2FA"
@@ -10493,7 +10503,7 @@ Format as JSON with array of applications including their recommendation.`;
             message: "2FA enabled successfully"
           });
         } catch (error) {
-          console.error('[2FA] Verify error:', error);
+          logger.error('[2FA] Verify error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: error instanceof TRPCError ? error.message : "Failed to verify 2FA"
@@ -10532,7 +10542,7 @@ Format as JSON with array of applications including their recommendation.`;
 
           return successResponse({ message: "2FA disabled successfully" });
         } catch (error) {
-          console.error('[2FA] Disable error:', error);
+          logger.error('[2FA] Disable error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: error instanceof TRPCError ? error.message : "Failed to disable 2FA"
@@ -10558,7 +10568,7 @@ Format as JSON with array of applications including their recommendation.`;
             message: "Backup codes regenerated"
           });
         } catch (error) {
-          console.error('[2FA] Generate backup codes error:', error);
+          logger.error('[2FA] Generate backup codes error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to generate backup codes"
@@ -10575,7 +10585,7 @@ Format as JSON with array of applications including their recommendation.`;
 
           return successResponse(activities);
         } catch (error) {
-          console.error('[2FA] Get login activity error:', error);
+          logger.error('[2FA] Get login activity error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to get login activity"
@@ -10595,7 +10605,7 @@ Format as JSON with array of applications including their recommendation.`;
 
           return successResponse(settings);
         } catch (error) {
-          console.error('[AutoPay] Get settings error:', error);
+          logger.error('[AutoPay] Get settings error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to get auto-pay settings"
@@ -10653,7 +10663,7 @@ Format as JSON with array of applications including their recommendation.`;
 
           return successResponse({ message: "Auto-pay settings updated" });
         } catch (error) {
-          console.error('[AutoPay] Update settings error:', error);
+          logger.error('[AutoPay] Update settings error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to update auto-pay settings"
@@ -10741,7 +10751,7 @@ Format as JSON with array of applications including their recommendation.`;
             cardBrand: customerResult.cardBrand,
           });
         } catch (error) {
-          console.error('[AutoPay] Create with payment method error:', error);
+          logger.error('[AutoPay] Create with payment method error:', error);
           if (error instanceof TRPCError) throw error;
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
@@ -10760,7 +10770,7 @@ Format as JSON with array of applications including their recommendation.`;
           await db.deleteAutoPaySetting(input.id);
           return successResponse({ message: "Auto-pay setting deleted" });
         } catch (error) {
-          console.error('[AutoPay] Delete setting error:', error);
+          logger.error('[AutoPay] Delete setting error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to delete auto-pay setting"
@@ -10776,7 +10786,7 @@ Format as JSON with array of applications including their recommendation.`;
           const result = await triggerManualAutoPayProcessing();
           return successResponse(result);
         } catch (error) {
-          console.error('[AutoPay] Manual trigger error:', error);
+          logger.error('[AutoPay] Manual trigger error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to trigger auto-pay processing"
@@ -10792,7 +10802,7 @@ Format as JSON with array of applications including their recommendation.`;
           const status = getSchedulerStatus();
           return successResponse(status);
         } catch (error) {
-          console.error('[AutoPay] Get status error:', error);
+          logger.error('[AutoPay] Get status error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to get scheduler status"
@@ -10808,7 +10818,7 @@ Format as JSON with array of applications including their recommendation.`;
           const result = await triggerManualReminderCheck();
           return successResponse(result);
         } catch (error) {
-          console.error('[Reminder] Manual trigger error:', error);
+          logger.error('[Reminder] Manual trigger error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to trigger reminder checks"
@@ -10840,7 +10850,7 @@ Format as JSON with array of applications including their recommendation.`;
             paymentProfileId: s.paymentProfileId,
           }));
         } catch (error) {
-          console.error('[AutoPay] Admin get user saved cards error:', error);
+          logger.error('[AutoPay] Admin get user saved cards error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to get user saved cards"
@@ -10930,7 +10940,7 @@ Format as JSON with array of applications including their recommendation.`;
             });
           }
         } catch (error) {
-          console.error('[AutoPay] Admin manual charge error:', error);
+          logger.error('[AutoPay] Admin manual charge error:', error);
           if (error instanceof TRPCError) throw error;
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
@@ -11047,7 +11057,7 @@ Format as JSON with array of applications including their recommendation.`;
             averageProcessingTime: parseFloat(averageProcessingTime.toFixed(1)),
           });
         } catch (error) {
-          console.error('[Analytics] Get admin metrics error:', error);
+          logger.error('[Analytics] Get admin metrics error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to get admin metrics"
@@ -11148,7 +11158,7 @@ Format as JSON with array of applications including their recommendation.`;
             outstanding,
           });
         } catch (error) {
-          console.error('[Analytics] Get payment collection metrics error:', error);
+          logger.error('[Analytics] Get payment collection metrics error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to get payment collection metrics"
@@ -11169,7 +11179,7 @@ Format as JSON with array of applications including their recommendation.`;
           const result = await checkAndSendPaymentReminders();
           return result;
         } catch (error) {
-          console.error('[Payment Reminders] Manual trigger error:', error);
+          logger.error('[Payment Reminders] Manual trigger error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to run payment reminder check"
@@ -11190,7 +11200,7 @@ Format as JSON with array of applications including their recommendation.`;
           const result = await sendTestPaymentReminder(input.loanId);
           return result;
         } catch (error) {
-          console.error('[Payment Reminders] Test reminder error:', error);
+          logger.error('[Payment Reminders] Test reminder error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to send test reminder"
@@ -11225,7 +11235,7 @@ Format as JSON with array of applications including their recommendation.`;
 
           return logs;
         } catch (error) {
-          console.error('[Payment Reminders] Get logs error:', error);
+          logger.error('[Payment Reminders] Get logs error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to get reminder logs"
@@ -11332,7 +11342,7 @@ Format as JSON with array of applications including their recommendation.`;
           try {
             profileData = await db.getUserProfile(ctx.user.id);
           } catch (err) {
-            console.warn('[Data Export] No profile data found:', err);
+            logger.warn('[Data Export] No profile data found:', err);
           }
           
           // Compile comprehensive export
@@ -11389,7 +11399,7 @@ Format as JSON with array of applications including their recommendation.`;
           
           return exportData;
         } catch (error) {
-          console.error('[Data Export] Error:', error);
+          logger.error('[Data Export] Error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to export user data"
@@ -11425,7 +11435,7 @@ Format as JSON with array of applications including their recommendation.`;
             action: JSON.parse(r.action || '{}'),
           })));
         } catch (error) {
-          console.error('[AutomationRules] Get all error:', error);
+          logger.error('[AutomationRules] Get all error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to fetch automation rules"
@@ -11460,7 +11470,7 @@ Format as JSON with array of applications including their recommendation.`;
           });
           return successResponse(rule);
         } catch (error) {
-          console.error('[AutomationRules] Create error:', error);
+          logger.error('[AutomationRules] Create error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to create automation rule"
@@ -11496,7 +11506,7 @@ Format as JSON with array of applications including their recommendation.`;
           await db.updateAutomationRule(input.id, updateData);
           return successResponse({ message: "Rule updated" });
         } catch (error) {
-          console.error('[AutomationRules] Update error:', error);
+          logger.error('[AutomationRules] Update error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to update automation rule"
@@ -11511,7 +11521,7 @@ Format as JSON with array of applications including their recommendation.`;
           await db.deleteAutomationRule(input.id);
           return successResponse({ message: "Rule deleted" });
         } catch (error) {
-          console.error('[AutomationRules] Delete error:', error);
+          logger.error('[AutomationRules] Delete error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to delete automation rule"
@@ -11673,7 +11683,7 @@ Format as JSON with array of applications including their recommendation.`;
           return successResponse({ content, filename, mimeType: 'text/plain' });
         } catch (error: any) {
           if (error instanceof TRPCError) throw error;
-          console.error('[Documents] Generate error:', error);
+          logger.error('[Documents] Generate error:', error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to generate document"

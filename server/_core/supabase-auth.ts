@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { ENV } from "./env";
 import { sendEmail } from "./email";
 import * as db from "../db";
+import { logger } from "./logger";
 
 // Initialize Supabase client
 let supabaseClient: ReturnType<typeof createClient> | null = null;
@@ -20,9 +21,9 @@ export function getSupabaseClient() {
           persistSession: true,
         },
       });
-      console.log("✅ Supabase client initialized successfully");
+      logger.info("✅ Supabase client initialized successfully");
     } catch (error) {
-      console.error("❌ Failed to initialize Supabase client:", error);
+      logger.error("❌ Failed to initialize Supabase client:", error);
       supabaseClient = null;
     }
   }
@@ -69,7 +70,7 @@ export async function signUpWithEmail(email: string, password: string, fullName?
 
     return { success: true, user: data.user };
   } catch (error: any) {
-    console.error("Supabase signup error:", error);
+    logger.error("Supabase signup error:", error);
     
     // Provide a more specific error message
     const errorMessage = error.message || "Unable to create account. Please try again.";
@@ -109,7 +110,7 @@ export async function signInWithEmail(email: string, password: string) {
 
     return { success: true, user: data.user, session: data.session };
   } catch (error: any) {
-    console.error("Supabase signin error:", error);
+    logger.error("Supabase signin error:", error);
     
     // Provide a more specific error message
     const errorMessage = error.message || "Unable to sign in. Please try again.";
@@ -141,7 +142,7 @@ export async function signInWithOTP(email: string) {
 
     return { success: true };
   } catch (error: any) {
-    console.error("Supabase OTP error:", error);
+    logger.error("Supabase OTP error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -180,7 +181,7 @@ export async function verifyOTPToken(email: string, token: string) {
 
     return { success: true, user: data.user, session: data.session };
   } catch (error: any) {
-    console.error("Supabase OTP verification error:", error);
+    logger.error("Supabase OTP verification error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -209,7 +210,7 @@ export async function sendPasswordResetEmail(email: string) {
 
     return { success: true };
   } catch (error: any) {
-    console.error("Password reset error:", error);
+    logger.error("Password reset error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -232,7 +233,7 @@ export async function signOut() {
 
     return { success: true };
   } catch (error: any) {
-    console.error("Sign out error:", error);
+    logger.error("Sign out error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -255,7 +256,7 @@ export async function getCurrentSession() {
 
     return { success: true, session: data.session };
   } catch (error: any) {
-    console.error("Get session error:", error);
+    logger.error("Get session error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -278,7 +279,7 @@ export async function getCurrentUser() {
 
     return { success: true, user: data.user };
   } catch (error: any) {
-    console.error("Get user error:", error);
+    logger.error("Get user error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -305,7 +306,7 @@ export async function updateUserProfile(updates: {
 
     return { success: true, user: data.user };
   } catch (error: any) {
-    console.error("Update profile error:", error);
+    logger.error("Update profile error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -316,7 +317,7 @@ export async function updateUserProfile(updates: {
 export function isSupabaseConfigured(): boolean {
   const configured = Boolean(ENV.supabaseUrl && ENV.supabaseAnonKey);
   if (!configured) {
-    console.warn("⚠️  Supabase not configured - VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY missing");
+    logger.warn("⚠️  Supabase not configured - VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY missing");
   }
   return configured;
 }

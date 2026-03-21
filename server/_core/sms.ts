@@ -4,13 +4,14 @@
  */
 
 import { ENV } from "./env";
+import { logger } from "./logger";
 
 /**
  * Send SMS using Twilio
  */
 export async function sendSMS(to: string, message: string): Promise<{ success: boolean; error?: string }> {
   if (!ENV.twilioAccountSid || !ENV.twilioAuthToken || !ENV.twilioPhoneNumber) {
-    console.error("Twilio credentials not configured");
+    logger.error("Twilio credentials not configured");
     return { success: false, error: "SMS service not configured" };
   }
 
@@ -35,15 +36,15 @@ export async function sendSMS(to: string, message: string): Promise<{ success: b
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      console.error('Twilio API error:', errorData);
+      logger.error('Twilio API error:', errorData);
       return { success: false, error: errorData.message || 'Failed to send SMS' };
     }
 
     const data = await response.json();
-    console.log(`SMS sent successfully to ${to}. SID: ${data.sid}`);
+    logger.info(`SMS sent successfully to ${to}. SID: ${data.sid}`);
     return { success: true };
   } catch (error) {
-    console.error('Error sending SMS:', error);
+    logger.error('Error sending SMS:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
@@ -58,12 +59,12 @@ export async function sendOTPSMS(phone: string, code: string, purpose: "signup" 
   const result = await sendSMS(phone, message);
   
   if (!result.success) {
-    console.error(`Failed to send OTP SMS to ${phone}:`, result.error);
+    logger.error(`Failed to send OTP SMS to ${phone}:`, result.error);
   }
   
   // Log OTP delivery (code redacted for security)
   if (process.env.NODE_ENV === "development") {
-    console.log(`[OTP] Code sent to ${phone.slice(0, 3)}****${phone.slice(-2)} for ${purposeText}`);
+    logger.info(`[OTP] Code sent to ${phone.slice(0, 3)}****${phone.slice(-2)} for ${purposeText}`);
   }
 
   return result;
