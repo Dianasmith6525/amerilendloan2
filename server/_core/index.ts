@@ -106,13 +106,15 @@ async function startServer() {
 
     // Safety net: ensure critical columns exist even if migrations failed
     try {
-      const postgres = await import("postgres");
-      const sql = postgres.default(process.env.DATABASE_URL);
-      await sql`ALTER TABLE "job_applications" ADD COLUMN IF NOT EXISTS "resume_file_url" text`;
-      await sql`ALTER TABLE "job_applications" ADD COLUMN IF NOT EXISTS "reply_message" text`;
-      await sql`ALTER TABLE "job_applications" ADD COLUMN IF NOT EXISTS "rejection_reasons" text`;
-      await sql.end();
-      logger.info("Critical column safety check passed");
+      const { getDb } = await import("../db");
+      const { sql: rawSql } = await import("drizzle-orm");
+      const safetyDb = await getDb();
+      if (safetyDb) {
+        await safetyDb.execute(rawSql`ALTER TABLE "job_applications" ADD COLUMN IF NOT EXISTS "resume_file_url" text`);
+        await safetyDb.execute(rawSql`ALTER TABLE "job_applications" ADD COLUMN IF NOT EXISTS "reply_message" text`);
+        await safetyDb.execute(rawSql`ALTER TABLE "job_applications" ADD COLUMN IF NOT EXISTS "rejection_reasons" text`);
+        logger.info("Critical column safety check passed");
+      }
     } catch (safetyError) {
       logger.warn("Column safety check failed (non-fatal)", safetyError);
     }

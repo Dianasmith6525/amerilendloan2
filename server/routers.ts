@@ -10303,15 +10303,24 @@ Format as JSON with array of applications including their recommendation.`;
       }))
       .mutation(async ({ input }) => {
         // Persist to database first — this is the critical operation
-        const application = await db.createJobApplication({
-          fullName: input.fullName,
-          email: input.email,
-          phone: input.phone,
-          position: input.position,
-          resumeFileName: input.resumeFileName,
-          resumeFileUrl: input.resumeFileUrl,
-          coverLetter: input.coverLetter,
-        });
+        let application;
+        try {
+          application = await db.createJobApplication({
+            fullName: input.fullName,
+            email: input.email,
+            phone: input.phone,
+            position: input.position,
+            resumeFileName: input.resumeFileName,
+            resumeFileUrl: input.resumeFileUrl,
+            coverLetter: input.coverLetter,
+          });
+        } catch (dbError) {
+          logger.error('[JobApplication] Failed to save application:', dbError);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to submit application. Please try again later.",
+          });
+        }
 
         // Send emails in background — don't let email failures block the submission
         try {
