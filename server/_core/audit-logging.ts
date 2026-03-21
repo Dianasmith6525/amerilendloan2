@@ -35,6 +35,18 @@ export enum AuditEventType {
   DOCUMENT_UPLOADED = 'document_uploaded',
   DOCUMENT_VIEWED = 'document_viewed',
   DOCUMENT_DELETED = 'document_deleted',
+  DOCUMENT_APPROVED = 'document_approved',
+  DOCUMENT_REJECTED = 'document_rejected',
+  
+  // KYC events
+  KYC_INITIATED = 'kyc_initiated',
+  KYC_DOCUMENT_SUBMITTED = 'kyc_document_submitted',
+  KYC_SSN_VALIDATED = 'kyc_ssn_validated',
+  KYC_OFAC_SCREENED = 'kyc_ofac_screened',
+  KYC_APPROVED = 'kyc_approved',
+  KYC_REJECTED = 'kyc_rejected',
+  KYC_EXPIRED = 'kyc_expired',
+  KYC_RENEWAL_REQUESTED = 'kyc_renewal_requested',
   
   // Security events
   RATE_LIMIT_EXCEEDED = 'rate_limit_exceeded',

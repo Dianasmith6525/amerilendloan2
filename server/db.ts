@@ -30,7 +30,13 @@ import {
   ticketMessages,
   TicketMessage,
   InsertTicketMessage,
-  automationRules
+  automationRules,
+  kycVerification,
+  KycVerification,
+  InsertKycVerification,
+  uploadedDocuments,
+  UploadedDocument,
+  InsertUploadedDocument
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { COMPANY_INFO } from './_core/companyConfig';
@@ -1851,25 +1857,25 @@ export async function deleteAddress(addressId: number, userId?: number) {
 // PHASE 3: KYC/IDENTITY VERIFICATION
 // ============================================
 
-export async function getKycVerification(userId: number) {
+export async function getKycVerification(userId: number): Promise<KycVerification | null> {
   const db = await getDb();
   if (!db) return null;
   
-  const { kycVerification } = await import("../drizzle/schema");
   const result = await db.select().from(kycVerification).where(eq(kycVerification.userId, userId)).limit(1);
   return result.length > 0 ? result[0] : null;
 }
 
-export async function updateKycVerification(userId: number, data: any) {
+export async function updateKycVerification(
+  userId: number,
+  data: Partial<Omit<InsertKycVerification, 'userId'>>
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
-  const { kycVerification } = await import("../drizzle/schema");
   
   const existing = await getKycVerification(userId);
   
   if (existing) {
-    return db.update(kycVerification).set(data).where(eq(kycVerification.userId, userId));
+    return db.update(kycVerification).set({ ...data, updatedAt: new Date() }).where(eq(kycVerification.userId, userId));
   }
   
   return db.insert(kycVerification).values({
@@ -1878,20 +1884,56 @@ export async function updateKycVerification(userId: number, data: any) {
   });
 }
 
-export async function uploadDocument(data: any) {
+export async function uploadDocument(data: InsertUploadedDocument) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const { uploadedDocuments } = await import("../drizzle/schema");
   return db.insert(uploadedDocuments).values(data);
 }
 
-export async function getUserDocuments(userId: number) {
+export async function getUserDocuments(userId: number): Promise<UploadedDocument[]> {
   const db = await getDb();
   if (!db) return [];
   
-  const { uploadedDocuments } = await import("../drizzle/schema");
   return db.select().from(uploadedDocuments).where(eq(uploadedDocuments.userId, userId)).orderBy(desc(uploadedDocuments.createdAt));
+}
+
+/**
+ * Get all KYC verifications that are expiring within the given number of days.
+ */
+export async function getExpiringKycVerifications(withinDays: number): Promise<KycVerification[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const now = new Date();
+  const futureDate = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
+
+  return db.select().from(kycVerification)
+    .where(
+      and(
+        eq(kycVerification.status, 'approved'),
+        gt(kycVerification.expiresAt, now),
+        sql`${kycVerification.expiresAt} <= ${futureDate}`
+      )
+    );
+}
+
+/**
+ * Get all KYC verifications that have expired (expiresAt < now and still marked approved).
+ */
+export async function getExpiredKycVerifications(): Promise<KycVerification[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const now = new Date();
+
+  return db.select().from(kycVerification)
+    .where(
+      and(
+        eq(kycVerification.status, 'approved'),
+        sql`${kycVerification.expiresAt} IS NOT NULL AND ${kycVerification.expiresAt} <= ${now}`
+      )
+    );
 }
 
 // ============================================

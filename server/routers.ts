@@ -28,6 +28,8 @@ import { ENV } from "./_core/env";
 import { sdk } from "./_core/sdk";
 import { getClientIP } from "./_core/ipUtils";
 import { COMPANY_INFO } from "./_core/companyConfig";
+import { screenAgainstOFAC, validateSSNFormat, validateITINFormat } from "./_core/ofac-check";
+import { logAuditEvent, AuditEventType, AuditSeverity } from "./_core/audit-logging";
 import { 
   signUpWithEmail, 
   signInWithEmail, 
@@ -928,14 +930,93 @@ const bankingRouter = router({
 
 const kycRouter = router({
   getStatus: protectedProcedure.query(async ({ ctx }) => {
-    try {
-      const kyc = await db.getKycVerification(ctx.user.id);
-      return kyc || { status: "not_started", userId: ctx.user.id };
-    } catch (error) {
-      logger.error("Error fetching KYC:", error);
-      return null;
-    }
+    const kyc = await db.getKycVerification(ctx.user.id);
+    return kyc || { status: "not_started" as const, userId: ctx.user.id };
   }),
+
+  /** Validate SSN format and mark it on the user's KYC record */
+  validateSSN: protectedProcedure
+    .input(z.object({
+      ssn: z.string().min(9).max(11),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const result = validateSSNFormat(input.ssn);
+      if (!result.valid) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: result.error });
+      }
+
+      await db.updateKycVerification(ctx.user.id, {
+        ssnVerified: true,
+        ssnVerifiedAt: new Date(),
+        status: "pending",
+      });
+
+      logAuditEvent({
+        eventType: AuditEventType.KYC_SSN_VALIDATED,
+        userId: ctx.user.id,
+        severity: AuditSeverity.INFO,
+        description: `SSN validated for user ${ctx.user.id}`,
+        metadata: { maskedSSN: result.maskedSSN },
+      });
+
+      return { success: true, maskedSSN: result.maskedSSN };
+    }),
+
+  /** Validate ITIN format */
+  validateITIN: protectedProcedure
+    .input(z.object({
+      itin: z.string().min(9).max(11),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const result = validateITINFormat(input.itin);
+      if (!result.valid) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: result.error });
+      }
+
+      await db.updateKycVerification(ctx.user.id, {
+        itin: result.maskedITIN,
+        itinVerified: true,
+        status: "pending",
+      });
+
+      return { success: true, maskedITIN: result.maskedITIN };
+    }),
+
+  /** Run OFAC / sanctions screening for the current user */
+  screenOFAC: protectedProcedure
+    .input(z.object({
+      firstName: z.string().min(1),
+      lastName: z.string().min(1),
+      dateOfBirth: z.string().optional(),
+      address: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const result = await screenAgainstOFAC(input);
+
+      await db.updateKycVerification(ctx.user.id, {
+        ofacCheckCompleted: true,
+        ofacClear: result.clear,
+      });
+
+      logAuditEvent({
+        eventType: AuditEventType.KYC_OFAC_SCREENED,
+        userId: ctx.user.id,
+        severity: result.clear ? AuditSeverity.INFO : AuditSeverity.CRITICAL,
+        description: `OFAC screening ${result.clear ? "clear" : "flagged"} for user ${ctx.user.id}`,
+        metadata: {
+          screeningId: result.screeningId,
+          clear: result.clear,
+          matchCount: result.matchCount,
+          provider: result.provider,
+        },
+      });
+
+      return {
+        clear: result.clear,
+        screeningId: result.screeningId,
+        matchCount: result.matchCount,
+      };
+    }),
 
   uploadDocument: protectedProcedure
     .input(z.object({
@@ -952,8 +1033,27 @@ const kycRouter = router({
       try {
         await db.uploadDocument({
           userId: ctx.user.id,
-          ...input,
-          status: "pending_review",
+          documentType: input.documentType as "driver_license" | "state_id" | "passport" | "tax_return" | "w2" | "pay_stub",
+          filename: input.documentUrl.split('/').pop() || input.documentType,
+          storagePath: input.documentUrl,
+          fileSize: 0,
+          mimeType: "application/octet-stream",
+          status: "pending",
+        });
+
+        // Update KYC record to reflect document submission
+        await db.updateKycVerification(ctx.user.id, {
+          documentsUploaded: true,
+          documentSubmittedAt: new Date(),
+          status: "pending",
+        });
+
+        logAuditEvent({
+          eventType: AuditEventType.KYC_DOCUMENT_SUBMITTED,
+          userId: ctx.user.id,
+          severity: AuditSeverity.INFO,
+          description: `Document uploaded: ${input.documentType}`,
+          metadata: { documentType: input.documentType },
         });
 
         // Send admin notification email for document upload
@@ -9027,29 +9127,43 @@ export const appRouter = router({
       }),
 
     // List all pending KYC verifications (admin only)
-    listPendingKYC: adminProcedure.query(async ({ ctx }) => {
+    listPendingKYC: adminProcedure.query(async () => {
       try {
         const documents = await db.getAllVerificationDocuments();
-        const pending = (documents || []).filter(doc => doc.status === "under_review");
+        // Filter to documents that are pending review (status "pending")
+        const pending = (documents || []).filter(
+          doc => doc.status === "pending" || doc.status === "rejected"
+        );
         
-        // Group by userId to get unique users with pending verification
-        const userMap = new Map();
-        for (const doc of pending) {
-          if (!userMap.has(doc.userId)) {
-            const user = await db.getUserById(doc.userId);
-            if (user) {
-              userMap.set(doc.userId, {
-                userId: doc.userId,
-                userName: user.name || "Unknown",
-                userEmail: user.email || "",
-                documents: [],
-                submittedAt: doc.createdAt,
-                status: "pending",
-              });
-            }
+        // Gather unique user IDs first, then batch-fetch users
+        const uniqueUserIds = Array.from(new Set(pending.map(doc => doc.userId)));
+        const userMap = new Map<number, { userId: number; userName: string; userEmail: string; documents: Array<{ id: number; type: string; fileName: string; uploadedAt: Date; status: string; notes: string }>; submittedAt: Date; status: string }>();
+
+        // Fetch all users in parallel instead of N+1
+        const userResults = await Promise.all(
+          uniqueUserIds.map(uid => db.getUserById(uid))
+        );
+
+        for (let i = 0; i < uniqueUserIds.length; i++) {
+          const uid = uniqueUserIds[i];
+          const user = userResults[i];
+          if (user) {
+            userMap.set(uid, {
+              userId: uid,
+              userName: user.name || "Unknown",
+              userEmail: user.email || "",
+              documents: [],
+              submittedAt: new Date(),
+              status: "pending",
+            });
           }
-          if (userMap.has(doc.userId)) {
-            userMap.get(doc.userId).documents.push({
+        }
+
+        // Assign documents to their users
+        for (const doc of pending) {
+          const entry = userMap.get(doc.userId);
+          if (entry) {
+            entry.documents.push({
               id: doc.id,
               type: doc.documentType,
               fileName: doc.fileName || "Document",
@@ -9057,6 +9171,10 @@ export const appRouter = router({
               status: doc.status,
               notes: doc.adminNotes || "",
             });
+            // Use earliest document date as submission date
+            if (doc.createdAt < entry.submittedAt) {
+              entry.submittedAt = doc.createdAt;
+            }
           }
         }
         
@@ -9080,7 +9198,7 @@ export const appRouter = router({
           let loanApplicationId: number | null = null;
 
           for (const doc of documents || []) {
-            if (doc.status === "under_review") {
+            if (doc.status === "pending") {
               await db.updateVerificationDocumentStatus(
                 doc.id, 
                 "approved",
@@ -9090,6 +9208,31 @@ export const appRouter = router({
               approvedTypes.push(doc.documentType);
               if (doc.loanApplicationId) loanApplicationId = doc.loanApplicationId;
             }
+          }
+
+          // Update overall KYC status + set expiry (1 year from now)
+          if (approvedTypes.length > 0) {
+            const expiresAt = new Date();
+            expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+            await db.updateKycVerification(input.userId, {
+              status: "approved",
+              approvedAt: new Date(),
+              expiresAt,
+            });
+
+            logAuditEvent({
+              eventType: AuditEventType.KYC_APPROVED,
+              userId: ctx.user.id,
+              severity: AuditSeverity.INFO,
+              description: `KYC approved for user ${input.userId} — ${approvedTypes.length} documents`,
+              metadata: {
+                targetUserId: input.userId,
+                approvedTypes,
+                expiresAt: expiresAt.toISOString(),
+                notes: input.notes,
+              },
+            });
           }
 
           // Send ONE consolidated email instead of per-document emails
@@ -9136,7 +9279,7 @@ export const appRouter = router({
           let loanApplicationId: number | null = null;
 
           for (const doc of documents || []) {
-            if (doc.status === "under_review") {
+            if (doc.status === "pending") {
               await db.updateVerificationDocumentStatus(
                 doc.id, 
                 "rejected",
@@ -9146,6 +9289,26 @@ export const appRouter = router({
               rejectedTypes.push(doc.documentType);
               if (doc.loanApplicationId) loanApplicationId = doc.loanApplicationId;
             }
+          }
+
+          // Update overall KYC status
+          if (rejectedTypes.length > 0) {
+            await db.updateKycVerification(input.userId, {
+              status: "rejected",
+              rejectionReason: input.reason,
+            });
+
+            logAuditEvent({
+              eventType: AuditEventType.KYC_REJECTED,
+              userId: ctx.user.id,
+              severity: AuditSeverity.WARNING,
+              description: `KYC rejected for user ${input.userId} — ${rejectedTypes.length} documents`,
+              metadata: {
+                targetUserId: input.userId,
+                rejectedTypes,
+                reason: input.reason,
+              },
+            });
           }
 
           // Send ONE consolidated email instead of per-document emails

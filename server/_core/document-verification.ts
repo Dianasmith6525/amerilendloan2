@@ -379,11 +379,13 @@ export async function processDocumentVerification(
       {
         confidenceScore: verificationResult.confidenceScore,
         flags: JSON.stringify(verificationResult.flags),
-        extractedData: JSON.stringify(extractedData),
+        extractedData: JSON.stringify(verificationResult.extractedData),
       }
     );
+    logger.info(`[Document Verification] Updated verification status for loan ${loanApplicationId}`);
   } catch (error) {
     logger.error('[Document Verification] Failed to update status:', error);
+    // Non-fatal: the verification result is still valid even if DB update fails
   }
 
   return verificationResult;

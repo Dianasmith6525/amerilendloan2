@@ -7,6 +7,8 @@ import { CronJob } from "cron";
 import { checkAndSendPaymentReminders } from "./paymentReminders";
 import { processAutoPay } from "./auto-pay-executor";
 import { logger } from "./logger";
+import * as db from "../db";
+import { logAuditEvent, AuditEventType, AuditSeverity } from "./audit-logging";
 
 /**
  * Initialize all cron jobs
@@ -52,9 +54,53 @@ export function initializeCronJobs() {
 
   logger.info("[Cron Jobs] ✅ Auto-Pay Job scheduled (Daily at 3:00 AM EST)");
 
+  // KYC Expiry Check - Run daily at 6:00 AM
+  const kycExpiryJob = new CronJob(
+    "0 6 * * *", // At 6:00 AM every day
+    async () => {
+      logger.info("[Cron Jobs] Running daily KYC expiry check...");
+      try {
+        // 1) Mark expired KYC records
+        const expired = await db.getExpiredKycVerifications();
+        for (const kyc of expired) {
+          await db.updateKycVerification(kyc.userId, { status: "expired" });
+          logAuditEvent({
+            eventType: AuditEventType.KYC_EXPIRED,
+            userId: kyc.userId,
+            severity: AuditSeverity.WARNING,
+            description: `KYC expired for user ${kyc.userId}`,
+            metadata: { expiresAt: kyc.expiresAt?.toISOString() },
+          });
+        }
+
+        // 2) Send renewal reminders for KYC expiring within 30 days
+        const expiringSoon = await db.getExpiringKycVerifications(30);
+        for (const kyc of expiringSoon) {
+          logAuditEvent({
+            eventType: AuditEventType.KYC_RENEWAL_REQUESTED,
+            userId: kyc.userId,
+            severity: AuditSeverity.INFO,
+            description: `KYC renewal reminder sent to user ${kyc.userId}`,
+            metadata: { expiresAt: kyc.expiresAt?.toISOString() },
+          });
+        }
+
+        logger.info(`[Cron Jobs] KYC expiry check: ${expired.length} expired, ${expiringSoon.length} expiring soon`);
+      } catch (error) {
+        logger.error("[Cron Jobs] KYC expiry check failed:", error);
+      }
+    },
+    null,
+    true,
+    "America/New_York"
+  );
+
+  logger.info("[Cron Jobs] ✅ KYC Expiry Job scheduled (Daily at 6:00 AM EST)");
+
   return {
     paymentReminderJob,
     autoPayJob,
+    kycExpiryJob,
   };
 }
 

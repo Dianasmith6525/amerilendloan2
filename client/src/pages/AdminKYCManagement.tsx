@@ -1,9 +1,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle, XCircle, Clock, FileText, Download, Filter, Loader2, CheckCheck, ShieldCheck } from "lucide-react";
+import { CheckCircle, XCircle, Clock, FileText, Download, Loader2, CheckCheck, ShieldCheck, AlertTriangle, Shield, CreditCard, User, FileImage, FileCheck } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -12,7 +11,7 @@ interface KYCVerification {
   userId: number;
   userName: string;
   userEmail: string;
-  status: "pending" | "approved" | "rejected";
+  status: string;
   submittedAt: Date;
   documents: Document[];
 }
@@ -78,7 +77,7 @@ export function AdminKYCManagement() {
     });
   };
 
-  const pendingDocs = selectedKYC?.documents.filter(d => d.status === "under_review" || d.status === "pending") || [];
+  const pendingDocs = selectedKYC?.documents.filter(d => d.status === "pending") || [];
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -103,6 +102,13 @@ export function AdminKYCManagement() {
             Rejected
           </Badge>
         );
+      case "expired":
+        return (
+          <Badge className="bg-orange-600 flex items-center gap-1 w-fit">
+            <AlertTriangle className="w-3 h-3" />
+            Expired
+          </Badge>
+        );
       default:
         return null;
     }
@@ -110,19 +116,39 @@ export function AdminKYCManagement() {
 
   const getDocumentBadge = (status: string) => {
     switch (status) {
+      case "approved":
       case "verified":
         return <Badge className="bg-green-600 text-xs">Verified</Badge>;
       case "pending":
         return <Badge className="bg-yellow-600 text-xs">Pending</Badge>;
       case "rejected":
         return <Badge variant="destructive" className="text-xs">Rejected</Badge>;
+      case "expired":
+        return <Badge className="bg-orange-600 text-xs">Expired</Badge>;
       default:
-        return null;
+        return <Badge className="bg-slate-600 text-xs">{status}</Badge>;
     }
   };
 
   const getDocumentTypeIcon = (type: string) => {
-    return "";
+    switch (type) {
+      case "drivers_license_front":
+      case "drivers_license_back":
+      case "driver_license":
+        return <CreditCard className="w-4 h-4 text-blue-400" />;
+      case "passport":
+        return <Shield className="w-4 h-4 text-purple-400" />;
+      case "national_id_front":
+      case "national_id_back":
+      case "state_id":
+        return <User className="w-4 h-4 text-cyan-400" />;
+      case "selfie_with_id":
+        return <FileImage className="w-4 h-4 text-green-400" />;
+      case "ssn_card":
+        return <FileCheck className="w-4 h-4 text-red-400" />;
+      default:
+        return <FileText className="w-4 h-4 text-slate-400" />;
+    }
   };
 
   return (
@@ -262,7 +288,7 @@ export function AdminKYCManagement() {
                     <div key={doc.id} className="p-3 bg-slate-700/50 rounded-lg border border-slate-600">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-2xl">{getDocumentTypeIcon(doc.type)}</span>
+                          {getDocumentTypeIcon(doc.type)}
                           <div>
                             <p className="text-white text-sm font-medium">{doc.fileName}</p>
                             <p className="text-xs text-slate-400">{doc.type.replace("_", " ")}</p>
