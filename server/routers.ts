@@ -3406,30 +3406,19 @@ export const appRouter = router({
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       
-      // Clear session cookie with all possible variations for maximum compatibility
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, path: '/', maxAge: 0 });
-      ctx.res.clearCookie(COOKIE_NAME, { path: '/', httpOnly: true, secure: true, sameSite: 'lax', maxAge: 0 });
-      ctx.res.clearCookie(COOKIE_NAME, { path: '/' });
-      
-      // Set expired cookie explicitly
+      // Clear session cookie
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: 0 });
       ctx.res.cookie(COOKIE_NAME, '', {
         ...cookieOptions,
-        path: '/',
         maxAge: 0,
         expires: new Date(0),
       });
       
-      // Clear any other app cookies (consent, preferences, etc.)
-      const cookiesToClear = ['cookie_consent', 'cookie_preferences', 'app_consent', 'consent_accepted', 'theme_preference'];
-      for (const cookieName of cookiesToClear) {
-        ctx.res.clearCookie(cookieName, { path: '/' });
-        ctx.res.clearCookie(cookieName, { path: '/', httpOnly: false, secure: true, sameSite: 'lax' });
-      }
+      // Clear-Site-Data header for browsers that support it
+      ctx.res.setHeader("Clear-Site-Data", '"cookies", "storage"');
       
-      logger.info('[Auth] User logged out successfully - all cookies cleared');
-      return {
-        success: true,
-      } as const;
+      logger.info('[Auth] User logged out via tRPC – cookies cleared');
+      return { success: true } as const;
     }),
 
     // Update user password

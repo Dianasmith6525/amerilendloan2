@@ -28,6 +28,8 @@ import { apiLimiter, authLimiter, contactLimiter, paymentLimiter, uploadLimiter,
 import { handleFileUpload, handleFileDownload, upload } from "./upload-handler";
 import { registerAdminEmailActionRoutes } from "./admin-email-actions";
 import { logger } from "./logger";
+import { getSessionCookieOptions } from "./cookies";
+import { COOKIE_NAME } from "../../shared/const";
 
 // Validate critical environment variables at startup
 // (Zod validation in env.ts handles the detailed checks;
@@ -498,7 +500,38 @@ async function startServer() {
   
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
-  
+
+  // ── Dedicated logout endpoint ──────────────────────────────────────────
+  // Uses a direct GET route so the browser navigates here (not via tRPC/fetch).
+  // This guarantees the Set-Cookie header is processed by the browser,
+  // avoiding issues with Vercel's rewrite proxy stripping Set-Cookie from
+  // tRPC JSON responses.
+  app.get("/api/logout", (req, res) => {
+    const cookieOptions = getSessionCookieOptions(req);
+
+    // Clear the session cookie with matching attributes
+    res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: 0 });
+
+    // Belt-and-suspenders: also set it to empty with immediate expiry
+    res.cookie(COOKIE_NAME, "", {
+      ...cookieOptions,
+      maxAge: 0,
+      expires: new Date(0),
+    });
+
+    // Clear-Site-Data tells the browser to wipe cookies, storage, and cache
+    // for this origin. Supported by Chrome, Edge, Firefox.
+    res.setHeader("Clear-Site-Data", '"cookies", "storage"');
+
+    logger.info("[Auth] User logged out via /api/logout – cookies cleared");
+
+    // Redirect to home page after clearing the cookie
+    const redirectTo = typeof req.query.redirect === "string" ? req.query.redirect : "/";
+    // Only allow relative redirects to prevent open-redirect attacks
+    const safeRedirect = redirectTo.startsWith("/") ? redirectTo : "/";
+    res.redirect(302, safeRedirect);
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",
