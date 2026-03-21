@@ -29,7 +29,8 @@ import { handleFileUpload, handleFileDownload, upload } from "./upload-handler";
 import { registerAdminEmailActionRoutes } from "./admin-email-actions";
 import { logger } from "./logger";
 import { getSessionCookieOptions } from "./cookies";
-import { COOKIE_NAME } from "../../shared/const";
+import { COOKIE_NAME, SESSION_COOKIE_MS } from "../../shared/const";
+import { redeemSessionCode } from "./session-code";
 
 // Validate critical environment variables at startup
 // (Zod validation in env.ts handles the detailed checks;
@@ -515,6 +516,27 @@ async function startServer() {
   
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  // ── Session establishment endpoint ─────────────────────────────────────
+  // Vercel's rewrite proxy may strip Set-Cookie headers from tRPC/fetch
+  // responses. Login mutations return a one-time session code; the client
+  // then navigates here (direct GET) to set the session cookie reliably.
+  app.get("/api/auth/session", (req, res) => {
+    const code = typeof req.query.code === "string" ? req.query.code : "";
+    const redirect = typeof req.query.redirect === "string" ? req.query.redirect : "/dashboard";
+    const safeRedirect = redirect.startsWith("/") ? redirect : "/dashboard";
+
+    const sessionToken = redeemSessionCode(code);
+    if (!sessionToken) {
+      logger.warn("[Auth] Invalid or expired session code");
+      return res.redirect(302, "/login?error=session_expired");
+    }
+
+    const cookieOptions = getSessionCookieOptions(req);
+    res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_COOKIE_MS });
+    logger.info("[Auth] Session cookie set via /api/auth/session redirect");
+    res.redirect(302, safeRedirect);
+  });
 
   // ── Dedicated logout endpoint ──────────────────────────────────────────
   // Uses a direct GET route so the browser navigates here (not via tRPC/fetch).

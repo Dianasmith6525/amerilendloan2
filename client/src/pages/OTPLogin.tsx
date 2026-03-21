@@ -66,22 +66,24 @@ export default function OTPLogin() {
   });
 
   const verifyCodeMutation = trpc.otp.verifyCode.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       if (isResetMode) {
         // For password reset, move to password entry step instead of directly logging in
         setResetStep("newPassword");
         toast.success("Code verified! Now enter your new password.");
       } else if (isLogin) {
         toast.success("Login successful!");
-        // Full page reload so auth.me re-fetches with the new session cookie
-        setTimeout(() => { window.location.href = "/dashboard"; }, 300);
+        // Navigate via server endpoint so Set-Cookie is preserved through Vercel proxy
+        const code = data && 'sessionCode' in data ? (data as any).sessionCode : undefined;
+        setTimeout(() => { window.location.href = code ? `/api/auth/session?code=${encodeURIComponent(code)}&redirect=/dashboard` : "/dashboard"; }, 300);
       } else {
         toast.success("Account created successfully!");
         setSignupEmail("");
         setSignupUsername("");
         setSignupPassword("");
-        // Full page reload so auth.me re-fetches with the new session cookie
-        setTimeout(() => { window.location.href = "/dashboard"; }, 300);
+        // Navigate via server endpoint so Set-Cookie is preserved through Vercel proxy
+        const code = data && 'sessionCode' in data ? (data as any).sessionCode : undefined;
+        setTimeout(() => { window.location.href = code ? `/api/auth/session?code=${encodeURIComponent(code)}&redirect=/dashboard` : "/dashboard"; }, 300);
       }
     },
     onError: (error) => {
@@ -108,10 +110,11 @@ export default function OTPLogin() {
 
   // Password login mutation - tries custom password login first, then falls back to Supabase or OTP
   const passwordLoginMutation = trpc.auth.loginWithPassword.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success("Login successful!");
-      // Full page reload so auth.me re-fetches with the new session cookie
-      setTimeout(() => { window.location.href = "/dashboard"; }, 300);
+      // Navigate via server endpoint so Set-Cookie is preserved through Vercel proxy
+      const code = data?.sessionCode;
+      setTimeout(() => { window.location.href = code ? `/api/auth/session?code=${encodeURIComponent(code)}&redirect=/dashboard` : "/dashboard"; }, 300);
     },
     onError: (error) => {
       const errorMsg = error.message || "Failed to sign in";
@@ -131,10 +134,11 @@ export default function OTPLogin() {
 
   // Fallback password login mutation (Supabase)
   const supabaseLoginMutation = trpc.auth.supabaseSignIn.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success("Login successful!");
-      // Full page reload so auth.me re-fetches with the new session cookie
-      setTimeout(() => { window.location.href = "/dashboard"; }, 300);
+      // Navigate via server endpoint so Set-Cookie is preserved through Vercel proxy
+      const code = data?.sessionCode;
+      setTimeout(() => { window.location.href = code ? `/api/auth/session?code=${encodeURIComponent(code)}&redirect=/dashboard` : "/dashboard"; }, 300);
     },
     onError: (error) => {
       // If password login fails (service unavailable, invalid API key, etc), 

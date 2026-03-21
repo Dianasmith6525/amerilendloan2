@@ -79,6 +79,14 @@ export function getSessionCookieOptions(
  * The most reliable source is the VITE_APP_URL env var which the operator sets explicitly.
  */
 function getClientHostname(req: Request): string {
+  // If the actual request is from a local host, return it directly.
+  // VITE_APP_URL may point to the production domain which would cause
+  // cookie domain mismatches (e.g. domain=.amerilendloan.com on localhost).
+  const actualHost = req.hostname;
+  if (LOCAL_HOSTS.has(actualHost)) {
+    return actualHost;
+  }
+
   // 1. VITE_APP_URL env var — most reliable, explicitly configured by the operator
   const appUrl = process.env.VITE_APP_URL;
   if (appUrl) {

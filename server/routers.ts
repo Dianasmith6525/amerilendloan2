@@ -4,6 +4,7 @@ import { logger } from "./_core/logger";
 import { COOKIE_NAME, SESSION_COOKIE_MS } from "@shared/const";
 import { toTitleCase, capitalizeWords } from "@shared/format";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { createSessionCode } from "./_core/session-code";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -4123,6 +4124,7 @@ export const appRouter = router({
           }
 
           // Create and set our own signed session cookie (not the Supabase token)
+          let sessionCode: string | undefined;
           if (result.session && result.user?.id) {
             const cookieOptions = getSessionCookieOptions(ctx.req);
             const sessionToken = await sdk.createSessionToken(result.user.id, {
@@ -4130,6 +4132,7 @@ export const appRouter = router({
               expiresInMs: SESSION_COOKIE_MS,
             });
             ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_COOKIE_MS });
+            sessionCode = createSessionCode(sessionToken);
           }
 
           // Sync with your database and send login notification
@@ -4164,7 +4167,7 @@ export const appRouter = router({
             }
           }
 
-          return { success: true, user: result.user?.email };
+          return { success: true, user: result.user?.email, sessionCode };
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
           logger.error("[Auth] Supabase login error:", errorMsg);
@@ -4267,6 +4270,7 @@ export const appRouter = router({
           return { 
             success: true, 
             user: user.email,
+            sessionCode: createSessionCode(sessionToken),
             message: "Login successful"
           };
         } catch (error) {
@@ -4451,6 +4455,7 @@ export const appRouter = router({
         }
 
         // Create and set our own signed session cookie (not the Supabase token)
+        let sessionCode: string | undefined;
         if (result.session && result.user?.id) {
           const cookieOptions = getSessionCookieOptions(ctx.req);
           const sessionToken = await sdk.createSessionToken(result.user.id, {
@@ -4458,9 +4463,10 @@ export const appRouter = router({
             expiresInMs: SESSION_COOKIE_MS,
           });
           ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_COOKIE_MS });
+          sessionCode = createSessionCode(sessionToken);
         }
 
-        return { success: true, user: result.user?.email };
+        return { success: true, user: result.user?.email, sessionCode };
       }),
 
     supabaseResetPassword: publicProcedure
@@ -4683,6 +4689,7 @@ export const appRouter = router({
               expiresInMs: SESSION_COOKIE_MS,
             });
             ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_COOKIE_MS });
+            const sessionCode = createSessionCode(sessionToken);
 
             // Send signup welcome email for new users
             if (isNewUser && input.purpose === "signup" && user.email) {
@@ -4701,6 +4708,8 @@ export const appRouter = router({
                 logger.error('[Email] Failed to send admin signup notification:', err);
               }
             }
+
+            return { success: true, sessionCode };
           } catch (err) {
             logger.error('[OTP] Failed to establish session after verification:', err);
             // Do not expose internal error details to client
