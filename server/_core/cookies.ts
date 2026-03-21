@@ -41,7 +41,11 @@ function getApexDomain(hostname: string): string {
 export function getSessionCookieOptions(
   req: Request
 ): Pick<CookieOptions, "domain" | "httpOnly" | "path" | "sameSite" | "secure"> {
-  const hostname = req.hostname;
+  // Determine the real client-facing hostname.
+  // Behind Vercel rewrites, req.hostname may be the Railway internal hostname
+  // (e.g. "amerilendloan-production.up.railway.app") instead of the user-facing
+  // domain. Check X-Forwarded-Host, then Origin/Referer to get the actual domain.
+  const hostname = getClientHostname(req);
   const secure = isSecureRequest(req);
   const shouldSetDomain =
     hostname &&
@@ -63,4 +67,37 @@ export function getSessionCookieOptions(
     secure,
     ...(domain ? { domain } : {}),
   };
+}
+
+/**
+ * Get the real client-facing hostname, even behind reverse proxies.
+ * Priority: X-Forwarded-Host > Origin header > Referer header > req.hostname
+ */
+function getClientHostname(req: Request): string {
+  // 1. X-Forwarded-Host (set by some proxies)
+  const xfh = req.headers["x-forwarded-host"];
+  if (xfh) {
+    const host = (Array.isArray(xfh) ? xfh[0] : xfh).split(",")[0].trim();
+    // Strip port if present
+    return host.replace(/:\d+$/, "");
+  }
+
+  // 2. Origin header (always present on POST/mutation requests from browsers)
+  const origin = req.headers["origin"];
+  if (origin) {
+    try {
+      return new URL(origin).hostname;
+    } catch { /* ignore parse errors */ }
+  }
+
+  // 3. Referer header
+  const referer = req.headers["referer"];
+  if (referer) {
+    try {
+      return new URL(referer).hostname;
+    } catch { /* ignore parse errors */ }
+  }
+
+  // 4. Fallback to Express req.hostname (which reads Host header / trust proxy)
+  return req.hostname;
 }
