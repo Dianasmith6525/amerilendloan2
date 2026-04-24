@@ -257,6 +257,12 @@ async function startServer() {
           ...extraConnectSrc,
         ],
         workerSrc: ["'self'", "blob:"],
+        // Defense-in-depth against clickjacking. Same as X-Frame-Options: SAMEORIGIN
+        // but enforced via the modern CSP3 directive (browsers prefer this when both
+        // are set).
+        frameAncestors: ["'self'"],
+        // Block mixed content and force HTTPS subresources.
+        upgradeInsecureRequests: [],
       },
     },
     crossOriginEmbedderPolicy: false, // Allow cross-origin resources (Stripe, fonts)
@@ -264,18 +270,58 @@ async function startServer() {
     referrerPolicy: { policy: "strict-origin-when-cross-origin" },
   }));
 
+  // Permissions-Policy: explicitly deny browser features the site does not use.
+  // Reduces blast radius of any future XSS by preventing access to camera, mic,
+  // geolocation, USB, payment APIs (we use Stripe.js iframes, not the W3C
+  // Payment Request API), etc. Listing only what's denied keeps this readable
+  // and avoids accidentally allowlisting a third-party origin.
+  app.use((_req, res, next) => {
+    res.setHeader(
+      "Permissions-Policy",
+      [
+        "camera=()",
+        "microphone=()",
+        "geolocation=()",
+        "payment=()",
+        "usb=()",
+        "magnetometer=()",
+        "accelerometer=()",
+        "gyroscope=()",
+        "interest-cohort=()",
+      ].join(", "),
+    );
+    next();
+  });
+
   // Rate limiting (configured in rate-limiting.ts with optional Redis backing)
   app.use("/api/trpc", apiLimiter);
 
   // Apply strict auth limiter to OAuth routes
   app.use("/api/oauth", authLimiter);
-  
+
   // Apply upload limiter to upload endpoints
   app.use("/api/upload", uploadLimiter);
-  
+
   // Apply strict limiter to contact form endpoints (prevent email spam)
   app.use("/api/trpc/contact.sendEmail", contactLimiter);
   app.use("/api/trpc/contact.sendJobApplication", contactLimiter);
+
+  // Payment endpoints — tighter limit (20/h/IP) on top of the generic apiLimiter.
+  // Defends against payment-flow probing, fraudulent card-testing, and accidental
+  // duplicate submissions that survive client-side dedup.
+  app.use("/api/trpc/payments", paymentLimiter);
+  app.use("/api/stripe/webhook", paymentLimiter);
+
+  // Public unauthenticated POSTs that are the highest abuse-risk endpoints on a
+  // publicly-indexed site: anonymous loan submission, OTP code requests (which
+  // send real emails/SMS that cost money), and duplicate-account probes.
+  // authLimiter = 5 attempts / 15 min / IP, with successful requests excluded
+  // so legitimate users are unaffected.
+  app.use("/api/trpc/loans.submit", authLimiter);
+  app.use("/api/trpc/loans.checkDuplicate", authLimiter);
+  app.use("/api/trpc/otp.requestCode", authLimiter);
+  app.use("/api/trpc/otp.requestPhoneCode", authLimiter);
+  app.use("/api/trpc/otp.verifyCode", authLimiter);
   
   // Apply admin limiter to admin-facing tRPC endpoints
   app.use("/api/trpc/admin", adminLimiter);
