@@ -18,7 +18,7 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
-import { getFriendlyFirstName } from "@shared/format";
+import { getFriendlyFirstName, getFriendlyFullName } from "@shared/format";
 import AiSupportWidget from "@/components/AiSupportWidget";
 import UserNotificationBell from "@/components/UserNotificationBell";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -745,14 +745,14 @@ export default function Dashboard() {
                     <div className="w-8 h-8 rounded-full bg-[#0A2540] flex items-center justify-center">
                       <User className="w-4 h-4 text-white" />
                     </div>
-                    <span className="text-sm font-medium hidden sm:inline">{user?.name?.split(" ")[0] || "Account"}</span>
+                    <span className="text-sm font-medium hidden sm:inline">{getFriendlyFirstName(user)}</span>
                     <ChevronDown className="w-4 h-4 text-slate-400" />
                   </button>
                   
                   {showProfileMenu && (
                     <div className="absolute right-0 mt-2 w-52 bg-white border border-slate-200 rounded-xl shadow-lg z-10 overflow-hidden">
                       <div className="p-3 border-b border-slate-100 bg-slate-50/50">
-                        <p className="text-sm font-medium text-slate-900">{user?.name || "User"}</p>
+                        <p className="text-sm font-medium text-slate-900">{getFriendlyFullName(user)}</p>
                         <p className="text-xs text-slate-500 truncate">{user?.email || ""}</p>
                       </div>
                       <div className="py-1">

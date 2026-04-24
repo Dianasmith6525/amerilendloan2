@@ -65,3 +65,29 @@ export function getFriendlyFirstName(user?: {
 
   return "there";
 }
+
+/**
+ * Returns a properly-cased full name (e.g. "Diana Smith") for display.
+ * Prefers the structured firstName/lastName columns, falls back to the
+ * legacy `name` field, then the email local-part. Never returns the raw
+ * email so we don't leak it in UI surfaces.
+ */
+export function getFriendlyFullName(user?: {
+  firstName?: string | null;
+  lastName?: string | null;
+  name?: string | null;
+  email?: string | null;
+} | null): string {
+  if (!user) return "User";
+
+  const first = user.firstName?.trim();
+  const last = user.lastName?.trim();
+  if (first || last) {
+    return [first, last].filter(Boolean).map((p) => toTitleCase(p as string)).join(" ");
+  }
+
+  const fromName = user.name?.trim();
+  if (fromName) return toTitleCase(fromName);
+
+  return getFriendlyFirstName(user);
+}
