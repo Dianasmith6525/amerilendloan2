@@ -67,8 +67,11 @@ export default function SelfieCapture() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: facingMode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          // Portrait framing — better suited to head + ID verification
+          // than the default landscape webcam stream.
+          width: { ideal: 720 },
+          height: { ideal: 960 },
+          aspectRatio: { ideal: 3 / 4 },
         },
         audio: false
       });
@@ -115,9 +118,22 @@ export default function SelfieCapture() {
 
     if (!ctx) return;
 
-    // Set canvas dimensions to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Center-crop to a 3:4 portrait so the saved photo matches the on-screen
+    // framing aperture instead of the raw (often landscape) sensor stream.
+    const sw = video.videoWidth;
+    const sh = video.videoHeight;
+    const targetRatio = 3 / 4; // width / height
+    let cropW = sw;
+    let cropH = Math.round(sw / targetRatio);
+    if (cropH > sh) {
+      cropH = sh;
+      cropW = Math.round(sh * targetRatio);
+    }
+    const sx = Math.round((sw - cropW) / 2);
+    const sy = Math.round((sh - cropH) / 2);
+
+    canvas.width = cropW;
+    canvas.height = cropH;
 
     // Mirror image if using front camera
     if (facingMode === "user") {
@@ -125,8 +141,8 @@ export default function SelfieCapture() {
       ctx.scale(-1, 1);
     }
 
-    // Draw video frame to canvas
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // Draw the cropped video region to canvas
+    ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
 
     // Convert to data URL
     const imageDataUrl = canvas.toDataURL("image/jpeg", 0.9);
@@ -331,21 +347,21 @@ export default function SelfieCapture() {
 
             {cameraActive && !capturedImage && (
               <div className="space-y-4">
-                <div className="relative bg-black rounded-lg overflow-hidden">
+                <div className="relative bg-black rounded-lg overflow-hidden mx-auto w-full max-w-sm aspect-[3/4]">
                   <video
                     ref={videoRef}
                     autoPlay
                     playsInline
                     muted
-                    className={`w-full h-auto max-h-[400px] object-cover ${facingMode === "user" ? "-scale-x-100" : ""}`}
+                    className={`absolute inset-0 w-full h-full object-cover ${facingMode === "user" ? "-scale-x-100" : ""}`}
                   />
                   {/* Face/ID guide overlay */}
                   <div className="absolute inset-0 pointer-events-none">
                     <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                      <div className="w-48 h-64 border-2 border-white/50 rounded-lg flex flex-col items-center justify-center">
-                        <User className="w-16 h-16 text-white/50" />
+                      <div className="w-44 h-56 border-2 border-white/60 rounded-[50%/40%] flex flex-col items-center justify-center">
+                        <User className="w-12 h-12 text-white/60" />
                         <p className="text-white/70 text-xs mt-2 text-center px-2">
-                          Position your face here with ID visible
+                          Center your face & ID here
                         </p>
                       </div>
                     </div>
@@ -370,11 +386,11 @@ export default function SelfieCapture() {
 
             {capturedImage && (
               <div className="space-y-4">
-                <div className="relative bg-gray-100 rounded-lg overflow-hidden">
+                <div className="relative bg-gray-100 rounded-lg overflow-hidden mx-auto w-full max-w-sm aspect-[3/4]">
                   <img
                     src={capturedImage}
                     alt="Captured selfie"
-                    className="w-full h-auto max-h-[400px] object-contain"
+                    className="absolute inset-0 w-full h-full object-cover"
                   />
                 </div>
                 
