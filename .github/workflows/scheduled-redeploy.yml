@@ -1,0 +1,59 @@
+name: Scheduled Redeploy (one-shot)
+
+# Triggers Railway auto-deploy by pushing an empty commit to main, then
+# disables itself so it only runs once.
+#
+# Scheduled for 00:30 UTC (8:30pm EDT / 7:30pm EST) — outside Railway
+# free-tier peak hours (8am–8pm America/New_York).
+#
+# Can also be triggered manually from the Actions tab. After it runs
+# successfully once (scheduled or manual), it self-disables. To re-arm:
+#   GitHub → Actions → Scheduled Redeploy (one-shot) → ⋯ → Enable workflow
+
+on:
+  schedule:
+    # 00:30 UTC daily = 8:30pm EDT / 7:30pm EST
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Reason for manual redeploy"
+        required: false
+        default: "manual trigger"
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: scheduled-redeploy
+  cancel-in-progress: false
+
+jobs:
+  redeploy:
+    name: Push empty commit and self-disable
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Push empty commit
+        run: |
+          REASON="${{ github.event.inputs.reason || 'scheduled redeploy (cron, one-shot)' }}"
+          git commit --allow-empty -m "chore: trigger Railway redeploy [skip ci]" -m "Reason: $REASON"
+          git push origin main
+
+      - name: Disable this workflow (one-shot)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow disable "scheduled-redeploy.yml" --repo "${{ github.repository }}"
