@@ -3869,15 +3869,20 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         try {
-          // Map firstName/lastName to name for updateUserProfile
-          const profileUpdate = {
-            name: input.firstName && input.lastName 
-              ? `${input.firstName} ${input.lastName}`
-              : input.firstName || input.lastName || undefined,
-            phone: input.phoneNumber,
-          };
-          
-          await db.updateUserProfile(ctx.user.id, profileUpdate);
+          // Persist the structured fields directly (firstName/lastName/phoneNumber/
+          // dateOfBirth) and keep the legacy `name` column in sync for any callers
+          // that still read it.
+          const composedName = input.firstName && input.lastName
+            ? `${input.firstName} ${input.lastName}`
+            : input.firstName || input.lastName || undefined;
+
+          await db.updateUserProfile(ctx.user.id, {
+            firstName: input.firstName,
+            lastName: input.lastName,
+            phoneNumber: input.phoneNumber,
+            dateOfBirth: input.dateOfBirth,
+            name: composedName,
+          });
           
           // Log the activity
           await db.logAccountActivity({

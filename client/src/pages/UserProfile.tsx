@@ -103,6 +103,21 @@ export function UserProfile() {
     },
   });
 
+  // Reset form values whenever fresh user data arrives so the inputs reflect
+  // the saved profile (defaultValues only run once on mount).
+  useEffect(() => {
+    if (user) {
+      personalForm.reset({
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        email: user.email || '',
+        phone: user.phoneNumber || '',
+        dateOfBirth: user.dateOfBirth || '',
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.firstName, user?.lastName, user?.email, user?.phoneNumber, user?.dateOfBirth]);
+
   // Address form
   const addressForm = useForm<AddressForm>({
     resolver: zodResolver(addressSchema),
@@ -119,6 +134,7 @@ export function UserProfile() {
   const updateProfileMutation = trpc.auth.updateUserProfile.useMutation({
     onSuccess: () => {
       toast.success('Profile updated successfully');
+      utils.auth.me.invalidate();
       refetchUser();
       setIsEditingPersonal(false);
     },

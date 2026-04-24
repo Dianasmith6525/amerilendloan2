@@ -1212,14 +1212,31 @@ export async function searchUsers(query: string, limit = 10) {
     .limit(limit);
 }
 
-export async function updateUserProfile(userId: number, updates: { name?: string; email?: string; phone?: string }) {
+export async function updateUserProfile(
+  userId: number,
+  updates: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    firstName?: string;
+    lastName?: string;
+    phoneNumber?: string;
+    dateOfBirth?: string;
+  },
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
+
   const updateData: any = { updatedAt: new Date() };
   if (updates.name !== undefined) updateData.name = updates.name || null;
   if (updates.email !== undefined) updateData.email = updates.email || null;
-  
+  if (updates.firstName !== undefined) updateData.firstName = updates.firstName || null;
+  if (updates.lastName !== undefined) updateData.lastName = updates.lastName || null;
+  // Accept either `phone` (legacy) or the canonical `phoneNumber` column name.
+  if (updates.phoneNumber !== undefined) updateData.phoneNumber = updates.phoneNumber || null;
+  else if (updates.phone !== undefined) updateData.phoneNumber = updates.phone || null;
+  if (updates.dateOfBirth !== undefined) updateData.dateOfBirth = updates.dateOfBirth || null;
+
   await db.update(users)
     .set(updateData)
     .where(eq(users.id, userId));
