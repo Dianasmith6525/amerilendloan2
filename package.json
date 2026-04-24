@@ -18,7 +18,8 @@
     "db:generate": "drizzle-kit generate",
     "audit:env": "tsx scripts/audit-env.ts",
     "audit:env:strict": "tsx scripts/audit-env.ts --strict",
-    "sitemap": "tsx scripts/generate-sitemap.ts"
+    "sitemap": "tsx scripts/generate-sitemap.ts",
+    "verify:backup": "tsx scripts/verify-backup.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
