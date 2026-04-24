@@ -710,7 +710,7 @@ export default function Dashboard() {
 
               <div className="flex-1 md:flex-none">
                 <h1 className="text-lg md:text-xl font-semibold text-[#0A2540] tracking-tight">
-                  Welcome back, {getFriendlyFirstName(user)}
+                  Welcome back, {getFriendlyFullName(user)}
                 </h1>
                 <p className="text-sm text-slate-500 hidden md:block">Manage your loan applications and payments</p>
               </div>
