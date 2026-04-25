@@ -976,8 +976,8 @@ export default function Dashboard() {
                               onClick={() => setExpandedLoan(expandedLoan === loan.id ? null : loan.id)}
                               className="w-full text-left hover:opacity-75 transition-opacity"
                             >
-                              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                                <div className="flex-1">
+                              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                                <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-3 mb-2">
                                     <h3 className="text-lg font-bold text-gray-800">
                                       {loan.loanType === "installment" ? "Installment Loan" : "Short-Term Loan"}
@@ -999,7 +999,7 @@ export default function Dashboard() {
                                       </p>
                                     </div>
                                   )}
-                                  <div className="grid md:grid-cols-3 gap-4 text-sm">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-sm">
                                     <div>
                                       <p className="text-gray-500">Requested Amount</p>
                                       <p className="font-semibold text-gray-800">
@@ -1023,7 +1023,7 @@ export default function Dashboard() {
                                   </div>
                                 </div>
 
-                                <div className="flex flex-col gap-2 md:min-w-fit">
+                                <div className="flex flex-col gap-2 md:w-56 md:flex-shrink-0">
                                   <ChevronDown
                                     className={`w-5 h-5 text-gray-400 transition-transform md:hidden ${
                                       expandedLoan === loan.id ? "rotate-180" : ""
@@ -1035,9 +1035,9 @@ export default function Dashboard() {
                                         <p className="font-semibold">Approved</p>
                                         <p>Your loan has been approved. Pay the processing fee to release funds.</p>
                                       </div>
-                                      <Link href={`/payment/${loan.id}`}>
-                                        <Button className="bg-[#C9A227] hover:bg-[#B8922A] text-white w-full">
-                                          Pay Processing Fee
+                                      <Link href={`/payment/${loan.id}`} className="w-full">
+                                        <Button className="bg-[#C9A227] hover:bg-[#B8922A] text-white w-full whitespace-nowrap text-sm px-3">
+                                          Pay Fee
                                         </Button>
                                       </Link>
                                     </>
@@ -1239,7 +1239,7 @@ export default function Dashboard() {
                       Your loan has been approved. Pay the processing fee below to release the funds for disbursement.
                     </p>
                     <Link href={`/payment/${loan.id}`}>
-                      <Button className="bg-[#C9A227] hover:bg-[#B8922A] text-white">
+                      <Button className="bg-[#C9A227] hover:bg-[#B8922A] text-white whitespace-nowrap">
                         Pay Processing Fee ({formatCurrency(loan.processingFeeAmount || 0)})
                       </Button>
                     </Link>
