@@ -241,8 +241,14 @@ async function startServer() {
         scriptSrc: [
           "'self'",
           "https://js.stripe.com",
+          // Google Translate widget loads scripts from several subdomains as it
+          // initializes. Allow the full translate + gstatic origins so the
+          // widget can actually swap page text after the user picks a language.
           "https://translate.google.com",
           "https://translate.googleapis.com",
+          "https://translate-pa.googleapis.com",
+          "https://www.gstatic.com",
+          "https://www.google.com",
           // Cloudflare Turnstile bot-verification widget
           "https://challenges.cloudflare.com",
           ...devScriptSrc,
@@ -266,8 +272,13 @@ async function startServer() {
           // Sentry error reporting
           "https://*.sentry.io",
           "https://*.ingest.sentry.io",
-          // Google Translate widget
+          // Google Translate widget — loads translation payloads from
+          // translate.googleapis.com and translate-pa.googleapis.com, plus
+          // fetches font/asset metadata from www.gstatic.com.
           "https://translate.googleapis.com",
+          "https://translate-pa.googleapis.com",
+          "https://www.gstatic.com",
+          "https://www.google.com",
           ...extraConnectSrc,
           ...devConnectSrc,
         ],
