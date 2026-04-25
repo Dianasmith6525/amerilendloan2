@@ -29,23 +29,13 @@ export default function Settings() {
       setLocation("/login");
     }
   }, [isAuthenticated, authLoading, setLocation]);
-  
-  // Show loading state while checking authentication
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-emerald-50 to-blue-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">{t('common.loading')}</p>
-        </div>
-      </div>
-    );
-  }
-  
-  // Don't render if not authenticated (redirect will happen)
-  if (!isAuthenticated) {
-    return null;
-  }
+
+  // NOTE: do not early-return here. React requires the same number of hooks
+  // on every render, and dozens of useState/useQuery/useMutation calls live
+  // below. Returning before them flipped the hook count whenever auth state
+  // resolved and produced "Rendered more hooks than during the previous
+  // render". The loading/unauthenticated UI is rendered further down after
+  // every hook has been called.
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
@@ -241,6 +231,18 @@ export default function Settings() {
   }, [activeTab]);
 
   // 2FA query removed - now managed in Dashboard
+
+  // Render guards live AFTER every hook so the hook count stays stable.
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-emerald-50 to-blue-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">{t('common.loading')}</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
