@@ -7,7 +7,12 @@ import { storagePut } from "../storage";
 import { ENV } from "./env";
 
 // Backup configuration
-const BACKUP_DIR = path.join(process.cwd(), "backups");
+// BACKUP_DIR can be overridden via env (e.g. point to a Railway volume mount).
+// Defaults to <cwd>/backups, which is read-only on most container filesystems
+// (Railway, Vercel, Docker images built with `COPY` only). When the directory
+// can't be created or written to we silently skip the local-disk write — the
+// object-storage upload remains the source of truth.
+const BACKUP_DIR = process.env.BACKUP_DIR || path.join(process.cwd(), "backups");
 const MAX_BACKUPS = 50; // Keep last 50 backups (more than before since frequency is higher)
 const BACKUP_STORAGE_PREFIX = "db-backups";
 
@@ -40,11 +45,28 @@ export function getBackupHealth() {
   return { ...lastBackupStatus };
 }
 
-// Ensure backup directory exists
-function ensureBackupDir() {
-  if (!fs.existsSync(BACKUP_DIR)) {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    logger.info(`[Backup] Created backup directory: ${BACKUP_DIR}`);
+// Ensure backup directory exists. Returns true on success, false if the
+// filesystem is read-only or otherwise refuses the mkdir (e.g. EACCES on
+// Railway's immutable container filesystem). Never throws — callers should
+// treat a false return as "local writes unavailable, fall back to object
+// storage only".
+let backupDirWarnedUnavailable = false;
+function ensureBackupDir(): boolean {
+  try {
+    if (!fs.existsSync(BACKUP_DIR)) {
+      fs.mkdirSync(BACKUP_DIR, { recursive: true });
+      logger.info(`[Backup] Created backup directory: ${BACKUP_DIR}`);
+    }
+    return true;
+  } catch (error) {
+    if (!backupDirWarnedUnavailable) {
+      backupDirWarnedUnavailable = true;
+      logger.warn(
+        `[Backup] Local backup directory unavailable (${(error as Error).message}). ` +
+        `Set BACKUP_DIR to a writable path or rely on object storage.`
+      );
+    }
+    return false;
   }
 }
 
@@ -57,6 +79,7 @@ function getBackupTimestamp() {
 // Clean up old backups (keep only MAX_BACKUPS)
 function cleanupOldBackups() {
   try {
+    if (!fs.existsSync(BACKUP_DIR)) return;
     const files = fs.readdirSync(BACKUP_DIR)
       .filter(f => (f.startsWith("backup-") || f.startsWith("pre-migration-backup-")) && f.endsWith(".json"))
       .sort()
@@ -77,10 +100,10 @@ function cleanupOldBackups() {
 // Export all tables to a backup file
 export async function createBackup(): Promise<string | null> {
   logger.info("[Backup] Starting database backup...");
-  
+
   try {
-    ensureBackupDir();
-    
+    const localDirAvailable = ensureBackupDir();
+
     const db = await getDb();
     if (!db) {
       logger.error("[Backup] Database connection not available");
@@ -134,23 +157,33 @@ export async function createBackup(): Promise<string | null> {
       }
     }
 
-    // Local-disk write (always attempted as a best-effort fallback so dev /
-    // single-instance deploys keep a copy available via the file system).
-    try {
-      fs.writeFileSync(filepath, serialized);
+    // Local-disk write (best-effort fallback so dev / single-instance deploys
+    // keep a copy on disk). Skipped entirely when the backup directory isn't
+    // writable, e.g. read-only container filesystems on Railway/Vercel.
+    if (localDirAvailable) {
+      try {
+        fs.writeFileSync(filepath, serialized);
 
-      // Verify backup file is valid by re-reading and parsing it
-      const verifyContent = fs.readFileSync(filepath, "utf-8");
-      const verifyData = JSON.parse(verifyContent);
-      if (!verifyData.metadata || !verifyData.data || verifyData.metadata.tableCount !== metadata.tableCount) {
-        throw new Error("Backup verification failed: file contents don't match expected data");
+        // Verify backup file is valid by re-reading and parsing it
+        const verifyContent = fs.readFileSync(filepath, "utf-8");
+        const verifyData = JSON.parse(verifyContent);
+        if (!verifyData.metadata || !verifyData.data || verifyData.metadata.tableCount !== metadata.tableCount) {
+          throw new Error("Backup verification failed: file contents don't match expected data");
+        }
+      } catch (localError) {
+        if (storageConfigured()) {
+          logger.warn("[Backup] Local-disk fallback write failed (object storage copy still ok)", localError);
+        } else {
+          throw localError;
+        }
       }
-    } catch (localError) {
-      if (storageConfigured()) {
-        logger.warn("[Backup] Local-disk fallback write failed (object storage copy still ok)", localError);
-      } else {
-        throw localError;
-      }
+    } else if (!storageConfigured()) {
+      // No durable destination at all — surface a clear error rather than
+      // silently "succeeding" with an in-memory backup nobody can restore.
+      throw new Error(
+        "No backup destination available: local backup directory is not writable and object storage is not configured. " +
+        "Set BACKUP_DIR to a writable path or configure BUILT_IN_FORGE_API_URL/BUILT_IN_FORGE_API_KEY."
+      );
     }
 
     const totalRecords = Object.values(backupData).reduce((sum, arr) => sum + arr.length, 0);
@@ -190,14 +223,22 @@ export async function createBackup(): Promise<string | null> {
 export async function createPreMigrationBackup(): Promise<string | null> {
   logger.info("[Backup] Creating pre-migration safety backup...");
   try {
-    ensureBackupDir();
     const result = await createBackup();
     if (result) {
-      // Rename to indicate it's a pre-migration backup
-      const preMigrationName = result.replace("backup-", "pre-migration-backup-");
-      fs.renameSync(result, preMigrationName);
-      logger.info(`[Backup] ✅ Pre-migration backup: ${path.basename(preMigrationName)}`);
-      return preMigrationName;
+      // Rename to indicate it's a pre-migration backup. Only meaningful when
+      // the backup actually landed on local disk (object-storage-only deploys
+      // get a regular timestamped key in storage).
+      try {
+        const preMigrationName = result.replace("backup-", "pre-migration-backup-");
+        if (fs.existsSync(result)) {
+          fs.renameSync(result, preMigrationName);
+          logger.info(`[Backup] ✅ Pre-migration backup: ${path.basename(preMigrationName)}`);
+          return preMigrationName;
+        }
+      } catch (renameError) {
+        logger.warn("[Backup] Could not rename pre-migration backup", renameError);
+      }
+      return result;
     }
     return null;
   } catch (error) {
