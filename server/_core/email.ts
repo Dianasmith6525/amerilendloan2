@@ -277,8 +277,8 @@ export async function sendLoanApplicationReceivedEmail(
             <!-- Success Icon -->
             <div style="text-align: center; margin-bottom: 20px;">
               <div style="display: inline-block; background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-radius: 50%; width: 64px; height: 64px; line-height: 64px; font-size: 28px;">📋</div>
-              <h2 style="color: #0033A0; margin: 12px 0 5px 0; font-size: 22px; font-weight: 700;">Application Received!</h2>
-              <p style="color: #888; margin: 0; font-size: 13px;">Your loan application is now being reviewed</p>
+              <h2 style="color: #0033A0; margin: 12px 0 5px 0; font-size: 22px; font-weight: 700;">Application Received</h2>
+              <p style="color: #888; margin: 0; font-size: 13px;">Your loan application is now under review</p>
             </div>
 
             <p style="color: #444; font-size: 15px;">Hi <strong>${fullName}</strong>,</p>
@@ -347,8 +347,8 @@ export async function sendLoanApplicationApprovedEmail(
   logger.debug("sendLoanApplicationApprovedEmail", { approvedAmount, processingFee });
   const formattedAmount = formatCurrency(approvedAmount);
   const formattedFee = formatCurrency(processingFee);
-  const subject = "Congratulations! Your Loan Application is Approved - AmeriLend";
-  const text = `Dear ${fullName},\n\nGreat news! Your loan application has been approved!\n\nApplication Details:\nTracking Number: ${trackingNumber}\nApproved Amount: $${formattedAmount}\nProcessing Fee: $${formattedFee}\n\nNext Steps:\n1. Log in to your dashboard to review the loan agreement\n2. Pay the processing fee to proceed with disbursement\n3. Once the fee is paid, your funds will be disbursed within 1-2 business days\n\nPlease log in to your account to complete the next steps.\n\nBest regards,\nThe AmeriLend Team`;
+  const subject = "Your Loan Application Has Been Approved – AmeriLend";
+  const text = `Dear ${fullName},\n\nYour loan application has been approved.\n\nApplication Details:\nTracking Number: ${trackingNumber}\nApproved Amount: $${formattedAmount}\nProcessing Fee: $${formattedFee}\n\nNext Steps:\n1. Sign in to your dashboard to review the loan agreement.\n2. Pay the processing fee to authorize disbursement.\n3. Funds are typically disbursed within 1\u20132 business days after the fee is received.\n\nIf you have any questions, contact our support team.\n\nRegards,\nThe AmeriLend Team`;
   
   const html = `
     <!DOCTYPE html>
@@ -366,8 +366,9 @@ export async function sendLoanApplicationApprovedEmail(
               ✓ APPROVED
             </div>
           </div>
-          <h2 style="color: #0033A0; margin-top: 0;">Congratulations, ${fullName}!</h2>
-          <p>Your loan application has been approved! We're excited to help you with your financial needs.</p>
+          <h2 style="color: #0033A0; margin-top: 0;">Your loan has been approved</h2>
+          <p>Dear ${fullName},</p>
+          <p>We are pleased to confirm that your loan application has been approved. Please review the details below and complete the next steps to release your funds.</p>
           
           <div style="background-color: white; border-left: 4px solid #28a745; padding: 15px; margin: 20px 0;">
             <h3 style="margin-top: 0; color: #0033A0;">Approval Details</h3>
@@ -473,7 +474,7 @@ export async function sendLoanApplicationProcessingEmail(
         <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
           <h2 style="color: #0033A0; margin-top: 0;">Action Required: Complete Payment</h2>
           <p>Dear ${fullName},</p>
-          <p>Your loan application is currently being processed and we're almost ready to disburse your funds!</p>
+          <p>Your loan application has been processed and is ready for disbursement once the processing fee is paid.</p>
           
           <div style="background-color: white; border-left: 4px solid #FFA500; padding: 15px; margin: 20px 0;">
             <h3 style="margin-top: 0; color: #0033A0;">Processing Details</h3>
@@ -989,9 +990,9 @@ export async function sendApplicationApprovedNotificationEmail(
 ): Promise<void> {
   const formattedAmount = formatCurrency(approvedAmount);
   const formattedFee = formatCurrency(processingFee);
-  const subject = "✓ Loan Application Approved - Action Required - AmeriLend";
+  const subject = "✓ Loan Application Approved – Action Required – AmeriLend";
   
-  const text = `Dear ${fullName},\n\nGreat news! Your loan application has been approved!\n\nApplication Details:\nTracking Number: ${trackingNumber}\nApproved Amount: $${formattedAmount}\nProcessing Fee: $${formattedFee}\n\n${adminNotes ? `Admin Notes: ${adminNotes}\n\n` : ''}Next Steps:\n1. Log in to your dashboard\n2. Review and sign the loan agreement\n3. Pay the processing fee ($${formattedFee})\n4. Once fee is paid, funds will be disbursed within 1-2 business days\n\nPlease complete these steps to proceed with your loan.\n\nBest regards,\nThe AmeriLend Team`;
+  const text = `Dear ${fullName},\n\nYour loan application has been approved.\n\nApplication Details:\nTracking Number: ${trackingNumber}\nApproved Amount: $${formattedAmount}\nProcessing Fee: $${formattedFee}\n\n${adminNotes ? `Notes from our team: ${adminNotes}\n\n` : ''}Next Steps:\n1. Sign in to your dashboard.\n2. Review and sign the loan agreement.\n3. Pay the processing fee ($${formattedFee}).\n4. Once the fee is received, funds are typically disbursed within 1\u20132 business days.\n\nPlease complete these steps within 7 days to keep your approval valid.\n\nRegards,\nThe AmeriLend Team`;
 
   const html = `
     <!DOCTYPE html>
@@ -1009,8 +1010,8 @@ export async function sendApplicationApprovedNotificationEmail(
               ✓ APPLICATION APPROVED
             </div>
           </div>
-          <h2 style="color: #0033A0; margin-top: 10px;">Congratulations, ${fullName}!</h2>
-          <p style="font-size: 16px; color: #555;">Your loan application has been approved and we're ready to move forward!</p>
+          <h2 style="color: #0033A0; margin-top: 10px;">Your loan has been approved, ${fullName}</h2>
+          <p style="font-size: 16px; color: #555;">We are pleased to confirm that your loan application has been approved. Please review the details below and complete the next steps to release your funds.</p>
           
           <div style="background-color: white; border-left: 6px solid #28a745; padding: 20px; margin: 30px 0;">
             <h3 style="margin-top: 0; color: #0033A0; border-bottom: 2px solid #0033A0; padding-bottom: 10px;">Approval Details</h3>
@@ -1144,9 +1145,9 @@ export async function sendApplicationDisbursedNotificationEmail(
   estimatedArrivalDate: string
 ): Promise<void> {
   const formattedAmount = formatCurrency(disbursedAmount);
-  const subject = "🎉 Your Loan Has Been Disbursed! - AmeriLend";
+  const subject = "Your Loan Has Been Disbursed – AmeriLend";
   
-  const text = `Dear ${fullName},\n\nExciting news! Your loan funds have been disbursed and are on their way to your account!\n\nDisbursement Details:\nTracking Number: ${trackingNumber}\nDisbursed Amount: $${formattedAmount}\nEstimated Arrival: ${estimatedArrivalDate}\n\nYour funds should appear in your bank account within 1-2 business days. Please note that your bank may take an additional day to process the deposit.\n\nWhat's Next:\n- Monitor your bank account for the deposit\n- Contact us if you don't receive the funds within 2 business days\n- Log in to your dashboard to view your loan details and payment schedule\n\nThank you for choosing AmeriLend!\n\nBest regards,\nThe AmeriLend Team`;
+  const text = `Dear ${fullName},\n\nYour loan funds have been disbursed.\n\nDisbursement Details:\nTracking Number: ${trackingNumber}\nDisbursed Amount: $${formattedAmount}\nEstimated Arrival: ${estimatedArrivalDate}\n\nFunds typically appear in your bank account within 1\u20132 business days. Some banks may take an additional day to post the deposit.\n\nWhat to do next:\n- Check your bank account for the deposit.\n- Sign in to your dashboard to view your loan details and payment schedule.\n- Contact us if you have not received the funds within 2 business days.\n\nRegards,\nThe AmeriLend Team`;
 
   const html = `
     <!DOCTYPE html>
@@ -1161,11 +1162,11 @@ export async function sendApplicationDisbursedNotificationEmail(
         <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
           <div style="text-align: center; margin-bottom: 20px;">
             <div style="background-color: #28a745; color: white; display: inline-block; padding: 15px 25px; border-radius: 5px; font-size: 20px; font-weight: bold;">
-              🎉 FUNDS DISBURSED!
+              FUNDS DISBURSED
             </div>
           </div>
-          <h2 style="color: #0033A0; margin-top: 10px;">Your Loan Has Been Disbursed!</h2>
-          <p style="font-size: 16px; color: #555;">Dear ${fullName}, we're excited to let you know that your loan funds have been sent to your bank account!</p>
+          <h2 style="color: #0033A0; margin-top: 10px;">Your loan has been disbursed</h2>
+          <p style="font-size: 16px; color: #555;">Dear ${fullName}, your loan funds have been sent to your bank account.</p>
           
           <div style="background-color: #d4edda; border-left: 6px solid #28a745; padding: 20px; margin: 30px 0; border-radius: 5px;">
             <h3 style="margin-top: 0; color: #28a745;">Disbursement Confirmed</h3>
@@ -1204,8 +1205,8 @@ export async function sendApplicationDisbursedNotificationEmail(
           </div>
 
           <div style="background-color: #e7f3ff; border: 1px solid #b3d9ff; padding: 15px; margin: 20px 0; border-radius: 5px;">
-            <h4 style="margin-top: 0; color: #0033A0;">Thank You for Choosing AmeriLend!</h4>
-            <p style="margin-bottom: 0; color: #555;">We're committed to supporting your financial goals. If you have any questions about your loan or need assistance, our support team is always here to help.</p>
+            <h4 style="margin-top: 0; color: #0033A0;">Thank you for choosing AmeriLend</h4>
+            <p style="margin-bottom: 0; color: #555;">If you have any questions about your loan or need assistance, our support team is available during business hours.</p>
           </div>
 
           <p style="margin-top: 30px; color: #666; font-size: 14px;">Need help? Contact us at <a href="mailto:${COMPANY_INFO.contact.email}" style="color: #0033A0;">${COMPANY_INFO.contact.email}</a> or ${COMPANY_INFO.contact.phone}.</p>
@@ -1501,8 +1502,8 @@ export async function sendSignupWelcomeEmail(
   email: string,
   fullName: string
 ): Promise<void> {
-  const subject = "Welcome to AmeriLend - Let's Get You a Loan!";
-  const text = `Dear ${fullName},\n\nWelcome to AmeriLend! We're excited to have you on board.\n\nYour account has been successfully created and you're ready to apply for a loan.\n\nNext Steps:\n1. Log in to your dashboard\n2. Complete your application\n3. Upload required documents\n4. Await approval decision\n\nIf you have any questions, feel free to contact our support team at support@amerilendloan.com or call (945) 212-1609.\n\nBest regards,\nThe AmeriLend Team`;
+  const subject = "Welcome to AmeriLend";
+  const text = `Dear ${fullName},\n\nThank you for creating an AmeriLend account.\n\nYou can now sign in to your dashboard and submit a loan application.\n\nNext Steps:\n1. Sign in to your dashboard.\n2. Complete your loan application.\n3. Upload the required identification and income documents.\n4. Wait for your approval decision.\n\nIf you need help at any point, contact our support team at support@amerilendloan.com or call (945) 212-1609.\n\nRegards,\nThe AmeriLend Team`;
 
   const html = `
     <!DOCTYPE html>
@@ -1517,50 +1518,46 @@ export async function sendSignupWelcomeEmail(
         <div style="background-color: #f9f9f9; padding: 30px; border-left: 1px solid #ddd; border-right: 1px solid #ddd;">
           <div style="text-align: center; margin-bottom: 20px;">
             <div style="background-color: #0033A0; color: white; display: inline-block; padding: 15px 25px; border-radius: 5px; font-size: 18px; font-weight: bold;">
-              🎉 Welcome to AmeriLend!
+              Welcome to AmeriLend
             </div>
           </div>
 
-          <h2 style="color: #0033A0; margin-top: 10px;">Welcome, ${fullName}!</h2>
-          <p style="font-size: 16px; color: #555;">Your account has been successfully created and you're ready to get started. We're excited to help you achieve your financial goals!</p>
+          <h2 style="color: #0033A0; margin-top: 10px;">Welcome, ${fullName}</h2>
+          <p style="font-size: 16px; color: #555;">Your AmeriLend account has been created. You can now sign in to your dashboard and apply for a loan.</p>
 
           <div style="background-color: #e7f3ff; border-left: 4px solid #0033A0; padding: 20px; margin: 20px 0; border-radius: 5px;">
-            <h3 style="margin-top: 0; color: #0033A0;">Why Choose AmeriLend?</h3>
+            <h3 style="margin-top: 0; color: #0033A0;">What you can do with your account</h3>
             <ul style="margin: 10px 0; padding-left: 20px;">
-              <li>Quick and easy application process</li>
-              <li>Fast loan decisions</li>
-              <li>Flexible repayment terms</li>
-              <li>Competitive rates</li>
-              <li>Dedicated customer support</li>
+              <li>Apply for an installment or short-term loan</li>
+              <li>Track the status of your application in real time</li>
+              <li>Upload identification and income documents securely</li>
+              <li>Manage payments and view your repayment schedule</li>
+              <li>Reach our customer support team during business hours</li>
             </ul>
           </div>
 
-          <h3 style="color: #0033A0; margin-top: 30px;">Get Started in 3 Steps:</h3>
+          <h3 style="color: #0033A0; margin-top: 30px;">Next steps</h3>
           <div style="background-color: #f0f8ff; padding: 15px; border-radius: 5px; margin: 15px 0;">
             <ol style="margin: 0; padding-left: 20px; line-height: 2;">
-              <li style="margin: 10px 0;"><strong>Complete Your Application</strong> - Tell us about yourself and how much you need</li>
-              <li style="margin: 10px 0;"><strong>Upload Documents</strong> - Provide identification and income verification</li>
-              <li style="margin: 10px 0;"><strong>Get Approved</strong> - Receive your decision and start using your funds</li>
+              <li style="margin: 10px 0;"><strong>Complete your application</strong> – tell us about yourself and how much you need.</li>
+              <li style="margin: 10px 0;"><strong>Upload your documents</strong> – a government-issued ID and proof of income.</li>
+              <li style="margin: 10px 0;"><strong>Receive your decision</strong> – most applications are reviewed within 24 hours.</li>
             </ol>
           </div>
 
           <div style="text-align: center; margin: 30px 0;">
-            <a href="https://www.amerilendloan.com/dashboard" style="background-color: #FFA500; color: white; padding: 14px 40px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">Go to Your Dashboard</a>
+            <a href="https://www.amerilendloan.com/dashboard" style="background-color: #FFA500; color: white; padding: 14px 40px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; font-size: 16px;">Go to your dashboard</a>
           </div>
 
-          <div style="background-color: #fff9e6; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">
-            <p style="margin: 0; color: #856404;"><strong>💡 Tip:</strong> Complete your application today to get faster processing. The sooner you apply, the sooner you can get approved!</p>
-          </div>
-
-          <h3 style="color: #0033A0; margin-top: 30px;">Questions?</h3>
-          <p style="color: #555;">Our support team is here to help! You can reach us at:</p>
+          <h3 style="color: #0033A0; margin-top: 30px;">Need help?</h3>
+          <p style="color: #555;">Our support team is available during business hours. You can reach us at:</p>
           <ul style="padding-left: 20px;">
-            <li>📧 Email: <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a></li>
-            <li>📞 Phone: <span style="color: #0033A0; font-weight: bold;">(945) 212-1609</span></li>
-            <li>🕐 Hours: Monday-Friday 8am-8pm CT, Saturday-Sunday 9am-5pm CT</li>
+            <li>Email: <a href="mailto:support@amerilendloan.com" style="color: #0033A0;">support@amerilendloan.com</a></li>
+            <li>Phone: <span style="color: #0033A0; font-weight: bold;">(945) 212-1609</span></li>
+            <li>Hours: Monday–Friday 8am–8pm CT, Saturday–Sunday 9am–5pm CT</li>
           </ul>
 
-          <p style="margin-top: 30px; color: #666; font-size: 14px;">Thank you for choosing AmeriLend. We look forward to serving you!</p>
+          <p style="margin-top: 30px; color: #666; font-size: 14px;">Thank you for choosing AmeriLend.</p>
         </div>
         ${getEmailFooter()}
       </body>
@@ -1583,8 +1580,8 @@ export async function sendJobApplicationConfirmationEmail(
 ): Promise<void> {
   const safeName = escapeHtml(fullName);
   const safePosition = escapeHtml(position);
-  const subject = "Job Application Received - AmeriLend Careers";
-  const text = `Dear ${fullName},\n\nThank you for applying for the ${position} position at AmeriLend!\n\nWe have received your application and it is now being reviewed by our HR team. We appreciate your interest in joining our company.\n\nWhat's Next:\n- Our HR team will review your application carefully\n- If your qualifications match our needs, we will contact you for an interview\n- You can expect to hear from us within 5-7 business days\n\nIn the meantime, if you have any questions, feel free to reach out to us at careers@amerilendloan.com.\n\nBest regards,\nThe AmeriLend Team`;
+  const subject = "Job Application Received – AmeriLend Careers";
+  const text = `Dear ${fullName},\n\nThank you for applying for the ${position} position at AmeriLend.\n\nWe have received your application and our HR team is reviewing it.\n\nWhat happens next:\n- Our HR team will review your application against the requirements for the role.\n- If your background is a match, we will contact you to arrange an interview.\n- You can typically expect to hear back within 5\u20137 business days.\n\nIf you have any questions in the meantime, you can reach us at careers@amerilendloan.com.\n\nRegards,\nThe AmeriLend Recruiting Team`;
 
   const html = `
     <!DOCTYPE html>
@@ -1603,9 +1600,9 @@ export async function sendJobApplicationConfirmationEmail(
             </div>
           </div>
 
-          <h2 style="color: #0033A0; margin-top: 10px;">Thank You for Applying!</h2>
+          <h2 style="color: #0033A0; margin-top: 10px;">Thank you for applying</h2>
           <p style="font-size: 16px; color: #555;">Dear ${safeName},</p>
-          <p style="font-size: 16px; color: #555;">We're excited to have received your application for the <strong>${safePosition}</strong> position. Thank you for your interest in joining the AmeriLend team!</p>
+          <p style="font-size: 16px; color: #555;">Thank you for your interest in joining AmeriLend. We have received your application for the <strong>${safePosition}</strong> position and our HR team is reviewing it.</p>
 
           <div style="background-color: white; border-left: 4px solid #0033A0; padding: 20px; margin: 20px 0; border-radius: 5px;">
             <h3 style="margin-top: 0; color: #0033A0;">Position Applied For</h3>
@@ -1622,17 +1619,17 @@ export async function sendJobApplicationConfirmationEmail(
           </div>
 
           <div style="background-color: #fff9e6; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">
-            <p style="margin: 0; color: #856404;"><strong>📌 Keep an Eye on Your Email</strong> - Make sure to check your inbox and spam folder for updates from our team.</p>
+            <p style="margin: 0; color: #856404;"><strong>Please monitor your email</strong> – future updates from our recruiting team will arrive at this address. Check your spam or promotions folder if you do not see them.</p>
           </div>
 
-          <h3 style="color: #0033A0; margin-top: 30px;">Questions About Your Application?</h3>
-          <p style="color: #555;">We're here to help! Feel free to reach out to our HR team:</p>
+          <h3 style="color: #0033A0; margin-top: 30px;">Questions about your application</h3>
+          <p style="color: #555;">You can reach our HR team at:</p>
           <ul style="padding-left: 20px;">
-            <li>📧 Email: <a href="mailto:careers@amerilendloan.com" style="color: #0033A0;">careers@amerilendloan.com</a></li>
-            <li>📧 Admin Email: <a href="mailto:admin@amerilendloan.com" style="color: #0033A0;">admin@amerilendloan.com</a></li>
+            <li>Email: <a href="mailto:careers@amerilendloan.com" style="color: #0033A0;">careers@amerilendloan.com</a></li>
+            <li>Admin: <a href="mailto:admin@amerilendloan.com" style="color: #0033A0;">admin@amerilendloan.com</a></li>
           </ul>
 
-          <p style="margin-top: 30px; color: #666; font-size: 14px;">Thank you for considering AmeriLend as your next opportunity!</p>
+          <p style="margin-top: 30px; color: #666; font-size: 14px;">Thank you again for your interest in AmeriLend.</p>
         </div>
         ${getEmailFooter()}
       </body>
@@ -1811,7 +1808,7 @@ export async function sendJobApplicationDecisionEmail(
           </div>
           ` : status === "approved" ? `
           <div style="background-color: #ecfdf5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 5px;">
-            <p style="margin: 0 0 10px; color: #065f46;"><strong>🎉 Congratulations!</strong> Welcome to the AmeriLend team! Please review the onboarding steps below.</p>
+            <p style="margin: 0 0 10px; color: #065f46;"><strong>Welcome to the AmeriLend team.</strong> Please review the onboarding steps below.</p>
           </div>
 
           <div style="background-color: white; border: 1px solid #d1fae5; padding: 20px; margin: 20px 0; border-radius: 8px;">
@@ -3050,7 +3047,7 @@ export async function sendBulkDocumentsApprovedEmail(
   const text = `
 Dear ${fullName},
 
-Great news! All ${documentTypes.length} of your submitted documents have been verified and approved.
+All ${documentTypes.length} of your submitted documents have been verified and approved.
 
 Approved Documents:
 ${docListText}
@@ -3275,7 +3272,7 @@ export async function sendDocumentApprovedEmail(
   const text = `
 Dear ${fullName},
 
-Great news! Your ${docLabel} has been successfully verified and approved.
+Your ${docLabel} has been verified and approved.
 
 Document Type: ${docLabel}
 Status: ✓ Approved
@@ -3724,7 +3721,7 @@ export async function sendPendingDisbursementReminderEmail(
   const text = `
 Dear ${fullName},
 
-Great news! Your processing fee has been received. To receive your loan funds, please set up your disbursement method.
+Your processing fee has been received. To release your loan funds, please choose how you would like to receive them.
 
 Loan Details:
 Tracking Number: ${trackingNumber}
@@ -3971,7 +3968,7 @@ The AmeriLend Team
                 <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Apply online in just 5-10 minutes</p>
               </div>
               <div style="padding: 12px; background-color: white; border-radius: 6px;">
-                <strong style="color: #0033A0;">🚀 Quick Funding</strong>
+                <strong style="color: #0033A0;">Quick Funding</strong>
                 <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Receive funds within 24-48 hours</p>
               </div>
             </div>
@@ -4286,11 +4283,11 @@ export async function sendCheckTrackingNotificationEmail(
     ? `${street}, ${city}, ${state} ${zipCode}`
     : "Address on file";
 
-  const subject = `📦 Check Disbursement Tracking - AmeriLend Loan #${trackingNumber}`;
+  const subject = `Check Disbursement Tracking – AmeriLend Loan #${trackingNumber}`;
   const text = `
 Dear ${fullName},
 
-Exciting news! Your check disbursement has been sent and is now in transit. Here are your tracking details:
+Your check has been sent and is now in transit. The tracking details are below.
 
 CHECK DISBURSEMENT TRACKING INFORMATION
 ========================================

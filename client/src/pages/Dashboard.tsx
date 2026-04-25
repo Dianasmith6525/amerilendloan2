@@ -1032,8 +1032,8 @@ export default function Dashboard() {
                                   {(loan.status === "approved" || loan.status === "fee_pending") && (
                                     <>
                                       <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800 mb-2 hidden md:block">
-                                        <p className="font-semibold">Congratulations!</p>
-                                        <p>Your loan has been approved.</p>
+                                        <p className="font-semibold">Approved</p>
+                                        <p>Your loan has been approved. Pay the processing fee to release funds.</p>
                                       </div>
                                       <Link href={`/payment/${loan.id}`}>
                                         <Button className="bg-[#C9A227] hover:bg-[#B8922A] text-white w-full">
@@ -1044,20 +1044,20 @@ export default function Dashboard() {
                                   )}
                                   {loan.status === "fee_paid" && (
                                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800 hidden md:block">
-                                      <p className="font-semibold">Payment Confirmed</p>
-                                      <p>Your payment is being verified by our team. Disbursement will follow shortly.</p>
+                                      <p className="font-semibold">Payment Received</p>
+                                      <p>We are verifying your payment. Disbursement typically completes within 1–2 business days.</p>
                                     </div>
                                   )}
                                   {loan.status === "disbursed" && (
                                     <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800 hidden md:block">
                                       <p className="font-semibold">Funds Disbursed</p>
-                                      <p>Check your bank account.</p>
+                                      <p>Funds have been sent to your bank account.</p>
                                     </div>
                                   )}
                                   {loan.status === "rejected" && (
                                     <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800 hidden md:block">
                                       <p className="font-semibold">Not Approved</p>
-                                      <p>Contact us for details.</p>
+                                      <p>Please contact support for the specific reason and next steps.</p>
                                     </div>
                                   )}
                                 </div>
@@ -1236,7 +1236,7 @@ export default function Dashboard() {
                       Next Steps
                     </h4>
                     <p className="text-sm text-green-800 mb-3">
-                      Congratulations! Your loan has been approved. Pay the processing fee to proceed with disbursement.
+                      Your loan has been approved. Pay the processing fee below to release the funds for disbursement.
                     </p>
                     <Link href={`/payment/${loan.id}`}>
                       <Button className="bg-[#C9A227] hover:bg-[#B8922A] text-white">
@@ -1251,7 +1251,7 @@ export default function Dashboard() {
                                       Next Steps
                                     </h4>
                                     <p className="text-sm text-blue-800">
-                                      Payment confirmed! Your loan is being processed for disbursement. Funds will be transferred to your bank account within 1-2 business days.
+                                      Payment received. Your loan is queued for disbursement. Funds typically arrive in your bank account within 1–2 business days.
                                     </p>
                                   </div>
                                 )}
@@ -1303,8 +1303,8 @@ export default function Dashboard() {
 
                                 {loan.status === "approved" && (
                                   <div className="bg-green-50 border border-green-200 rounded-lg p-4 md:hidden">
-                                    <p className="font-semibold text-green-800 mb-2">Congratulations!</p>
-                                    <p className="text-sm text-green-800 mb-3">Your loan has been approved.</p>
+                                    <p className="font-semibold text-green-800 mb-2">Approved</p>
+                                    <p className="text-sm text-green-800 mb-3">Your loan has been approved. Pay the processing fee to release the funds.</p>
                                     <Link href={`/payment/${loan.id}`}>
                                       <Button className="bg-[#C9A227] hover:bg-[#B8922A] text-white w-full">
                                         Pay Processing Fee
@@ -1428,7 +1428,7 @@ export default function Dashboard() {
                       </div>
                       <h3 className="text-xl font-bold text-gray-800 mb-2">No Applications Yet</h3>
                       <p className="text-gray-600 mb-6">
-                        You haven't submitted any loan applications. Ready to get started?
+                        You have not submitted a loan application. Start one when you are ready.
                       </p>
                       <Link href="/apply">
                         <Button className="bg-[#C9A227] hover:bg-[#B8922A] text-white px-8">
@@ -2169,28 +2169,28 @@ export default function Dashboard() {
         steps={[
           {
             id: "welcome",
-            title: "Welcome to AmeriLend!",
-            description: "Let's take a quick tour of your dashboard so you know where everything is.",
+            title: "Welcome to AmeriLend",
+            description: "This short tour shows you where to find your loan, payment, and document tools.",
           },
           {
             id: "sidebar",
-            title: "Navigation Sidebar",
-            description: "Use the sidebar to navigate between your loan overview, payment history, documents, and settings.",
+            title: "Navigation",
+            description: "Use the sidebar to move between your loan overview, payment history, documents, and account settings.",
           },
           {
             id: "apply",
             title: "Apply for a Loan",
-            description: "Ready to get started? Click 'Apply Now' in the sidebar or the button on your dashboard to submit a new loan application.",
+            description: "To start a new application, select 'Apply Now' from the sidebar or the button on your dashboard.",
           },
           {
             id: "payments",
-            title: "Make Payments",
-            description: "Once your loan is approved, you can make processing fee payments via credit card or cryptocurrency right from your dashboard.",
+            title: "Make a Payment",
+            description: "Once your loan is approved you can pay the processing fee directly from the dashboard using a card or cryptocurrency.",
           },
           {
             id: "support",
-            title: "Need Help?",
-            description: "Use the AI Support chat in the bottom-right corner or call us at (800) 990-9130 for assistance anytime.",
+            title: "Support",
+            description: "Use the support chat in the bottom-right corner or call (800) 990-9130 if you need help with your account.",
           },
         ]}
       />
