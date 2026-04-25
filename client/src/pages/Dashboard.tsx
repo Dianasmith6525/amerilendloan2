@@ -19,9 +19,7 @@ import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { getFriendlyFirstName, getFriendlyFullName } from "@shared/format";
-import AiSupportWidget from "@/components/AiSupportWidget";
 import UserNotificationBell from "@/components/UserNotificationBell";
-import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import {
   CheckCircle2,
   Clock,
@@ -662,9 +660,6 @@ export default function Dashboard() {
             </div>
 
             <div className="mt-6 pt-6 border-t border-slate-100">
-              <div className="px-4 py-2">
-                <LanguageSwitcher />
-              </div>
               <Link href="/settings" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
                 <Settings className="w-5 h-5" />
                 <span className="text-sm">Settings</span>
@@ -2110,9 +2105,6 @@ export default function Dashboard() {
         </footer>
       </div>
     </div>
-
-      {/* AI Support Widget - Only for authenticated users */}
-      <AiSupportWidget isAuthenticated={true} userName={user?.firstName || user?.name?.split(" ")[0]} />
 
       {/* Withdrawal Confirmation Dialog */}
       <Dialog open={withdrawalDialogOpen} onOpenChange={setWithdrawalDialogOpen}>

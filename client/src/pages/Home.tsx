@@ -21,7 +21,6 @@ import {
 import { useState } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
-import AiSupportWidget from "@/components/AiSupportWidget";
 import TestimonialsSection from "@/components/TestimonialsSection";
 import ComplianceFooter from "@/components/ComplianceFooter";
 import SEOHead from "@/components/SEOHead";
@@ -555,8 +554,6 @@ export default function Home() {
 
       <ComplianceFooter />
 
-      {/* AI Support Widget */}
-      <AiSupportWidget isAuthenticated={false} />
 
       {/* ════════════════════════════════════════════════════
           CODE ENTRY MODAL
