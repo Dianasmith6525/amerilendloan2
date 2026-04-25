@@ -104,7 +104,13 @@ const SITE_KEY = (import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)
 
 export function useTurnstile(options: UseTurnstileOptions = {}): UseTurnstileResult {
   const { action, theme = "auto", size = "flexible" } = options;
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  // Callback ref pattern (instead of useRef) so the render effect re-fires
+  // whenever a *different* container DOM node attaches. The widget JSX is
+  // commonly placed inside conditionally-rendered branches (login tabs,
+  // signup form, reset form), so the same hook instance can see its
+  // container unmount and a fresh one mount. With a plain useRef the render
+  // effect would never re-run, and the new container would stay empty.
+  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [scriptReady, setScriptReady] = useState(false);
@@ -130,14 +136,29 @@ export function useTurnstile(options: UseTurnstileOptions = {}): UseTurnstileRes
     };
   }, [isEnabled]);
 
-  // Render the widget once the script is loaded.
+  // Render the widget once the script is loaded *and* a container is
+  // attached. Re-runs when the container element changes (e.g. user switches
+  // login tabs and a fresh div mounts).
   useEffect(() => {
-    if (!isEnabled || !scriptReady || !containerRef.current || !window.turnstile) return;
-    // Avoid double-render on React 18 strict mode.
-    if (widgetIdRef.current) return;
+    if (!isEnabled || !scriptReady || !containerEl || !window.turnstile) return;
+
+    // Stale widget id from a previous (now-unmounted) container. Tell
+    // Turnstile to forget it before we render into the fresh container.
+    if (widgetIdRef.current) {
+      try {
+        window.turnstile.remove(widgetIdRef.current);
+      } catch {
+        /* widget already gone with its old DOM node */
+      }
+      widgetIdRef.current = null;
+    }
+
+    // Tokens are scoped to a specific widget render; clear any cached one
+    // since we are about to mount a brand-new challenge.
+    setToken(null);
 
     try {
-      const widgetId = window.turnstile.render(containerRef.current, {
+      const widgetId = window.turnstile.render(containerEl, {
         sitekey: SITE_KEY,
         action,
         theme,
@@ -165,7 +186,7 @@ export function useTurnstile(options: UseTurnstileOptions = {}): UseTurnstileRes
       }
       widgetIdRef.current = null;
     };
-  }, [isEnabled, scriptReady, action, theme, size]);
+  }, [isEnabled, scriptReady, containerEl, action, theme, size]);
 
   const reset = useCallback(() => {
     setToken(null);
@@ -180,7 +201,7 @@ export function useTurnstile(options: UseTurnstileOptions = {}): UseTurnstileRes
 
   const widget = isEnabled ? (
     <div
-      ref={containerRef}
+      ref={setContainerEl}
       id={`turnstile-${containerId}`}
       className="cf-turnstile my-3"
       aria-label="Verify you are human"
