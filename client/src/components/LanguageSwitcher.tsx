@@ -7,6 +7,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Languages, Check } from 'lucide-react';
+import { trpc } from '@/lib/trpc';
+import { useAuth } from '@/_core/hooks/useAuth';
 
 const languages = [
   { code: 'en', name: 'English', flag: '\u{1F1FA}\u{1F1F8}' },
@@ -39,6 +41,8 @@ function setGoogleTranslateLang(lang: string) {
 
 export function LanguageSwitcher() {
   const [currentLanguage, setCurrentLanguage] = useState('en');
+  const { isAuthenticated } = useAuth();
+  const updateProfile = trpc.auth.updateUserProfile.useMutation();
 
   useEffect(() => {
     setCurrentLanguage(getGoogleTranslateLang());
@@ -59,6 +63,12 @@ export function LanguageSwitcher() {
       setGoogleTranslateLang(langCode);
     }
     setCurrentLanguage(langCode);
+    // Persist preference server-side so the choice follows the user across
+    // devices. Fire-and-forget; failures are silent because the cookie above
+    // already takes effect immediately.
+    if (isAuthenticated) {
+      updateProfile.mutate({ preferredLanguage: langCode });
+    }
     window.location.reload();
   };
 

@@ -17,13 +17,6 @@ function formatPhoneNumber(value: string): string {
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
-function formatSSN(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 9);
-  if (digits.length < 4) return digits;
-  if (digits.length < 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
-}
-
 export default function Settings() {
   const [, setLocation] = useLocation();
   const { user, isAuthenticated, loading: authLoading, logout } = useAuth();
@@ -77,7 +70,6 @@ export default function Settings() {
     firstName: "",
     lastName: "",
     phoneNumber: "",
-    ssn: "",
     dateOfBirth: "",
     street: "",
     city: "",
@@ -334,11 +326,6 @@ export default function Settings() {
       value = formatPhoneNumber(value);
     }
     
-    // Apply formatting for SSN
-    if (e.target.name === "ssn") {
-      value = formatSSN(value);
-    }
-
     // Auto-capitalize name fields
     if (e.target.name === "firstName" || e.target.name === "lastName") {
       value = toTitleCase(value);
@@ -761,19 +748,6 @@ export default function Settings() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0A2540]"
                     />
                     <p className="text-xs text-gray-500">Automatically formatted as (XXX) XXX-XXXX</p>
-                  </div>
-                  <div className="space-y-3">
-                    <label className="text-sm font-semibold text-gray-800">Social Security Number</label>
-                    <input
-                      type="text"
-                      name="ssn"
-                      value={profileForm.ssn || ""}
-                      onChange={handleProfileChange}
-                      placeholder="XXX-XX-XXXX"
-                      maxLength={11}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0A2540]"
-                    />
-                    <p className="text-xs text-gray-500">Automatically formatted as XXX-XX-XXXX</p>
                   </div>
                 </div>
 

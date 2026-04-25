@@ -3394,6 +3394,62 @@ const virtualCardsRouter = router({
 });
 
 
+/**
+ * Enforce a fresh 2FA challenge before sensitive account changes when the
+ * user has 2FA enabled. No-op for users without 2FA. Throws TRPCError on
+ * missing or invalid codes. Accepts a 6-digit TOTP code or a backup code.
+ */
+async function requireTwoFactorIfEnabled(userId: number, providedCode?: string) {
+  const settings = await db.get2FASettings(userId);
+  if (!settings || !settings.enabled) return;
+
+  const code = (providedCode || "").trim();
+  if (!code) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Two-factor verification code required for this change",
+    });
+  }
+
+  // Try TOTP first (6-digit numeric, the common case).
+  if (settings.totpEnabled && settings.totpSecret) {
+    if (verifyTOTPCode(settings.totpSecret, code)) {
+      return;
+    }
+  }
+
+  // Fall back to single-use backup codes.
+  if (settings.backupCodes) {
+    try {
+      const hashedCodes: string[] = JSON.parse(settings.backupCodes);
+      const result = await verifyBackupCode(code, hashedCodes);
+      if (result.valid) {
+        // Burn the used backup code.
+        const remaining = hashedCodes.filter((_, i) => i !== result.usedIndex);
+        const dbHandle = await getDb();
+        if (dbHandle) {
+          const { twoFactorAuthentication } = await import("../drizzle/schema");
+          await dbHandle.update(twoFactorAuthentication)
+            .set({
+              backupCodes: JSON.stringify(remaining),
+              backupCodesUsed: (settings.backupCodesUsed || 0) + 1,
+              lastUsedAt: new Date(),
+            })
+            .where(eq(twoFactorAuthentication.userId, userId));
+        }
+        return;
+      }
+    } catch (err) {
+      logger.error("[2FA] Failed to parse stored backup codes", err);
+    }
+  }
+
+  throw new TRPCError({
+    code: "BAD_REQUEST",
+    message: "Invalid two-factor verification code",
+  });
+}
+
 export const appRouter = router({
   system: systemRouter,
   
@@ -3428,12 +3484,18 @@ export const appRouter = router({
       .input(z.object({
         currentPassword: z.string().min(8),
         newPassword: z.string().min(8),
+        twoFactorCode: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         try {
           const userId = ctx.user.id;
           const userEmail = ctx.user.email;
           const userName = ctx.user.name || "User";
+
+          // If the user has 2FA enabled, require a fresh TOTP/backup code
+          // before allowing a password change. A stolen session cookie alone
+          // must not be enough to take over the account.
+          await requireTwoFactorIfEnabled(userId, input.twoFactorCode);
           
           // Get current password hash from database
           const user = await db.getUserById(userId);
@@ -3492,11 +3554,16 @@ export const appRouter = router({
     updateEmail: protectedProcedure
       .input(z.object({
         newEmail: z.string().email(),
+        twoFactorCode: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         try {
           const userId = ctx.user.id;
-          
+
+          // Same protection as updatePassword: 2FA-enabled accounts must
+          // present a current code before the email-of-record can be moved.
+          await requireTwoFactorIfEnabled(userId, input.twoFactorCode);
+
           // Update email in database
           await db.updateUserEmail(userId, input.newEmail);
           
