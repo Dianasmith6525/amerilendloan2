@@ -71,12 +71,24 @@ export function getSessionCookieOptions(
 
 /**
  * Get the real client-facing hostname, even behind reverse proxies.
- * Priority: VITE_APP_URL env > X-Forwarded-Host > Origin header > Referer header > req.hostname
  *
- * Vercel rewrites `/api/*` to Railway, which means:
- *  - req.hostname = Railway's internal hostname (e.g. "amerilendloan-production.up.railway.app")
- *  - Vercel may or may not forward X-Forwarded-Host / Origin / Referer headers
- * The most reliable source is the VITE_APP_URL env var which the operator sets explicitly.
+ * Priority (most → least trustworthy on a Vercel→Railway hop):
+ *   1. COOKIE_DOMAIN env var — hard override, e.g. ".amerilendloan.com"
+ *   2. VITE_APP_URL env var
+ *   3. Origin header — always set by the browser on cross-origin/POST and
+ *      cannot be forged by an intermediate proxy without the browser noticing
+ *   4. Referer header
+ *   5. X-Forwarded-Host — proxies SHOULD set this to the public hostname, but
+ *      Vercel's rewrite-to-external-URL feature sets it to the *destination*
+ *      hostname (the railway.app one), which is wrong for cookie scoping
+ *   6. Express req.hostname (Host header)
+ *
+ * The reason Origin/Referer are placed above X-Forwarded-Host: in our setup
+ * Vercel rewrites /api/* to Railway and forwards X-Forwarded-Host as the
+ * Railway internal hostname, which would scope the session cookie to
+ * `.railway.app` and the browser would refuse to store it on
+ * `www.amerilendloan.com`. The browser-supplied Origin/Referer carry the
+ * actual user-facing domain.
  */
 function getClientHostname(req: Request): string {
   // If the actual request is from a local host, return it directly.
@@ -87,7 +99,13 @@ function getClientHostname(req: Request): string {
     return actualHost;
   }
 
-  // 1. VITE_APP_URL env var — most reliable, explicitly configured by the operator
+  // 1. Hard override — strip any leading dot, the apex helper will normalize.
+  const cookieDomain = process.env.COOKIE_DOMAIN?.replace(/^\./, "").trim();
+  if (cookieDomain) {
+    return cookieDomain;
+  }
+
+  // 2. VITE_APP_URL env var — most reliable, explicitly configured by the operator
   const appUrl = process.env.VITE_APP_URL;
   if (appUrl) {
     try {
@@ -95,30 +113,39 @@ function getClientHostname(req: Request): string {
     } catch { /* ignore parse errors */ }
   }
 
-  // 2. X-Forwarded-Host (set by some proxies)
-  const xfh = req.headers["x-forwarded-host"];
-  if (xfh) {
-    const host = (Array.isArray(xfh) ? xfh[0] : xfh).split(",")[0].trim();
-    // Strip port if present
-    return host.replace(/:\d+$/, "");
-  }
-
-  // 3. Origin header (always present on POST/mutation requests from browsers)
+  // 3. Origin header (always present on POST/mutation requests from browsers,
+  //    and on top-level navigations triggered cross-site). Trustworthy because
+  //    browsers set it directly and proxies don't usually rewrite it.
   const origin = req.headers["origin"];
   if (origin) {
     try {
-      return new URL(origin).hostname;
+      const host = new URL(origin).hostname;
+      if (host && !isIpAddress(host) && !LOCAL_HOSTS.has(host)) {
+        return host;
+      }
     } catch { /* ignore parse errors */ }
   }
 
-  // 4. Referer header
+  // 4. Referer header (set on most navigations by the browser).
   const referer = req.headers["referer"];
   if (referer) {
     try {
-      return new URL(referer).hostname;
+      const host = new URL(referer).hostname;
+      if (host && !isIpAddress(host) && !LOCAL_HOSTS.has(host)) {
+        return host;
+      }
     } catch { /* ignore parse errors */ }
   }
 
-  // 5. Fallback to Express req.hostname (which reads Host header / trust proxy)
+  // 5. X-Forwarded-Host (proxies SHOULD set this to the public hostname).
+  //    Last resort because Vercel rewrites set it to the destination's
+  //    internal hostname instead of the user-facing one.
+  const xfh = req.headers["x-forwarded-host"];
+  if (xfh) {
+    const host = (Array.isArray(xfh) ? xfh[0] : xfh).split(",")[0].trim();
+    return host.replace(/:\d+$/, "");
+  }
+
+  // 6. Fallback to Express req.hostname (which reads Host header / trust proxy)
   return req.hostname;
 }
