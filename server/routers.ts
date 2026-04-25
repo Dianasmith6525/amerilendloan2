@@ -3881,6 +3881,18 @@ export const appRouter = router({
             lastName: input.lastName,
             phoneNumber: input.phoneNumber,
             dateOfBirth: input.dateOfBirth,
+            street: input.street,
+            city: input.city,
+            state: input.state,
+            zipCode: input.zipCode,
+            country: input.country,
+            bio: input.bio,
+            preferredLanguage: input.preferredLanguage,
+            timezone: input.timezone,
+            employmentStatus: input.employmentstatus,
+            employer: input.employer,
+            jobTitle: input.jobTitle,
+            monthlyIncome: input.monthlyIncome,
             name: composedName,
           });
           

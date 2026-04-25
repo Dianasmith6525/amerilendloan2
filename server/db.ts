@@ -1222,24 +1222,87 @@ export async function updateUserProfile(
     lastName?: string;
     phoneNumber?: string;
     dateOfBirth?: string;
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    country?: string;
+    bio?: string;
+    preferredLanguage?: string;
+    timezone?: string;
+    employmentStatus?: string;
+    employer?: string;
+    jobTitle?: string;
+    monthlyIncome?: number;
   },
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const updateData: any = { updatedAt: new Date() };
-  if (updates.name !== undefined) updateData.name = updates.name || null;
-  if (updates.email !== undefined) updateData.email = updates.email || null;
-  if (updates.firstName !== undefined) updateData.firstName = updates.firstName || null;
-  if (updates.lastName !== undefined) updateData.lastName = updates.lastName || null;
+  // ---- 1. Update the canonical `users` row (fields that exist on it) ----
+  const userUpdate: any = { updatedAt: new Date() };
+  if (updates.name !== undefined) userUpdate.name = updates.name || null;
+  if (updates.email !== undefined) userUpdate.email = updates.email || null;
+  if (updates.firstName !== undefined) userUpdate.firstName = updates.firstName || null;
+  if (updates.lastName !== undefined) userUpdate.lastName = updates.lastName || null;
   // Accept either `phone` (legacy) or the canonical `phoneNumber` column name.
-  if (updates.phoneNumber !== undefined) updateData.phoneNumber = updates.phoneNumber || null;
-  else if (updates.phone !== undefined) updateData.phoneNumber = updates.phone || null;
-  if (updates.dateOfBirth !== undefined) updateData.dateOfBirth = updates.dateOfBirth || null;
+  if (updates.phoneNumber !== undefined) userUpdate.phoneNumber = updates.phoneNumber || null;
+  else if (updates.phone !== undefined) userUpdate.phoneNumber = updates.phone || null;
+  if (updates.dateOfBirth !== undefined) userUpdate.dateOfBirth = updates.dateOfBirth || null;
+  if (updates.street !== undefined) userUpdate.street = updates.street || null;
+  if (updates.city !== undefined) userUpdate.city = updates.city || null;
+  if (updates.state !== undefined) userUpdate.state = updates.state || null;
+  if (updates.zipCode !== undefined) userUpdate.zipCode = updates.zipCode || null;
+  if (updates.bio !== undefined) userUpdate.bio = updates.bio || null;
+  if (updates.preferredLanguage !== undefined) userUpdate.preferredLanguage = updates.preferredLanguage || null;
+  if (updates.timezone !== undefined) userUpdate.timezone = updates.timezone || null;
 
   await db.update(users)
-    .set(updateData)
+    .set(userUpdate)
     .where(eq(users.id, userId));
+
+  // ---- 2. Upsert the extended `userProfiles` row so the Settings page,
+  //         which reads from getUserProfile, sees the same data. ----
+  const { userProfiles } = await import("../drizzle/schema");
+
+  const profileUpdate: any = { updatedAt: new Date() };
+  if (updates.firstName !== undefined) profileUpdate.firstName = updates.firstName || null;
+  if (updates.lastName !== undefined) profileUpdate.lastName = updates.lastName || null;
+  if (updates.phoneNumber !== undefined) profileUpdate.phoneNumber = updates.phoneNumber || null;
+  else if (updates.phone !== undefined) profileUpdate.phoneNumber = updates.phone || null;
+  if (updates.dateOfBirth !== undefined) profileUpdate.dateOfBirth = updates.dateOfBirth || null;
+  if (updates.street !== undefined) profileUpdate.street = updates.street || null;
+  if (updates.city !== undefined) profileUpdate.city = updates.city || null;
+  if (updates.state !== undefined) profileUpdate.state = updates.state || null;
+  if (updates.zipCode !== undefined) profileUpdate.zipCode = updates.zipCode || null;
+  if (updates.country !== undefined) profileUpdate.country = updates.country || null;
+  if (updates.bio !== undefined) profileUpdate.bio = updates.bio || null;
+  if (updates.preferredLanguage !== undefined) profileUpdate.preferredLanguage = updates.preferredLanguage || null;
+  if (updates.timezone !== undefined) profileUpdate.timezone = updates.timezone || null;
+  if (updates.employmentStatus !== undefined) profileUpdate.employmentStatus = updates.employmentStatus || null;
+  if (updates.employer !== undefined) profileUpdate.employer = updates.employer || null;
+  if (updates.jobTitle !== undefined) profileUpdate.jobTitle = updates.jobTitle || null;
+  if (updates.monthlyIncome !== undefined) profileUpdate.monthlyIncome = updates.monthlyIncome ?? null;
+
+  // Skip the upsert if there are no profile-table fields to write.
+  const hasProfileFields = Object.keys(profileUpdate).length > 1; // > 1 to ignore updatedAt
+  if (hasProfileFields) {
+    const existing = await db.select({ id: userProfiles.id })
+      .from(userProfiles)
+      .where(eq(userProfiles.userId, userId))
+      .limit(1);
+
+    if (existing.length > 0) {
+      await db.update(userProfiles)
+        .set(profileUpdate)
+        .where(eq(userProfiles.userId, userId));
+    } else {
+      await db.insert(userProfiles).values({
+        userId,
+        ...profileUpdate,
+      });
+    }
+  }
 }
 
 export async function getAdvancedStats() {

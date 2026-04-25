@@ -355,11 +355,11 @@ export default function Settings() {
   };
 
   const handleNotificationChange = (key: keyof typeof notifications) => {
-    setNotifications({
-      ...notifications,
-      [key]: !notifications[key],
-    });
-    toast.success("Notification preference updated");
+    const next = { ...notifications, [key]: !notifications[key] };
+    setNotifications(next);
+    // Actually persist the change. Without this call the toggle only flipped
+    // local state and the toast was misleading.
+    updateNotificationMutation.mutate(next);
   };
 
   const handleEnable2FA = () => {
