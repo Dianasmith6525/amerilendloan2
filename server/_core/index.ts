@@ -677,7 +677,66 @@ async function startServer() {
       });
     }
   });
-  
+
+  // Admin-only endpoint to view a job applicant's resume.
+  // Modern browsers block top-level navigation to base64 data: URLs,
+  // so when storage isn't configured (resume saved as data URL) the raw
+  // <a href> link silently fails. This endpoint decodes data URLs and
+  // streams them with proper Content-Type, or redirects to real URLs.
+  app.get("/api/view-resume/:id", async (req, res) => {
+    try {
+      let user;
+      try {
+        user = await sdk.authenticateRequest(req);
+      } catch {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const appId = parseInt(req.params.id, 10);
+      if (isNaN(appId)) {
+        return res.status(400).json({ error: "Invalid application ID" });
+      }
+
+      const db = await import("../db");
+      const application = await db.getJobApplicationById(appId);
+      if (!application || !application.resumeFileUrl) {
+        return res.status(404).json({ error: "Resume not found" });
+      }
+
+      const url = application.resumeFileUrl;
+      const fileName = application.resumeFileName || "resume";
+      const disposition = req.query.download === "1" ? "attachment" : "inline";
+      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+
+      // Base64 data URL — decode and stream
+      if (url.startsWith("data:")) {
+        const match = url.match(/^data:([^;]+);base64,(.+)$/);
+        if (!match) {
+          return res.status(500).json({ error: "Malformed resume data" });
+        }
+        const mime = match[1];
+        const buffer = Buffer.from(match[2], "base64");
+        res.setHeader("Content-Type", mime);
+        res.setHeader("Content-Length", buffer.length.toString());
+        res.setHeader(
+          "Content-Disposition",
+          `${disposition}; filename="${safeName}"`
+        );
+        res.setHeader("Cache-Control", "private, no-store");
+        return res.end(buffer);
+      }
+
+      // Real URL — redirect (browser will fetch directly)
+      return res.redirect(302, url);
+    } catch (error) {
+      logger.error("View resume error", error);
+      return res.status(500).json({ error: "Failed to load resume" });
+    }
+  });
+
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
 

@@ -263,7 +263,7 @@ export default function AdminJobApplications() {
                         <span className="flex items-center gap-1.5 text-blue-600">
                           <FileText className="w-3.5 h-3.5" />
                           {app.resumeFileUrl ? (
-                            <a href={app.resumeFileUrl} target="_blank" rel="noopener noreferrer" className="hover:underline flex items-center gap-1">
+                            <a href={`/api/view-resume/${app.id}`} target="_blank" rel="noopener noreferrer" className="hover:underline flex items-center gap-1">
                               {app.resumeFileName} <Download className="w-3 h-3" />
                             </a>
                           ) : (
@@ -337,12 +337,17 @@ export default function AdminJobApplications() {
                   <div><span className="text-gray-500">Position:</span> <span className="font-medium">{selectedApp.position}</span></div>
                 </div>
                 {selectedApp.resumeFileName && (
-                  <div>
-                    <span className="text-gray-500">Resume:</span>{" "}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-gray-500">Resume:</span>
                     {selectedApp.resumeFileUrl ? (
-                      <a href={selectedApp.resumeFileUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 font-medium hover:underline inline-flex items-center gap-1">
-                        {selectedApp.resumeFileName} <Download className="w-3.5 h-3.5" />
-                      </a>
+                      <>
+                        <a href={`/api/view-resume/${selectedApp.id}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 font-medium hover:underline inline-flex items-center gap-1">
+                          {selectedApp.resumeFileName}
+                        </a>
+                        <a href={`/api/view-resume/${selectedApp.id}?download=1`} className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1">
+                          <Download className="w-3.5 h-3.5" /> Download
+                        </a>
+                      </>
                     ) : (
                       <span className="text-blue-600 font-medium">{selectedApp.resumeFileName}</span>
                     )}
