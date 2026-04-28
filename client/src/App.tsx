@@ -1,3 +1,4 @@
+// Build marker: 2026-04-28T12:45 — force Vercel cache bust
 import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";

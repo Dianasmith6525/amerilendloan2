@@ -1,3 +1,4 @@
+// Build marker: 2026-04-28T12:45 — force Vercel cache bust
 import { useEffect, useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { useRoute, useLocation } from "wouter";
