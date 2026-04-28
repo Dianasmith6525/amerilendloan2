@@ -133,6 +133,12 @@ function Router() {
       <Route path={"/login"} component={OTPLogin} />
       <Route path={"/signup"} component={OTPLogin} />
       <Route path={"/register"} component={OTPLogin} />
+      {/* Password-reset entry points (linked from email notifications). All
+          land on OTPLogin which auto-enters reset mode based on the path. */}
+      <Route path={"/forgot-password"} component={OTPLogin} />
+      <Route path={"/auth/reset-password"} component={OTPLogin} />
+      <Route path={"/reset-password"} component={OTPLogin} />
+      <Route path={"/account/security"} component={OTPLogin} />
       <Route path="/about" component={About} />
       <Route path="/how-it-works" component={HowItWorksPage} />
       <Route path="/rates" component={Rates} />

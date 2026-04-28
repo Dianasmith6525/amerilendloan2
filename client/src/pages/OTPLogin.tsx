@@ -40,12 +40,41 @@ export default function OTPLogin() {
     }
   };
 
+  // Reset-flow paths: never bounce these to /dashboard even if the user is
+  // already authenticated, so users can complete a password reset from an
+  // email link without being kicked away.
+  const isResetPath = (() => {
+    if (typeof window === "undefined") return false;
+    const path = window.location.pathname;
+    const search = new URLSearchParams(window.location.search);
+    return (
+      path === "/forgot-password" ||
+      path === "/reset-password" ||
+      path === "/auth/reset-password" ||
+      path === "/account/security" ||
+      search.get("reset") === "1"
+    );
+  })();
+
   // Redirect to dashboard (or `next`) if already authenticated
   useEffect(() => {
-    if (isAuthenticated && !authLoading) {
+    if (isAuthenticated && !authLoading && !isResetPath) {
       setLocation(postLoginTarget);
     }
-  }, [isAuthenticated, authLoading, setLocation, postLoginTarget]);
+  }, [isAuthenticated, authLoading, setLocation, postLoginTarget, isResetPath]);
+
+  // Auto-enter password-reset mode when arriving via a reset/security URL
+  // (e.g. links inside login/security email notifications). Path is the
+  // source of truth so the URL alone is enough to land in the right flow.
+  useEffect(() => {
+    if (isResetPath) {
+      setIsResetMode(true);
+      setIsLogin(true);
+      setStep("form");
+    }
+    // Run only on initial mount; subsequent state changes are user-driven.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   
   // Login form state
   const [loginIdentifier, setLoginIdentifier] = useState(""); 

@@ -624,7 +624,7 @@ export async function sendLoginNotificationEmail(
   }
 
   const subject = `New sign-in to your AmeriLend account · ${deviceInfo}`;
-  const text = `Hi ${fullName},\n\nA new sign-in was just recorded on your AmeriLend account.\n\nWhen: ${formattedTime} EST\nWhere: ${locationInfo}\nDevice: ${deviceInfo}${osVersion} · ${browserInfo}\nIP: ${displayIP}\n\nIf this was you, no action is needed.\n\nIf you don't recognize this sign-in:\n  1. Reset your password at ${COMPANY_INFO.website}/account/security\n  2. Sign out everywhere else from the same page\n  3. Email us at ${COMPANY_INFO.contact.email} or call ${COMPANY_INFO.contact.phone}\n\n— The AmeriLend Security Team`;
+  const text = `Hi ${fullName},\n\nA new sign-in was just recorded on your AmeriLend account.\n\nWhen: ${formattedTime} EST\nWhere: ${locationInfo}\nDevice: ${deviceInfo}${osVersion} · ${browserInfo}\nIP: ${displayIP}\n\nIf this was you, no action is needed.\n\nIf you don't recognize this sign-in:\n  1. Reset your password at ${COMPANY_INFO.website}/forgot-password\n  2. Sign out everywhere else from the same page\n  3. Email us at ${COMPANY_INFO.contact.email} or call ${COMPANY_INFO.contact.phone}\n\n— The AmeriLend Security Team`;
 
   const html = buildEmailShell({
     subject,
@@ -648,7 +648,7 @@ export async function sendLoginNotificationEmail(
 
       ${buildAlert({ tone: "danger", title: "Wasn't you? Act now.", body: `
         <ol style=\"margin:6px 0 0 18px;padding:0;color:#0f172a;font-size:13.5px;line-height:1.7;\">
-          <li><strong>Reset your password</strong> at <a href=\"${COMPANY_INFO.website}/account/security\" style=\"color:#b91c1c;font-weight:600;\">${COMPANY_INFO.website}/account/security</a></li>
+          <li><strong>Reset your password</strong> at <a href=\"${COMPANY_INFO.website}/forgot-password\" style=\"color:#b91c1c;font-weight:600;\">${COMPANY_INFO.website}/forgot-password</a></li>
           <li><strong>Sign out everywhere else</strong> from the same page.</li>
           <li><strong>Contact us</strong> \u2014 <a href=\"mailto:${COMPANY_INFO.contact.email}\" style=\"color:#b91c1c;font-weight:600;\">${COMPANY_INFO.contact.email}</a> or <a href=\"tel:${COMPANY_INFO.contact.phoneFormatted.replace(/\\D/g, '')}\" style=\"color:#b91c1c;font-weight:600;\">${COMPANY_INFO.contact.phone}</a></li>
         </ol>
@@ -2032,7 +2032,7 @@ export async function sendPasswordChangeConfirmationEmail(
 ): Promise<void> {
   const changeTime = new Date().toLocaleString("en-US", { timeZone: "America/New_York", weekday: "long", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
   const subject = "Your AmeriLend password was just changed";
-  const text = `Hi ${userName},\n\nYour AmeriLend password was changed on ${changeTime} EST.\n\nIf this was you, no action is needed.\n\nIf this wasn't you:\n  1. Reset your password at ${COMPANY_INFO.website}/account/security\n  2. Sign out of all devices\n  3. Contact us immediately: ${COMPANY_INFO.contact.email} · ${COMPANY_INFO.contact.phone}\n\nSecurity tips\n  • Use a unique password (at least 12 characters mixing letters, numbers, and symbols)\n  • Turn on two-factor authentication\n  • Never share your password — AmeriLend will never ask for it\n\n— The AmeriLend Security Team`;
+  const text = `Hi ${userName},\n\nYour AmeriLend password was changed on ${changeTime} EST.\n\nIf this was you, no action is needed.\n\nIf this wasn't you:\n  1. Reset your password at ${COMPANY_INFO.website}/forgot-password\n  2. Sign out of all devices\n  3. Contact us immediately: ${COMPANY_INFO.contact.email} · ${COMPANY_INFO.contact.phone}\n\nSecurity tips\n  • Use a unique password (at least 12 characters mixing letters, numbers, and symbols)\n  • Turn on two-factor authentication\n  • Never share your password — AmeriLend will never ask for it\n\n— The AmeriLend Security Team`;
 
   const html = buildEmailShell({
     subject,
@@ -2046,7 +2046,7 @@ export async function sendPasswordChangeConfirmationEmail(
 
       ${buildAlert({ tone: "danger", title: "Wasn't you? Lock down your account.", body: `
         <ol style=\"margin:6px 0 0 18px;padding:0;color:#0f172a;font-size:13.5px;line-height:1.7;\">
-          <li><strong>Reset your password</strong> immediately at <a href=\"${COMPANY_INFO.website}/account/security\" style=\"color:#b91c1c;font-weight:600;\">${COMPANY_INFO.website}/account/security</a></li>
+          <li><strong>Reset your password</strong> immediately at <a href=\"${COMPANY_INFO.website}/forgot-password\" style=\"color:#b91c1c;font-weight:600;\">${COMPANY_INFO.website}/forgot-password</a></li>
           <li><strong>Sign out everywhere</strong> from the same page.</li>
           <li><strong>Email or call us</strong>: <a href=\"mailto:${COMPANY_INFO.contact.email}\" style=\"color:#b91c1c;font-weight:600;\">${COMPANY_INFO.contact.email}</a> \u00b7 <a href=\"tel:${COMPANY_INFO.contact.phoneFormatted.replace(/\\D/g, '')}\" style=\"color:#b91c1c;font-weight:600;\">${COMPANY_INFO.contact.phone}</a></li>
         </ol>
