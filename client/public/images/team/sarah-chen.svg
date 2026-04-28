@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a3050"/>
+      <stop offset="100%" stop-color="#264060"/>
+    </linearGradient>
+    <clipPath id="circle"><circle cx="200" cy="200" r="200"/></clipPath>
+  </defs>
+  <g clip-path="url(#circle)">
+    <rect width="400" height="400" fill="url(#bg)"/>
+    <!-- Head -->
+    <circle cx="200" cy="148" r="70" fill="#e8c9a0"/>
+    <!-- Hair long -->
+    <ellipse cx="200" cy="115" rx="74" ry="52" fill="#1a1a2e"/>
+    <ellipse cx="146" cy="148" rx="22" ry="40" fill="#1a1a2e"/>
+    <ellipse cx="254" cy="148" rx="22" ry="40" fill="#1a1a2e"/>
+    <!-- Shoulders/Body -->
+    <ellipse cx="200" cy="370" rx="115" ry="95" fill="#2a4a6a"/>
+    <!-- Blouse -->
+    <ellipse cx="200" cy="290" rx="70" ry="40" fill="#f0ebe5"/>
+    <!-- Neckline -->
+    <path d="M 170 260 Q 200 290 230 260" fill="none" stroke="#d4c5b0" stroke-width="2"/>
+    <!-- Ear left -->
+    <ellipse cx="132" cy="152" rx="9" ry="14" fill="#d4b08a"/>
+    <!-- Ear right -->
+    <ellipse cx="268" cy="152" rx="9" ry="14" fill="#d4b08a"/>
+  </g>
+</svg>

@@ -1,9 +1,12 @@
 /**
  * Cryptocurrency payment integration
- * Supports BTC, ETH, USDT payments via Coinbase Commerce or similar gateway
+ * Supports BTC, ETH, USDT, USDC payments via manual wallet transfers
+ * Admin can update wallet addresses anytime from the dashboard
  */
 
+import crypto from 'crypto';
 import { verifyCryptoTransactionWeb3, getNetworkStatus, TxVerificationResult } from "./web3-verification";
+import { logger } from "./logger";
 
 /**
  * Supported cryptocurrencies
@@ -11,11 +14,9 @@ import { verifyCryptoTransactionWeb3, getNetworkStatus, TxVerificationResult } f
 export type CryptoCurrency = "BTC" | "ETH" | "USDT" | "USDC";
 
 /**
- * Crypto payment configuration
+ * Crypto payment configuration (manual wallet-based)
  */
 export interface CryptoPaymentConfig {
-  apiKey: string;
-  webhookSecret: string;
   environment: "sandbox" | "production";
 }
 
@@ -24,8 +25,6 @@ export interface CryptoPaymentConfig {
  */
 export function getCryptoPaymentConfig(): CryptoPaymentConfig {
   return {
-    apiKey: process.env.COINBASE_COMMERCE_API_KEY || "",
-    webhookSecret: process.env.COINBASE_COMMERCE_WEBHOOK_SECRET || "",
     environment: (process.env.CRYPTO_PAYMENT_ENVIRONMENT as "sandbox" | "production") || "production",
   };
 }
@@ -54,15 +53,8 @@ export async function getCryptoExchangeRate(currency: CryptoCurrency): Promise<n
     );
 
     if (!response.ok) {
-      console.error(`CoinGecko API error: ${response.status}`);
-      // Fallback to reasonable default rates if API fails
-      const fallbackRates: Record<CryptoCurrency, number> = {
-        BTC: 65000,
-        ETH: 3200,
-        USDT: 1,
-        USDC: 1,
-      };
-      return fallbackRates[currency];
+      logger.error(`CoinGecko API error: ${response.status}`);
+      throw new Error(`Unable to fetch live ${currency} exchange rate (API status ${response.status}). Cannot process crypto payment with stale data.`);
     }
 
     const data = await response.json();
@@ -74,15 +66,12 @@ export async function getCryptoExchangeRate(currency: CryptoCurrency): Promise<n
 
     return rate;
   } catch (error) {
-    console.error(`Error fetching ${currency} exchange rate:`, error);
-    // Fallback to reasonable default rates
-    const fallbackRates: Record<CryptoCurrency, number> = {
-      BTC: 65000,
-      ETH: 3200,
-      USDT: 1,
-      USDC: 1,
-    };
-    return fallbackRates[currency];
+    logger.error(`Error fetching ${currency} exchange rate:`, error);
+    // Only allow stablecoins to use fallback rate (always ~$1)
+    if (currency === "USDT" || currency === "USDC") {
+      return 1;
+    }
+    throw new Error(`Unable to fetch live ${currency} exchange rate. Cannot process crypto payment without current pricing.`);
   }
 }
 
@@ -121,57 +110,17 @@ export async function createCryptoCharge(
 }> {
   const config = getCryptoPaymentConfig();
 
-  // Note: We don't require config.apiKey for direct wallet payments
-  // Only needed if using Coinbase Commerce integration
-
   try {
     // Convert USD to crypto
     const cryptoAmount = await convertUSDToCrypto(amount, currency);
 
-    // Get real wallet address for this cryptocurrency
+    // Get real wallet address for this cryptocurrency (from DB or env)
     const paymentAddress = getCryptoWalletAddress(currency);
     const chargeId = `charge_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
-    /*
-    // Production implementation with Coinbase Commerce:
-    const response = await fetch("https://api.commerce.coinbase.com/charges", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CC-Api-Key": config.apiKey,
-        "X-CC-Version": "2018-03-22",
-      },
-      body: JSON.stringify({
-        name: description,
-        description,
-        pricing_type: "fixed_price",
-        local_price: {
-          amount: (amount / 100).toFixed(2),
-          currency: "USD",
-        },
-        metadata,
-      }),
-    });
-
-    const data = await response.json();
-    
-    if (data.data) {
-      const charge = data.data;
-      const selectedCrypto = charge.pricing[currency];
-      
-      return {
-        success: true,
-        chargeId: charge.id,
-        cryptoAmount: selectedCrypto.amount,
-        paymentAddress: charge.addresses[currency],
-        qrCodeUrl: `https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=${currency}:${charge.addresses[currency]}?amount=${selectedCrypto.amount}`,
-        expiresAt: new Date(charge.expires_at),
-      };
-    }
-    */
-
-    // Return real payment data with your wallet address
+    // Return payment data with admin-configured wallet address
+    // User sends crypto manually, admin verifies on blockchain and approves
     return {
       success: true,
       chargeId,
@@ -181,7 +130,7 @@ export async function createCryptoCharge(
       expiresAt,
     };
   } catch (error) {
-    console.error("Crypto payment error:", error);
+    logger.error("Crypto payment error:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error occurred",
@@ -190,7 +139,7 @@ export async function createCryptoCharge(
 }
 
 /**
- * Check payment status from blockchain
+ * Check payment status from blockchain or payment processor
  */
 export async function checkCryptoPaymentStatus(
   chargeId: string,
@@ -202,45 +151,81 @@ export async function checkCryptoPaymentStatus(
   blockNumber?: number;
   timestamp?: Date;
 }> {
-  // In production, would verify against blockchain:
-  // - For BTC: Use blockchain.com API or Blockchair
-  // - For ETH: Use etherscan.io API or alchemy
-  // - For USDT/USDC: Use token contract verification
-  
-  /*
   if (!txHash) {
     return { status: "pending" };
   }
 
   try {
-    // Example: Check Ethereum transaction
-    const response = await fetch(
-      `https://api.etherscan.io/api?module=proxy&action=eth_getTransactionReceipt&txhash=${txHash}&apikey=${process.env.ETHERSCAN_API_KEY}`
-    );
-    const data = await response.json();
+    const etherscanKey = process.env.ETHERSCAN_API_KEY;
     
-    if (data.result) {
-      const blockConfirmations = data.result.blockNumber ? 
-        Math.floor(Math.random() * 20) + 1 : 0; // Mock confirmations
-      
-      return {
-        status: blockConfirmations >= 12 ? "confirmed" : "pending",
-        txHash,
-        confirmations: blockConfirmations,
-        blockNumber: parseInt(data.result.blockNumber || "0"),
-        timestamp: new Date(parseInt(data.result.timeStamp || "0") * 1000),
-      };
-    }
-  } catch (error) {
-    console.error("Error checking tx status:", error);
-  }
-  */
+    if (etherscanKey && txHash.startsWith("0x")) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
 
-  // For demo, return mock status
-  return {
-    status: "pending",
-    txHash,
-  };
+      try {
+        const response = await fetch(
+          `https://api.etherscan.io/api?module=proxy&action=eth_getTransactionReceipt&txhash=${encodeURIComponent(txHash)}&apikey=${encodeURIComponent(etherscanKey)}`,
+          { signal: controller.signal }
+        );
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          logger.warn(`[CryptoPayment] Etherscan returned status ${response.status}`);
+          return { status: "pending", txHash };
+        }
+
+        const data = await response.json();
+
+        // Handle Etherscan rate-limit or error responses
+        if (data.status === "0" || data.message === "NOTOK") {
+          logger.warn("[CryptoPayment] Etherscan rate limit or error:", data.result);
+          return { status: "pending", txHash };
+        }
+        
+        if (data.result && data.result.blockNumber) {
+          const controller2 = new AbortController();
+          const timeout2 = setTimeout(() => controller2.abort(), 15000);
+
+          const currentBlockRes = await fetch(
+            `https://api.etherscan.io/api?module=proxy&action=eth_blockNumber&apikey=${encodeURIComponent(etherscanKey)}`,
+            { signal: controller2.signal }
+          );
+          clearTimeout(timeout2);
+          const currentBlockData = await currentBlockRes.json();
+          const currentBlock = parseInt(currentBlockData.result, 16);
+          const txBlock = parseInt(data.result.blockNumber, 16);
+          const confirmations = currentBlock - txBlock;
+          
+          return {
+            status: confirmations >= 12 ? "confirmed" : "pending",
+            txHash,
+            confirmations,
+            blockNumber: txBlock,
+            timestamp: new Date(),
+          };
+        }
+      } catch (fetchErr) {
+        clearTimeout(timeout);
+        if (fetchErr instanceof DOMException && fetchErr.name === "AbortError") {
+          logger.warn("[CryptoPayment] Etherscan request timed out");
+        } else {
+          logger.error("[CryptoPayment] Etherscan fetch error:", fetchErr);
+        }
+        return { status: "pending", txHash };
+      }
+    }
+    
+    return {
+      status: "pending",
+      txHash,
+    };
+  } catch (error) {
+    logger.error("[CryptoPayment] Status check failed:", error);
+    return {
+      status: "pending",
+      txHash,
+    };
+  }
 }
 
 /**
@@ -269,8 +254,9 @@ export async function verifyCryptoPaymentByTxHash(
     }
 
     // Use Web3 to verify transaction on blockchain
+    // ETH/USDT/USDC use public RPC fallbacks when no API key is configured
     const result = await verifyCryptoTransactionWeb3(
-      currency as any,
+      currency,
       txHash,
       expectedAddress,
       expectedAmount
@@ -302,7 +288,7 @@ export async function checkNetworkStatus(
   currentBlock: number;
   message: string;
 }> {
-  if (!["ETH", "BTC"].includes(currency)) {
+  if (currency !== "ETH" && currency !== "BTC") {
     return {
       online: false,
       currentBlock: 0,
@@ -310,24 +296,23 @@ export async function checkNetworkStatus(
     };
   }
 
-  return getNetworkStatus(currency as any);
+  return getNetworkStatus(currency);
 }
 
 /**
- * Validate crypto payment webhook
+ * Validate crypto payment webhook (unused — admin manually verifies)
  */
 export function validateCryptoWebhook(
   signature: string,
   payload: string
 ): boolean {
-  const config = getCryptoPaymentConfig();
+  const secret = process.env.CRYPTO_WEBHOOK_SECRET;
   
-  if (!config.webhookSecret) {
+  if (!secret) {
     return false;
   }
 
-  const crypto = require("crypto");
-  const hmac = crypto.createHmac("sha256", config.webhookSecret);
+  const hmac = crypto.createHmac("sha256", secret);
   hmac.update(payload);
   const computedSignature = hmac.digest("hex");
 
@@ -335,21 +320,30 @@ export function validateCryptoWebhook(
 }
 
 /**
- * Get real cryptocurrency wallet address from environment
+ * Get cryptocurrency wallet address from environment or DB
+ * Admin can change these anytime from the admin dashboard
  */
 function getCryptoWalletAddress(currency: CryptoCurrency): string {
-  // Use real wallet addresses from environment variables
+  // Use wallet addresses from environment variables (DB override happens in router)
   const walletAddresses: Record<CryptoCurrency, string> = {
     BTC: process.env.CRYPTO_BTC_ADDRESS || "",
     ETH: process.env.CRYPTO_ETH_ADDRESS || "",
-    USDT: process.env.CRYPTO_USDT_ADDRESS || process.env.CRYPTO_ETH_ADDRESS || "", // USDT is ERC-20
-    USDC: process.env.CRYPTO_USDC_ADDRESS || process.env.CRYPTO_ETH_ADDRESS || "", // USDC is ERC-20
+    USDT: process.env.CRYPTO_USDT_ADDRESS || process.env.CRYPTO_ETH_ADDRESS || "",
+    USDC: process.env.CRYPTO_USDC_ADDRESS || process.env.CRYPTO_ETH_ADDRESS || "",
   };
 
   const address = walletAddresses[currency];
   
   if (!address) {
-    throw new Error(`No wallet address configured for ${currency}`);
+    throw new Error(`No wallet address configured for ${currency}. Please ask the admin to set wallet addresses in the dashboard.`);
+  }
+
+  // Basic address format validation
+  if ((currency === "ETH" || currency === "USDT" || currency === "USDC") && !/^0x[a-fA-F0-9]{40}$/.test(address)) {
+    throw new Error(`Invalid ${currency} wallet address format. Expected a 42-character hex address starting with 0x.`);
+  }
+  if (currency === "BTC" && !/^(1|3|bc1)[a-zA-HJ-NP-Z0-9]{25,62}$/.test(address)) {
+    throw new Error(`Invalid BTC wallet address format.`);
   }
   
   return address;

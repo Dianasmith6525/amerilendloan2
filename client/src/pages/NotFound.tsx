@@ -1,10 +1,23 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { AlertCircle, Home } from "lucide-react";
+import { AlertCircle, Contact, DollarSign, Home, Search } from "lucide-react";
+import { useEffect } from "react";
 import { useLocation } from "wouter";
 
 export default function NotFound() {
   const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    // Tell search engines not to index 404 pages
+    const meta = document.createElement("meta");
+    meta.name = "robots";
+    meta.content = "noindex";
+    document.head.appendChild(meta);
+    document.title = "Page Not Found | AmeriLend";
+    return () => {
+      document.head.removeChild(meta);
+    };
+  }, []);
 
   const handleGoHome = () => {
     setLocation("/");
@@ -35,7 +48,7 @@ export default function NotFound() {
 
           <div
             id="not-found-button-group"
-            className="flex flex-col sm:flex-row gap-3 justify-center"
+            className="grid grid-cols-1 sm:grid-cols-2 gap-3 justify-center"
           >
             <Button
               onClick={handleGoHome}
@@ -43,6 +56,30 @@ export default function NotFound() {
             >
               <Home className="w-4 h-4 mr-2" />
               Go Home
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setLocation("/check-offers")}
+              className="px-6 py-2.5 rounded-lg"
+            >
+              <Search className="w-4 h-4 mr-2" />
+              Check Offers
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setLocation("/rates")}
+              className="px-6 py-2.5 rounded-lg"
+            >
+              <DollarSign className="w-4 h-4 mr-2" />
+              View Rates
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setLocation("/contact")}
+              className="px-6 py-2.5 rounded-lg"
+            >
+              <Contact className="w-4 h-4 mr-2" />
+              Contact Support
             </Button>
           </div>
         </CardContent>

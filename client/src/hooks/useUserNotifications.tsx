@@ -8,11 +8,20 @@ export interface Notification {
   message: string;
   timestamp: Date;
   read: boolean;
-  data?: any;
+  data?: Record<string, unknown>;
 }
 
 export function useUserNotifications() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>(() => {
+    try {
+      const stored = localStorage.getItem('userNotifications');
+      if (stored) {
+        const parsed = JSON.parse(stored) as Notification[];
+        return parsed.map(n => ({ ...n, timestamp: new Date(n.timestamp) }));
+      }
+    } catch { /* ignore invalid data */ }
+    return [];
+  });
   
   // Initialize lastCheck from localStorage or use current time for first visit
   const [lastCheck, setLastCheck] = useState<Date>(() => {
@@ -103,12 +112,12 @@ export function useUserNotifications() {
 
     // Check for new support ticket messages
     if (Array.isArray(supportTicketsData?.data)) {
-      supportTicketsData.data.forEach((ticket: any) => {
+      supportTicketsData.data.forEach((ticket) => {
         if (!ticket.updatedAt) return; // Skip if no updatedAt
         // Check if ticket was recently updated by admin
         const updatedDate = new Date(ticket.updatedAt);
         if (isNaN(updatedDate.getTime())) return; // Skip invalid dates
-        if (updatedDate > lastCheck && ticket.lastMessageFromAdmin) {
+        if (updatedDate > lastCheck && (ticket as Record<string, unknown>).lastMessageFromAdmin) {
           newNotifications.push({
             id: `ticket-reply-${ticket.id}`,
             type: "message",
@@ -137,7 +146,7 @@ export function useUserNotifications() {
 
     // Check for payment confirmations
     if (Array.isArray(paymentsData)) {
-      paymentsData.forEach((payment: any) => {
+      paymentsData.forEach((payment) => {
         if (!payment.createdAt) return; // Skip if no createdAt
         const paymentDate = new Date(payment.createdAt);
         if (isNaN(paymentDate.getTime())) return; // Skip invalid dates
@@ -186,6 +195,13 @@ export function useUserNotifications() {
     });
 
   }, [loans, supportTicketsData, paymentsData, lastCheck]);
+
+  // Persist notifications to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('userNotifications', JSON.stringify(notifications));
+    } catch { /* ignore quota errors */ }
+  }, [notifications]);
 
   // Update last check timestamp every 30 seconds and persist to localStorage
   useEffect(() => {

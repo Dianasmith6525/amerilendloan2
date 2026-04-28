@@ -1,0 +1,1 @@
+Health: surface twilio/sendgrid/stripe-webhook/encryption/openai/redis env booleans on /health/detailed for live env diagnostics. No values are returned; only booleans + provider names. Lets us spot which envs are missing on Railway without an admin login.

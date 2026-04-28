@@ -1,0 +1,111 @@
+# Dependabot configuration for amerilendloan2.
+#
+# Goals:
+# - Surface security-relevant dependency updates promptly (Stripe, helmet,
+#   express, drizzle, zod, etc.) so we don't ship known CVEs to a public
+#   loan-application site.
+# - Keep noise low: weekly schedule, grouped patch/minor updates, separate PRs
+#   only for major bumps that need real review.
+#
+# Maintainers can change the cadence to "daily" if a CVE backlog appears.
+
+version: 2
+
+updates:
+  # Application dependencies (npm/pnpm).
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 10
+    versioning-strategy: "increase"
+    labels:
+      - "dependencies"
+      - "automated"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: "scope"
+    groups:
+      # Roll up non-breaking updates so we don't get 50 PRs a week.
+      production-minor-and-patch:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      development-minor-and-patch:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      # Keep React-ecosystem upgrades together — version skew between react,
+      # react-dom, and @types/react causes hard-to-debug runtime errors.
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      # Same idea for the Stripe SDKs — server + client must stay in sync.
+      stripe:
+        patterns:
+          - "stripe"
+          - "@stripe/*"
+      # Drizzle ORM + kit must always match.
+      drizzle:
+        patterns:
+          - "drizzle-orm"
+          - "drizzle-kit"
+          - "drizzle-zod"
+      # Radix UI ships dozens of small packages — group their patch/minor.
+      radix-ui:
+        patterns:
+          - "@radix-ui/*"
+    ignore:
+      # Pin major-version upgrades that need a manual migration plan.
+      # Remove an entry when you're ready to take the upgrade.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions workflow files.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+      - "automated"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"
+
+  # Dockerfile base image updates (catches Node LTS security patches).
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "docker"
+      - "automated"
+    commit-message:
+      prefix: "chore(docker)"
+      include: "scope"

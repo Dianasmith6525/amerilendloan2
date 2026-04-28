@@ -1,5 +1,7 @@
-import { desc, eq, or, and, sql, ilike } from "drizzle-orm";
+import crypto from 'crypto';
+import { asc, desc, eq, or, and, sql, ilike, inArray, gt, gte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
+import { logger } from "./_core/logger";
 import type postgres from "postgres";
 import { 
   InsertUser, 
@@ -27,7 +29,14 @@ import {
   InsertSupportTicket,
   ticketMessages,
   TicketMessage,
-  InsertTicketMessage
+  InsertTicketMessage,
+  automationRules,
+  kycVerification,
+  KycVerification,
+  InsertKycVerification,
+  uploadedDocuments,
+  UploadedDocument,
+  InsertUploadedDocument
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { COMPANY_INFO } from './_core/companyConfig';
@@ -42,11 +51,27 @@ import {
 // Bank account encryption utilities
 import { randomBytes, createCipheriv, createDecipheriv } from "crypto";
 
-const ENCRYPTION_KEY = (process.env.ENCRYPTION_KEY || '0'.repeat(64)).substring(0, 32); // 32 bytes for AES-256
+// Encryption key for bank data — ENCRYPTION_KEY is preferred; JWT_SECRET is accepted as fallback
+// but operators should set a dedicated ENCRYPTION_KEY in production
+const ENCRYPTION_KEY = (() => {
+  const dedicatedKey = process.env.ENCRYPTION_KEY;
+  if (dedicatedKey) return crypto.createHash('sha256').update(dedicatedKey).digest();
+
+  const fallback = process.env.JWT_SECRET;
+  if (fallback) {
+    if (process.env.NODE_ENV === 'production') {
+      // Log loudly — operators must set ENCRYPTION_KEY in production
+      logger.error('[SECURITY WARNING] Using JWT_SECRET for bank data encryption. Set a dedicated ENCRYPTION_KEY environment variable immediately.');
+    }
+    return crypto.createHash('sha256').update(fallback).digest();
+  }
+
+  throw new Error('[Security] No ENCRYPTION_KEY or JWT_SECRET configured — cannot encrypt bank data');
+})();
 
 function encryptBankData(data: string): string {
   const iv = randomBytes(16);
-  const cipher = createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY, 'utf8').subarray(0, 32), iv);
+  const cipher = createCipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
   let encrypted = cipher.update(data, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   return iv.toString('hex') + ':' + encrypted;
@@ -55,7 +80,7 @@ function encryptBankData(data: string): string {
 function decryptBankData(encrypted: string): string {
   const parts = encrypted.split(':');
   const iv = Buffer.from(parts[0], 'hex');
-  const decipher = createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY, 'utf8').subarray(0, 32), iv);
+  const decipher = createDecipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
   let decrypted = decipher.update(parts[1], 'hex', 'utf8');
   decrypted += decipher.final('utf8');
   return decrypted;
@@ -75,7 +100,7 @@ export async function getDb() {
       await _client`SELECT 1`;
       return _db;
     } catch (error) {
-      console.warn("[Database] Connection lost, attempting to reconnect...");
+      logger.warn("[Database] Connection lost, attempting to reconnect...");
       _db = null;
       _client = null;
       _connectionStartTime = null;
@@ -85,24 +110,49 @@ export async function getDb() {
   // Create new connection
   if (!_db && process.env.DATABASE_URL) {
     try {
-      console.log("[Database] Attempting to connect to database...");
+      logger.info("[Database] Attempting to connect to database...");
       _connectionStartTime = new Date();
       
       const postgresModule = await import("postgres");
       const postgres = postgresModule.default;
       
-      // Connection options
-      const sslEnabled = process.env.NODE_ENV === 'production';
-      console.log(`[Database] SSL mode: ${sslEnabled ? 'ENABLED' : 'DISABLED'}`);
+      // Connection options — enable SSL for any remote database (Supabase, Railway, Neon, etc.)
+      // SSL behavior:
+      //   Local DB (localhost/127.0.0.1) → SSL disabled
+      //   Remote DB → SSL enabled, with auto-detection of certificate verification:
+      //     • Set DB_SSL_REJECT_UNAUTHORIZED=true/false to override manually
+      //     • Cloud providers (Supabase, Neon, Railway) default to rejectUnauthorized=false
+      //     • If SSL verification fails at connect time, auto-retries with rejectUnauthorized=false
+      const dbUrl = process.env.DATABASE_URL;
+      const isLocalDb = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
+      const sslEnabled = !isLocalDb;
+      
+      // Determine SSL certificate verification:
+      // 1. Explicit env var override takes priority
+      // 2. If DATABASE_URL contains sslmode=no-verify or sslmode=require, disable verification
+      // 3. Cloud providers (Supabase, Neon, Railway) commonly use poolers with
+      //    certificates not in the default trust store, so default to false for remote DBs
+      const urlDisablesVerify = dbUrl.includes('sslmode=no-verify') ||
+                                dbUrl.includes('sslmode=require') ||
+                                dbUrl.includes('sslmode=prefer') ||
+                                dbUrl.includes('supabase.com') ||
+                                dbUrl.includes('neon.tech') ||
+                                dbUrl.includes('railway.app');
+      const envSslSetting = process.env.DB_SSL_REJECT_UNAUTHORIZED;
+      const rejectUnauthorized = envSslSetting !== undefined
+        ? envSslSetting === 'true'
+        : !urlDisablesVerify;
+      logger.info(`[Database] SSL mode: ${sslEnabled ? `ENABLED (verify=${rejectUnauthorized})` : 'DISABLED (local)'}`);
       
       _client = postgres(process.env.DATABASE_URL, {
-        ssl: sslEnabled ? 'require' : false,
+        ssl: sslEnabled ? { rejectUnauthorized } : false,
         idle_timeout: 30, // 30 seconds
         max_lifetime: 60 * 60, // 1 hour
         connect_timeout: 10, // 10 seconds
       });
 
       // Test connection with timeout
+      let connectionTestPassed = false;
       try {
         await Promise.race([
           _client`SELECT 1`,
@@ -110,29 +160,55 @@ export async function getDb() {
             setTimeout(() => reject(new Error("Connection test timeout (15s)")), 15000)
           )
         ]);
+        connectionTestPassed = true;
       } catch (testError) {
-        // Connection test failed, but don't fail startup - database might come online later
         const testErrorMsg = testError instanceof Error ? testError.message : String(testError);
-        console.warn(`[Database] Connection test failed: ${testErrorMsg} (server will continue)`);
+        
+        // If SSL verification failed, automatically retry without verification
+        if (testErrorMsg.includes('self-signed') || testErrorMsg.includes('certificate') || testErrorMsg.includes('SSL')) {
+          logger.warn(`[Database] SSL verification failed, retrying with rejectUnauthorized=false...`);
+          try {
+            // Close the broken client
+            await _client.end({ timeout: 3 }).catch(() => {});
+          } catch { /* ignore close errors */ }
+          
+          _client = postgres(process.env.DATABASE_URL, {
+            ssl: sslEnabled ? { rejectUnauthorized: false } : false,
+            idle_timeout: 30,
+            max_lifetime: 60 * 60,
+            connect_timeout: 10,
+          });
+          
+          try {
+            await _client`SELECT 1`;
+            connectionTestPassed = true;
+            logger.info(`[Database] SSL retry successful with rejectUnauthorized=false`);
+          } catch (retryError) {
+            const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
+            logger.warn(`[Database] Connection test failed after SSL retry: ${retryMsg} (server will continue)`);
+          }
+        } else {
+          logger.warn(`[Database] Connection test failed: ${testErrorMsg} (server will continue)`);
+        }
       }
       
       _db = drizzle(_client);
       _lastError = null;
       
       const uptime = new Date().getTime() - _connectionStartTime.getTime();
-      console.log(`[Database] ✅ Successfully connected to database (${uptime}ms)`);
+      logger.info(`[Database] ✅ Successfully connected to database (${uptime}ms)`);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       _lastError = errorMsg;
-      console.error("[Database] ❌ Failed to connect:", errorMsg);
+      logger.error("[Database] ❌ Failed to connect:", errorMsg);
       
       // Log detailed error info for debugging
       if (errorMsg.includes('SSL')) {
-        console.error("[Database] Tip: SSL error detected. Check your DATABASE_URL format.");
+        logger.error("[Database] Tip: SSL error detected. Check your DATABASE_URL format.");
       } else if (errorMsg.includes('ECONNREFUSED')) {
-        console.error("[Database] Tip: Connection refused. Is the database server running?");
+        logger.error("[Database] Tip: Connection refused. Is the database server running?");
       } else if (errorMsg.includes('authentication')) {
-        console.error("[Database] Tip: Authentication failed. Check database credentials.");
+        logger.error("[Database] Tip: Authentication failed. Check database credentials.");
       }
       
       _db = null;
@@ -142,7 +218,7 @@ export async function getDb() {
   }
   
   if (!process.env.DATABASE_URL) {
-    console.warn("[Database] DATABASE_URL not set - database operations will fail");
+    logger.warn("[Database] DATABASE_URL not set - database operations will fail");
   }
   
   return _db;
@@ -168,7 +244,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
+    logger.warn("[Database] Cannot upsert user: database not available");
     return;
   }
 
@@ -202,7 +278,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       // Auto-assign admin role if openId matches OWNER_OPEN_ID or email is admin email
       values.role = 'admin';
       updateSet.role = 'admin';
-      console.log(`✅ [Database] Auto-promoted ${user.email || user.openId} to admin role`);
+      logger.info(`✅ [Database] Auto-promoted ${user.email || user.openId} to admin role`);
     }
 
     if (!values.lastSignedIn) {
@@ -221,7 +297,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
         set: updateSet,
       });
   } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
+    logger.error("[Database] Failed to upsert user:", error);
     throw error;
   }
 }
@@ -229,7 +305,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 export async function getUserByOpenId(openId: string) {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
+    logger.warn("[Database] Cannot get user: database not available");
     return undefined;
   }
 
@@ -241,7 +317,7 @@ export async function getUserByOpenId(openId: string) {
 export async function getUserByEmail(email: string) {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
+    logger.warn("[Database] Cannot get user: database not available");
     return undefined;
   }
 
@@ -253,7 +329,27 @@ export async function getUserByEmail(email: string) {
 
     return result[0];
   } catch (error) {
-    console.error("[Database] Error in getUserByEmail:", error instanceof Error ? error.message : error);
+    logger.error("[Database] Error in getUserByEmail:", error instanceof Error ? error.message : error);
+    return undefined;
+  }
+}
+
+export async function getUserByName(name: string) {
+  const db = await getDb();
+  if (!db) {
+    logger.warn("[Database] Cannot get user: database not available");
+    return undefined;
+  }
+
+  try {
+    const result = await db.select()
+      .from(users)
+      .where(eq(users.name, name))
+      .limit(1);
+
+    return result[0];
+  } catch (error) {
+    logger.error("[Database] Error in getUserByName:", error instanceof Error ? error.message : error);
     return undefined;
   }
 }
@@ -261,13 +357,11 @@ export async function getUserByEmail(email: string) {
 export async function createUser(email: string, fullName?: string) {
   const db = await getDb();
   if (!db) {
-    console.error("[Database] createUser: Database connection not available");
+    logger.error("[Database] createUser: Database connection not available");
     throw new Error("Database connection not available");
   }
 
   try {
-    console.log("[Database] createUser: Starting user creation for", email);
-    
     // Check if user with this email already exists
     const existingUser = await db.select()
       .from(users)
@@ -275,7 +369,6 @@ export async function createUser(email: string, fullName?: string) {
       .limit(1);
     
     if (existingUser.length > 0) {
-      console.warn(`[Database] createUser: User with email ${email} already exists`);
       throw new Error(`User with email ${email} already exists`);
     }
     
@@ -283,7 +376,6 @@ export async function createUser(email: string, fullName?: string) {
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).substring(2, 8);
     const openId = `email_${timestamp}_${random}`;
-    console.log("[Database] createUser: Generated openId:", openId);
 
     // Extract first and last name from full name
     let firstName: string | undefined;
@@ -293,15 +385,9 @@ export async function createUser(email: string, fullName?: string) {
       firstName = parts[0];
       lastName = parts.length > 1 ? parts.slice(1).join(' ') : undefined;
     }
-    console.log("[Database] createUser: Names extracted - firstName:", firstName, "lastName:", lastName);
 
-    console.log("[Database] createUser: Inserting user into database...");
-    
     // Check if email is admin email - if so, assign admin role
     const userRole = email === COMPANY_INFO.admin.email ? "admin" : "user";
-    if (email === COMPANY_INFO.admin.email) {
-      console.log(`✅ [Database] Admin email detected - assigning admin role to ${email}`);
-    }
 
     const result = await db.insert(users).values({
       openId,
@@ -316,12 +402,11 @@ export async function createUser(email: string, fullName?: string) {
       lastSignedIn: new Date(),
     }).returning();
 
-    console.log("[Database] createUser: User created successfully with ID:", result[0]?.id);
     return result[0];
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("[Database] createUser failed:", errorMessage);
-    console.error("[Database] Full error:", error);
+    logger.error("[Database] createUser failed:", errorMessage);
+    logger.error("[Database] Full error:", error);
     throw error;
   }
 }
@@ -329,14 +414,14 @@ export async function createUser(email: string, fullName?: string) {
 export async function getUserByEmailOrPhone(identifier: string) {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
+    logger.warn("[Database] Cannot get user: database not available");
     return undefined;
   }
 
-  // Try to find by email first, or by loginMethod (phone for OTP users)
+  // Try to find by email first, then by phone number
   const result = await db.select()
     .from(users)
-    .where(or(eq(users.email, identifier), eq(users.loginMethod, identifier)))
+    .where(or(eq(users.email, identifier), eq(users.phoneNumber, identifier)))
     .limit(1);
   
   return result.length > 0 ? result[0] : undefined;
@@ -377,13 +462,20 @@ export async function checkDuplicateAccount(dateOfBirth: string, ssn: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  // Check for existing applications with same DOB and SSN
+  // Hash the SSN for lookup (matches the hash stored during submission)
+  const ssnHash = crypto.createHash('sha256').update(ssn).digest('hex');
+  
+  // Check for existing applications with same DOB and SSN hash
+  // Fall back to plain SSN check for legacy records that haven't been migrated
   const existingApplications = await db.select()
     .from(loanApplications)
     .where(
       and(
         eq(loanApplications.dateOfBirth, dateOfBirth),
-        eq(loanApplications.ssn, ssn)
+        or(
+          eq(loanApplications.ssnHash, ssnHash),
+          eq(loanApplications.ssn, ssn) // Legacy fallback for unencrypted records
+        )
       )
     );
   
@@ -452,13 +544,13 @@ export async function createLoanApplication(data: InsertLoanApplication) {
         insertedApplication.fullName,
         insertedApplication.trackingNumber,
         insertedApplication.requestedAmount
-      ).catch(err => console.error('[Database] Failed to send application submitted email:', err));
+      ).catch(err => logger.error('[Database] Failed to send application submitted email:', err));
     }
     
     return { ...result, trackingNumber };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error in createLoanApplication";
-    console.error("[Database] createLoanApplication error:", errorMsg);
+    logger.error("[Database] createLoanApplication error:", errorMsg);
     throw error; // Re-throw so caller can handle it
   }
 }
@@ -483,6 +575,84 @@ export async function getAllLoanApplications() {
   if (!db) return [];
   
   return db.select().from(loanApplications).orderBy(desc(loanApplications.createdAt));
+}
+
+/**
+ * Loans stuck in fee_pending for more than `minHoursOld` hours that have not
+ * yet been reminded within the last `cooldownHours` hours. Used by the daily
+ * unpaid-fee reminder cron to nudge users who never completed payment.
+ */
+export async function getFeePendingLoansNeedingReminder(
+  minHoursOld: number = 24,
+  cooldownHours: number = 72,
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const minAgeCutoff = new Date(Date.now() - minHoursOld * 60 * 60 * 1000);
+  const cooldownCutoff = new Date(Date.now() - cooldownHours * 60 * 60 * 1000);
+
+  return db
+    .select()
+    .from(loanApplications)
+    .where(
+      and(
+        eq(loanApplications.status, "fee_pending" as any),
+        sql`${loanApplications.updatedAt} <= ${minAgeCutoff}`,
+        or(
+          sql`${loanApplications.lastFeeReminderAt} IS NULL`,
+          sql`${loanApplications.lastFeeReminderAt} <= ${cooldownCutoff}`,
+        ),
+      ),
+    )
+    .orderBy(desc(loanApplications.createdAt));
+}
+
+export async function markFeeReminderSent(loanApplicationId: number) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db
+    .update(loanApplications)
+    .set({ lastFeeReminderAt: new Date(), updatedAt: new Date() })
+    .where(eq(loanApplications.id, loanApplicationId));
+}
+
+export async function getLoanApplicationByTrackingNumber(trackingNumber: string) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const result = await db.select().from(loanApplications)
+    .where(sql`UPPER(${loanApplications.trackingNumber}) = UPPER(${trackingNumber})`)
+    .limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+/**
+ * Atomically transition a loan application from one status to another.
+ * Returns true if the transition succeeded (row was in expectedStatus), false otherwise.
+ * Prevents race conditions in payment processing.
+ */
+export async function atomicStatusTransition(
+  id: number,
+  expectedStatus: string | string[],
+  newStatus: string
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const statuses = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+  const conditions = statuses.map(s => eq(loanApplications.status, s as any));
+
+  // Use .returning() so we get the updated rows back — .length > 0 is the
+  // most reliable way to know whether the WHERE matched, regardless of which
+  // Postgres driver property exposes the affected-row count.
+  const rows = await db.update(loanApplications)
+    .set({ status: newStatus as any, updatedAt: new Date() })
+    .where(and(eq(loanApplications.id, id), or(...conditions)))
+    .returning({ id: loanApplications.id });
+  
+  return rows.length > 0;
 }
 
 export async function updateLoanApplicationStatus(
@@ -524,7 +694,7 @@ export async function updateLoanApplicationStatus(
               additionalData.approvedAmount
             );
           } catch (smsError) {
-            console.error('Failed to send approval SMS:', smsError);
+            logger.error('Failed to send approval SMS:', smsError);
           }
         }
         break;
@@ -563,7 +733,7 @@ export async function updateLoanApplicationStatus(
         break;
     }
   } catch (emailError) {
-    console.error('Failed to send status update email:', emailError);
+    logger.error('Failed to send status update email:', emailError);
   }
 }
 
@@ -629,6 +799,44 @@ export async function createPayment(data: InsertPayment) {
   
   const result = await db.insert(payments).values(data).returning();
   return result.length > 0 ? result[0] : null;
+}
+
+/**
+ * Find a recent active (non-terminal) payment for the same loan + method.
+ * Used to dedupe payment creation when the user navigates back to the pay
+ * page or double-clicks Pay before the first request settles. Returns the
+ * most recent matching row, or undefined if none exist within the window.
+ */
+export async function findActivePaymentForLoan(
+  loanApplicationId: number,
+  paymentMethod: "card" | "crypto" | "wire",
+  withinMs: number = 30 * 60 * 1000,
+) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const cutoff = new Date(Date.now() - withinMs);
+  const activeStatuses: Array<"pending" | "processing" | "pending_verification"> = [
+    "pending",
+    "processing",
+    "pending_verification",
+  ];
+
+  const result = await db
+    .select()
+    .from(payments)
+    .where(
+      and(
+        eq(payments.loanApplicationId, loanApplicationId),
+        eq(payments.paymentMethod, paymentMethod),
+        inArray(payments.status, activeStatuses),
+        gte(payments.createdAt, cutoff),
+      ),
+    )
+    .orderBy(desc(payments.createdAt))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
 }
 
 export async function getPaymentById(id: number) {
@@ -714,7 +922,7 @@ export async function updatePaymentStatus(
       auditContext?.userId,
       auditContext?.ipAddress,
       auditContext?.userAgent
-    ).catch(err => console.warn("[Audit] Failed to log payment status change:", err));
+    ).catch(err => logger.warn("[Audit] Failed to log payment status change:", err));
   }
   
   return result;
@@ -997,29 +1205,104 @@ export async function searchUsers(query: string, limit = 10) {
     .from(users)
     .where(
       or(
-        eq(users.role, "admin"),
-        and(
-          or(
-            sql`LOWER(${users.name}) LIKE ${searchTerm}`,
-            sql`LOWER(${users.email}) LIKE ${searchTerm}`
-          )
-        )
+        sql`LOWER(${users.name}) LIKE ${searchTerm}`,
+        sql`LOWER(${users.email}) LIKE ${searchTerm}`
       )
     )
     .limit(limit);
 }
 
-export async function updateUserProfile(userId: number, updates: { name?: string; email?: string; phone?: string }) {
+export async function updateUserProfile(
+  userId: number,
+  updates: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    firstName?: string;
+    lastName?: string;
+    phoneNumber?: string;
+    dateOfBirth?: string;
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    country?: string;
+    bio?: string;
+    preferredLanguage?: string;
+    timezone?: string;
+    employmentStatus?: string;
+    employer?: string;
+    jobTitle?: string;
+    monthlyIncome?: number;
+  },
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
-  const updateData: any = { updatedAt: new Date() };
-  if (updates.name !== undefined) updateData.name = updates.name || null;
-  if (updates.email !== undefined) updateData.email = updates.email || null;
-  
+
+  // ---- 1. Update the canonical `users` row (fields that exist on it) ----
+  const userUpdate: any = { updatedAt: new Date() };
+  if (updates.name !== undefined) userUpdate.name = updates.name || null;
+  if (updates.email !== undefined) userUpdate.email = updates.email || null;
+  if (updates.firstName !== undefined) userUpdate.firstName = updates.firstName || null;
+  if (updates.lastName !== undefined) userUpdate.lastName = updates.lastName || null;
+  // Accept either `phone` (legacy) or the canonical `phoneNumber` column name.
+  if (updates.phoneNumber !== undefined) userUpdate.phoneNumber = updates.phoneNumber || null;
+  else if (updates.phone !== undefined) userUpdate.phoneNumber = updates.phone || null;
+  if (updates.dateOfBirth !== undefined) userUpdate.dateOfBirth = updates.dateOfBirth || null;
+  if (updates.street !== undefined) userUpdate.street = updates.street || null;
+  if (updates.city !== undefined) userUpdate.city = updates.city || null;
+  if (updates.state !== undefined) userUpdate.state = updates.state || null;
+  if (updates.zipCode !== undefined) userUpdate.zipCode = updates.zipCode || null;
+  if (updates.bio !== undefined) userUpdate.bio = updates.bio || null;
+  if (updates.preferredLanguage !== undefined) userUpdate.preferredLanguage = updates.preferredLanguage || null;
+  if (updates.timezone !== undefined) userUpdate.timezone = updates.timezone || null;
+
   await db.update(users)
-    .set(updateData)
+    .set(userUpdate)
     .where(eq(users.id, userId));
+
+  // ---- 2. Upsert the extended `userProfiles` row so the Settings page,
+  //         which reads from getUserProfile, sees the same data. ----
+  const { userProfiles } = await import("../drizzle/schema");
+
+  const profileUpdate: any = { updatedAt: new Date() };
+  if (updates.firstName !== undefined) profileUpdate.firstName = updates.firstName || null;
+  if (updates.lastName !== undefined) profileUpdate.lastName = updates.lastName || null;
+  if (updates.phoneNumber !== undefined) profileUpdate.phoneNumber = updates.phoneNumber || null;
+  else if (updates.phone !== undefined) profileUpdate.phoneNumber = updates.phone || null;
+  if (updates.dateOfBirth !== undefined) profileUpdate.dateOfBirth = updates.dateOfBirth || null;
+  if (updates.street !== undefined) profileUpdate.street = updates.street || null;
+  if (updates.city !== undefined) profileUpdate.city = updates.city || null;
+  if (updates.state !== undefined) profileUpdate.state = updates.state || null;
+  if (updates.zipCode !== undefined) profileUpdate.zipCode = updates.zipCode || null;
+  if (updates.country !== undefined) profileUpdate.country = updates.country || null;
+  if (updates.bio !== undefined) profileUpdate.bio = updates.bio || null;
+  if (updates.preferredLanguage !== undefined) profileUpdate.preferredLanguage = updates.preferredLanguage || null;
+  if (updates.timezone !== undefined) profileUpdate.timezone = updates.timezone || null;
+  if (updates.employmentStatus !== undefined) profileUpdate.employmentStatus = updates.employmentStatus || null;
+  if (updates.employer !== undefined) profileUpdate.employer = updates.employer || null;
+  if (updates.jobTitle !== undefined) profileUpdate.jobTitle = updates.jobTitle || null;
+  if (updates.monthlyIncome !== undefined) profileUpdate.monthlyIncome = updates.monthlyIncome ?? null;
+
+  // Skip the upsert if there are no profile-table fields to write.
+  const hasProfileFields = Object.keys(profileUpdate).length > 1; // > 1 to ignore updatedAt
+  if (hasProfileFields) {
+    const existing = await db.select({ id: userProfiles.id })
+      .from(userProfiles)
+      .where(eq(userProfiles.userId, userId))
+      .limit(1);
+
+    if (existing.length > 0) {
+      await db.update(userProfiles)
+        .set(profileUpdate)
+        .where(eq(userProfiles.userId, userId));
+    } else {
+      await db.insert(userProfiles).values({
+        userId,
+        ...profileUpdate,
+      });
+    }
+  }
 }
 
 export async function getAdvancedStats() {
@@ -1060,10 +1343,22 @@ export async function getAdvancedStats() {
   
   const averageLoanAmount = avgAmountResult[0]?.avg ? Number(avgAmountResult[0].avg) : 0;
   
-  // Calculate approval rate
   const totalApps = Number(apps[0]?.count || 0);
   const approvedApps = Number(approved[0]?.count || 0);
   const approvalRate = totalApps > 0 ? (approvedApps / totalApps) * 100 : 0;
+  
+  // Calculate average processing time from approved applications
+  let avgProcessingTime = 0;
+  try {
+    const processingTimeResult = await db.select({
+      avgHours: sql<number>`AVG(EXTRACT(EPOCH FROM (${loanApplications.updatedAt} - ${loanApplications.createdAt})) / 3600)`
+    })
+      .from(loanApplications)
+      .where(eq(loanApplications.status, "approved"));
+    avgProcessingTime = Math.round(processingTimeResult[0]?.avgHours || 24);
+  } catch {
+    avgProcessingTime = 24;
+  }
   
   return {
     totalAdmins: Number(admins[0]?.count || 0),
@@ -1075,7 +1370,7 @@ export async function getAdvancedStats() {
     totalApprovedAmount,
     averageLoanAmount,
     approvalRate: Math.round(approvalRate * 100) / 100,
-    avgProcessingTime: 24, // Placeholder - would need timestamps to calculate
+    avgProcessingTime,
   };
 }
 
@@ -1187,7 +1482,7 @@ export async function getUserBankInfo(userId: number) {
       bankAccountType: user[0].bankAccountType,
     };
   } catch (error) {
-    console.error('Failed to decrypt bank data:', error);
+    logger.error('Failed to decrypt bank data:', error);
     return null;
   }
 }
@@ -1456,6 +1751,30 @@ export async function storeIdempotencyResult(
   });
 }
 
+/**
+ * Cross-process Stripe webhook dedup. Returns true if this is the first time
+ * we've seen the event (caller should run side effects); false if it's a
+ * duplicate delivery. Uses INSERT ... ON CONFLICT DO NOTHING so concurrent
+ * replicas race safely on the same event.id primary key.
+ */
+export async function tryRecordStripeWebhookEvent(
+  eventId: string,
+  type: string,
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) {
+    // No DB — fall through to in-process dedup only.
+    return true;
+  }
+  const { stripeWebhookEvents } = await import("../drizzle/schema");
+  const inserted = await db
+    .insert(stripeWebhookEvents)
+    .values({ eventId, type })
+    .onConflictDoNothing({ target: stripeWebhookEvents.eventId })
+    .returning({ eventId: stripeWebhookEvents.eventId });
+  return inserted.length > 0;
+}
+
 // ============================================
 // Payment Audit Trail Queries
 // ============================================
@@ -1669,11 +1988,14 @@ export async function getUserBankAccounts(userId: number) {
   return db.select().from(bankAccounts).where(eq(bankAccounts.userId, userId));
 }
 
-export async function removeBankAccount(accountId: number) {
+export async function removeBankAccount(accountId: number, userId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
   const { bankAccounts } = await import("../drizzle/schema");
+  if (userId) {
+    return db.delete(bankAccounts).where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.userId, userId)));
+  }
   return db.delete(bankAccounts).where(eq(bankAccounts.id, accountId));
 }
 
@@ -1703,11 +2025,14 @@ export async function updateAddress(addressId: number, data: any) {
   return db.update(userAddresses).set(data).where(eq(userAddresses.id, addressId));
 }
 
-export async function deleteAddress(addressId: number) {
+export async function deleteAddress(addressId: number, userId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
   const { userAddresses } = await import("../drizzle/schema");
+  if (userId) {
+    return db.delete(userAddresses).where(and(eq(userAddresses.id, addressId), eq(userAddresses.userId, userId)));
+  }
   return db.delete(userAddresses).where(eq(userAddresses.id, addressId));
 }
 
@@ -1715,25 +2040,25 @@ export async function deleteAddress(addressId: number) {
 // PHASE 3: KYC/IDENTITY VERIFICATION
 // ============================================
 
-export async function getKycVerification(userId: number) {
+export async function getKycVerification(userId: number): Promise<KycVerification | null> {
   const db = await getDb();
   if (!db) return null;
   
-  const { kycVerification } = await import("../drizzle/schema");
   const result = await db.select().from(kycVerification).where(eq(kycVerification.userId, userId)).limit(1);
   return result.length > 0 ? result[0] : null;
 }
 
-export async function updateKycVerification(userId: number, data: any) {
+export async function updateKycVerification(
+  userId: number,
+  data: Partial<Omit<InsertKycVerification, 'userId'>>
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
-  const { kycVerification } = await import("../drizzle/schema");
   
   const existing = await getKycVerification(userId);
   
   if (existing) {
-    return db.update(kycVerification).set(data).where(eq(kycVerification.userId, userId));
+    return db.update(kycVerification).set({ ...data, updatedAt: new Date() }).where(eq(kycVerification.userId, userId));
   }
   
   return db.insert(kycVerification).values({
@@ -1742,20 +2067,56 @@ export async function updateKycVerification(userId: number, data: any) {
   });
 }
 
-export async function uploadDocument(data: any) {
+export async function uploadDocument(data: InsertUploadedDocument) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const { uploadedDocuments } = await import("../drizzle/schema");
   return db.insert(uploadedDocuments).values(data);
 }
 
-export async function getUserDocuments(userId: number) {
+export async function getUserDocuments(userId: number): Promise<UploadedDocument[]> {
   const db = await getDb();
   if (!db) return [];
   
-  const { uploadedDocuments } = await import("../drizzle/schema");
   return db.select().from(uploadedDocuments).where(eq(uploadedDocuments.userId, userId)).orderBy(desc(uploadedDocuments.createdAt));
+}
+
+/**
+ * Get all KYC verifications that are expiring within the given number of days.
+ */
+export async function getExpiringKycVerifications(withinDays: number): Promise<KycVerification[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const now = new Date();
+  const futureDate = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
+
+  return db.select().from(kycVerification)
+    .where(
+      and(
+        eq(kycVerification.status, 'approved'),
+        gt(kycVerification.expiresAt, now),
+        sql`${kycVerification.expiresAt} <= ${futureDate}`
+      )
+    );
+}
+
+/**
+ * Get all KYC verifications that have expired (expiresAt < now and still marked approved).
+ */
+export async function getExpiredKycVerifications(): Promise<KycVerification[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const now = new Date();
+
+  return db.select().from(kycVerification)
+    .where(
+      and(
+        eq(kycVerification.status, 'approved'),
+        sql`${kycVerification.expiresAt} IS NOT NULL AND ${kycVerification.expiresAt} <= ${now}`
+      )
+    );
 }
 
 // ============================================
@@ -1852,23 +2213,6 @@ export async function updateAutopaySettings(loanApplicationId: number, data: any
 // ============================================
 // PHASE 7: DELINQUENCY & COLLECTIONS
 // ============================================
-
-export async function createDelinquencyRecord(data: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  const { delinquencyRecords } = await import("../drizzle/schema");
-  
-  const existing = await db.select().from(delinquencyRecords)
-    .where(eq(delinquencyRecords.loanApplicationId, data.loanApplicationId)).limit(1);
-  
-  if (existing.length > 0) {
-    return db.update(delinquencyRecords).set(data)
-      .where(eq(delinquencyRecords.loanApplicationId, data.loanApplicationId));
-  }
-  
-  return db.insert(delinquencyRecords).values(data);
-}
 
 export async function getDelinquencyRecord(loanApplicationId: number) {
   const db = await getDb();
@@ -2141,6 +2485,56 @@ export async function updateRewardsBalance(userId: number, creditAmount: number,
 // ============================================
 
 /**
+ * Get payments coming due within N days
+ */
+export async function getUpcomingPayments(daysAhead: number = 7) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { paymentSchedules, loanApplications, users } = await import("../drizzle/schema");
+  
+  try {
+    const today = new Date();
+    const futureDate = new Date();
+    futureDate.setDate(today.getDate() + daysAhead);
+    
+    const todayStr = today.toISOString().split('T')[0];
+    const futureStr = futureDate.toISOString().split('T')[0];
+    
+    const result = await db.select({
+      id: paymentSchedules.id,
+      loanApplicationId: paymentSchedules.loanApplicationId,
+      installmentNumber: paymentSchedules.installmentNumber,
+      dueDate: paymentSchedules.dueDate,
+      amount: paymentSchedules.dueAmount,
+      status: paymentSchedules.status,
+      userId: users.id,
+      email: users.email,
+      firstName: users.firstName,
+      phoneNumber: users.phoneNumber,
+      loanNumber: loanApplications.trackingNumber,
+    })
+      .from(paymentSchedules)
+      .innerJoin(loanApplications, eq(paymentSchedules.loanApplicationId, loanApplications.id))
+      .innerJoin(users, eq(loanApplications.userId, users.id))
+      .where(
+        and(
+          or(
+            eq(paymentSchedules.status, "pending"),
+            eq(paymentSchedules.status, "not_paid")
+          ),
+          sql`DATE(${paymentSchedules.dueDate}) BETWEEN ${todayStr} AND ${futureStr}`
+        )
+      );
+    
+    return result;
+  } catch (error) {
+    logger.error("[db.getUpcomingPayments] Error:", error);
+    return [];
+  }
+}
+
+/**
  * Get payments due in N days (e.g., 7 days)
  * Used for payment reminder notifications
  */
@@ -2185,17 +2579,17 @@ export async function getPaymentsDueReminder(daysFromNow: number = 7) {
             eq(paymentSchedules.status, "late")
           ),
           and(
-            sql`DATE(${paymentSchedules.dueDate}) >= ${sql.raw(`'${targetDateStr}'`)}`
+            sql`DATE(${paymentSchedules.dueDate}) >= ${targetDateStr}`
           ),
           and(
-            sql`DATE(${paymentSchedules.dueDate}) < ${sql.raw(`'${nextDayStr}'`)}`
+            sql`DATE(${paymentSchedules.dueDate}) < ${nextDayStr}`
           )
         )
       );
     
     return result;
   } catch (error) {
-    console.error("[db.getPaymentsDueReminder] Error:", error);
+    logger.error("[db.getPaymentsDueReminder] Error:", error);
     return [];
   }
 }
@@ -2222,7 +2616,7 @@ export async function getOverduePayments(minDays: number = 1, maxDays: number = 
       principalAmount: paymentSchedules.principalAmount,
       interestAmount: paymentSchedules.interestAmount,
       status: paymentSchedules.status,
-      daysOverdue: sql<number>`EXTRACT(DAY FROM (CAST(${sql.raw(`'${today}'`)} AS date) - CAST(${paymentSchedules.dueDate} AS date)))`,
+      daysOverdue: sql<number>`(${today}::date - ${paymentSchedules.dueDate}::date)`,
       userId: users.id,
       email: users.email,
       firstName: users.firstName,
@@ -2241,7 +2635,7 @@ export async function getOverduePayments(minDays: number = 1, maxDays: number = 
             eq(paymentSchedules.status, "not_paid"),
             eq(paymentSchedules.status, "late")
           ),
-          sql`DATE(${paymentSchedules.dueDate}) < ${sql.raw(`'${today}'::date`)}`
+          sql`${paymentSchedules.dueDate}::date < ${today}::date`
         )
       );
     
@@ -2251,7 +2645,7 @@ export async function getOverduePayments(minDays: number = 1, maxDays: number = 
       return daysOverdue >= minDays && daysOverdue <= maxDays;
     });
   } catch (error) {
-    console.error("[db.getOverduePayments] Error:", error);
+    logger.error("[db.getOverduePayments] Error:", error);
     return [];
   }
 }
@@ -2278,7 +2672,7 @@ export async function getDelinquentPayments(minDays: number = 30) {
       principalAmount: paymentSchedules.principalAmount,
       interestAmount: paymentSchedules.interestAmount,
       status: paymentSchedules.status,
-      daysOverdue: sql<number>`EXTRACT(DAY FROM (CAST(${sql.raw(`'${today}'`)} AS date) - CAST(${paymentSchedules.dueDate} AS date)))`,
+      daysOverdue: sql<number>`(${today}::date - ${paymentSchedules.dueDate}::date)`,
       userId: users.id,
       email: users.email,
       firstName: users.firstName,
@@ -2298,7 +2692,7 @@ export async function getDelinquentPayments(minDays: number = 30) {
             eq(paymentSchedules.status, "not_paid"),
             eq(paymentSchedules.status, "late")
           ),
-          sql`DATE(${paymentSchedules.dueDate}) < ${sql.raw(`'${today}'::date`)}`
+          sql`${paymentSchedules.dueDate}::date < ${today}::date`
         )
       );
     
@@ -2308,7 +2702,7 @@ export async function getDelinquentPayments(minDays: number = 30) {
       return daysOverdue >= minDays;
     });
   } catch (error) {
-    console.error("[db.getDelinquentPayments] Error:", error);
+    logger.error("[db.getDelinquentPayments] Error:", error);
     return [];
   }
 }
@@ -2333,7 +2727,7 @@ export async function markLoanAsDelinquent(loanApplicationId: number) {
     
     return true;
   } catch (error) {
-    console.error("[db.markLoanAsDelinquent] Error:", error);
+    logger.error("[db.markLoanAsDelinquent] Error:", error);
     return false;
   }
 }
@@ -2355,7 +2749,7 @@ export async function getSystemConfig() {
     const configs = await db.select().from(systemConfig).limit(1);
     return configs[0] || null;
   } catch (error) {
-    console.error("[db.getSystemConfig] Error:", error);
+    logger.error("[db.getSystemConfig] Error:", error);
     return null;
   }
 }
@@ -2403,7 +2797,7 @@ export async function updateSystemConfig(data: {
       return await getSystemConfig();
     }
   } catch (error) {
-    console.error("[db.updateSystemConfig] Error:", error);
+    logger.error("[db.updateSystemConfig] Error:", error);
     return null;
   }
 }
@@ -2455,7 +2849,7 @@ export async function saveAPIKey(data: {
       return result[0]?.id || null;
     }
   } catch (error) {
-    console.error("[db.saveAPIKey] Error:", error);
+    logger.error("[db.saveAPIKey] Error:", error);
     return null;
   }
 }
@@ -2487,7 +2881,7 @@ export async function getAPIKey(provider: string, keyName: string) {
       value: decryptedValue,
     };
   } catch (error) {
-    console.error("[db.getAPIKey] Error:", error);
+    logger.error("[db.getAPIKey] Error:", error);
     return null;
   }
 }
@@ -2522,7 +2916,7 @@ export async function getAPIKeysByProvider(provider: string) {
       };
     });
   } catch (error) {
-    console.error("[db.getAPIKeysByProvider] Error:", error);
+    logger.error("[db.getAPIKeysByProvider] Error:", error);
     return [];
   }
 }
@@ -2587,7 +2981,7 @@ export async function saveEmailConfig(data: {
       return result[0]?.id || null;
     }
   } catch (error) {
-    console.error("[db.saveEmailConfig] Error:", error);
+    logger.error("[db.saveEmailConfig] Error:", error);
     return null;
   }
 }
@@ -2621,7 +3015,7 @@ export async function getEmailConfig() {
     
     return config;
   } catch (error) {
-    console.error("[db.getEmailConfig] Error:", error);
+    logger.error("[db.getEmailConfig] Error:", error);
     return null;
   }
 }
@@ -2639,7 +3033,7 @@ export async function getNotificationSettings() {
     const settings = await db.select().from(notificationSettings).limit(1);
     return settings[0] || null;
   } catch (error) {
-    console.error("[db.getNotificationSettings] Error:", error);
+    logger.error("[db.getNotificationSettings] Error:", error);
     return null;
   }
 }
@@ -2691,7 +3085,7 @@ export async function updateNotificationSettings(data: {
       return await getNotificationSettings();
     }
   } catch (error) {
-    console.error("[db.updateNotificationSettings] Error:", error);
+    logger.error("[db.updateNotificationSettings] Error:", error);
     return null;
   }
 }
@@ -2709,7 +3103,7 @@ export async function getCryptoWalletSettings() {
     const [settings] = await db.select().from(cryptoWalletSettings).where(eq(cryptoWalletSettings.isActive, true)).limit(1);
     return settings || null;
   } catch (error) {
-    console.error("[db.getCryptoWalletSettings] Error:", error);
+    logger.error("[db.getCryptoWalletSettings] Error:", error);
     return null;
   }
 }
@@ -2751,7 +3145,75 @@ export async function updateCryptoWalletSettings(data: {
       return await getCryptoWalletSettings();
     }
   } catch (error) {
-    console.error("[db.updateCryptoWalletSettings] Error:", error);
+    logger.error("[db.updateCryptoWalletSettings] Error:", error);
+    return null;
+  }
+}
+
+/**
+ * Company Bank Settings Management (for Wire/ACH transfers)
+ */
+export async function getCompanyBankSettings() {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { companyBankSettings } = await import("../drizzle/schema");
+  
+  try {
+    const [settings] = await db.select().from(companyBankSettings).where(eq(companyBankSettings.isActive, true)).limit(1);
+    return settings || null;
+  } catch (error) {
+    logger.error("[db.getCompanyBankSettings] Error:", error);
+    return null;
+  }
+}
+
+export async function updateCompanyBankSettings(data: {
+  bankName: string;
+  accountHolderName: string;
+  routingNumber: string;
+  accountNumber: string;
+  accountType?: string;
+  swiftCode?: string;
+  bankAddress?: string;
+  instructions?: string;
+  updatedBy?: number;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { companyBankSettings } = await import("../drizzle/schema");
+  
+  try {
+    const existing = await getCompanyBankSettings();
+    
+    if (existing) {
+      await db.update(companyBankSettings)
+        .set({
+          ...data,
+          updatedAt: new Date(),
+        })
+        .where(eq(companyBankSettings.id, existing.id));
+      
+      return await getCompanyBankSettings();
+    } else {
+      await db.insert(companyBankSettings).values({
+        bankName: data.bankName,
+        accountHolderName: data.accountHolderName,
+        routingNumber: data.routingNumber,
+        accountNumber: data.accountNumber,
+        accountType: data.accountType || "checking",
+        swiftCode: data.swiftCode || null,
+        bankAddress: data.bankAddress || null,
+        instructions: data.instructions || null,
+        isActive: true,
+        updatedBy: data.updatedBy,
+      });
+      
+      return await getCompanyBankSettings();
+    }
+  } catch (error) {
+    logger.error("[db.updateCompanyBankSettings] Error:", error);
     return null;
   }
 }
@@ -3366,26 +3828,51 @@ export async function getAllDisbursedLoans() {
 }
 
 /**
- * Get user notification preferences
+ * Get user notification preferences from user_notification_settings table
+ * Returns flat boolean object matching the NotificationSettings page fields
  */
 export async function getUserNotificationPreferences(userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
 
-  const { users } = await import("../drizzle/schema");
+  const { userNotificationSettings } = await import("../drizzle/schema");
 
   const result = await db
     .select()
-    .from(users)
-    .where(eq(users.id, userId))
+    .from(userNotificationSettings)
+    .where(eq(userNotificationSettings.userId, userId))
     .limit(1);
 
-  if (!result || result.length === 0) return null;
+  if (result && result.length > 0) {
+    const s = result[0];
+    return {
+      paymentReminders: s.paymentReminders,
+      paymentConfirmations: s.paymentConfirmations,
+      loanStatusUpdates: s.loanStatusUpdates,
+      documentNotifications: s.documentNotifications,
+      promotionalNotifications: s.promotionalNotifications,
+      emailEnabled: s.emailEnabled,
+      smsEnabled: s.smsEnabled,
+      emailDigest: s.emailDigest,
+    };
+  }
 
-  // For now, return a default object. Later we can add a preferences table
+  // Create default row and return defaults
+  try {
+    await db.insert(userNotificationSettings).values({ userId } as any);
+  } catch {
+    // Row may already exist from race condition — ignore
+  }
+
   return {
-    disablePaymentReminders: false,
-    disableEmailNotifications: false,
+    paymentReminders: true,
+    paymentConfirmations: true,
+    loanStatusUpdates: true,
+    documentNotifications: true,
+    promotionalNotifications: false,
+    emailEnabled: true,
+    smsEnabled: false,
+    emailDigest: false,
   };
 }
 
@@ -3408,7 +3895,7 @@ export async function logPaymentReminder(loanId: number, daysUntilDue: number) {
 
     return { success: true };
   } catch (error) {
-    console.error("Error logging payment reminder:", error);
+    logger.error("Error logging payment reminder:", error);
     return { success: false };
   }
 }
@@ -3500,7 +3987,7 @@ export async function logAutoPayFailure(loanId: number, reason: string) {
 
     return { success: true };
   } catch (error) {
-    console.error("Error logging auto-pay failure:", error);
+    logger.error("Error logging auto-pay failure:", error);
     return { success: false };
   }
 }
@@ -3529,7 +4016,7 @@ export async function createAuditLog(data: {
     const result = await db.insert(auditLog).values(data).returning();
     return result[0];
   } catch (error) {
-    console.error("Error creating audit log:", error);
+    logger.error("Error creating audit log:", error);
     throw error;
   }
 }
@@ -3574,7 +4061,7 @@ export async function getAuditLogs(filters?: {
 
     return await query;
   } catch (error) {
-    console.error("Error fetching audit logs:", error);
+    logger.error("Error fetching audit logs:", error);
     throw error;
   }
 }
@@ -3612,7 +4099,7 @@ export async function addLoanDocument(data: {
 
     return result[0];
   } catch (error) {
-    console.error("Error adding loan document:", error);
+    logger.error("Error adding loan document:", error);
     throw error;
   }
 }
@@ -3629,7 +4116,7 @@ export async function getLoanDocuments(loanApplicationId: number) {
       .where(eq(loanDocuments.loanApplicationId, loanApplicationId))
       .orderBy(desc(loanDocuments.uploadedAt));
   } catch (error) {
-    console.error("Error fetching loan documents:", error);
+    logger.error("Error fetching loan documents:", error);
     throw error;
   }
 }
@@ -3648,7 +4135,7 @@ export async function getLoanDocument(documentId: number) {
 
     return results[0] || null;
   } catch (error) {
-    console.error("Error fetching loan document:", error);
+    logger.error("Error fetching loan document:", error);
     throw error;
   }
 }
@@ -3677,9 +4164,2126 @@ export async function updateDocumentStatus(
 
     return result[0];
   } catch (error) {
-    console.error("Error updating document status:", error);
+    logger.error("Error updating document status:", error);
     throw error;
   }
 }
 
+// ============================================
+// ENHANCED FEATURES - DATABASE FUNCTIONS
+// ============================================
 
+// ========== Hardship Programs ==========
+
+export async function createHardshipRequest(data: {
+  loanApplicationId: number;
+  userId: number;
+  programType: string;
+  reason: string;
+  monthlyIncomeChange?: number;
+  proposedPaymentAmount?: number;
+  requestedDuration?: number;
+  supportingDocuments?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { hardshipRequests } = await import("../drizzle/schema");
+
+  const result = await db.insert(hardshipRequests).values({
+    loanApplicationId: data.loanApplicationId,
+    userId: data.userId,
+    programType: data.programType as any,
+    reason: data.reason,
+    monthlyIncomeChange: data.monthlyIncomeChange,
+    proposedPaymentAmount: data.proposedPaymentAmount,
+    requestedDuration: data.requestedDuration,
+    supportingDocuments: data.supportingDocuments,
+    status: "pending",
+  }).returning();
+
+  return result[0];
+}
+
+export async function getUserHardshipRequests(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { hardshipRequests, loanApplications } = await import("../drizzle/schema");
+
+  return await db
+    .select({
+      id: hardshipRequests.id,
+      loanApplicationId: hardshipRequests.loanApplicationId,
+      trackingNumber: loanApplications.trackingNumber,
+      programType: hardshipRequests.programType,
+      reason: hardshipRequests.reason,
+      status: hardshipRequests.status,
+      requestedDuration: hardshipRequests.requestedDuration,
+      approvedDuration: hardshipRequests.approvedDuration,
+      approvedPaymentAmount: hardshipRequests.approvedPaymentAmount,
+      startDate: hardshipRequests.startDate,
+      endDate: hardshipRequests.endDate,
+      createdAt: hardshipRequests.createdAt,
+    })
+    .from(hardshipRequests)
+    .leftJoin(loanApplications, eq(hardshipRequests.loanApplicationId, loanApplications.id))
+    .where(eq(hardshipRequests.userId, userId))
+    .orderBy(desc(hardshipRequests.createdAt));
+}
+
+export async function getAllHardshipRequests(status?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const { hardshipRequests, loanApplications, users } = await import("../drizzle/schema");
+
+  let query = db
+    .select({
+      id: hardshipRequests.id,
+      loanApplicationId: hardshipRequests.loanApplicationId,
+      trackingNumber: loanApplications.trackingNumber,
+      userId: hardshipRequests.userId,
+      userName: users.name,
+      userEmail: users.email,
+      programType: hardshipRequests.programType,
+      reason: hardshipRequests.reason,
+      status: hardshipRequests.status,
+      requestedDuration: hardshipRequests.requestedDuration,
+      proposedPaymentAmount: hardshipRequests.proposedPaymentAmount,
+      monthlyIncomeChange: hardshipRequests.monthlyIncomeChange,
+      createdAt: hardshipRequests.createdAt,
+    })
+    .from(hardshipRequests)
+    .leftJoin(loanApplications, eq(hardshipRequests.loanApplicationId, loanApplications.id))
+    .leftJoin(users, eq(hardshipRequests.userId, users.id))
+    .$dynamic();
+
+  if (status) {
+    query = query.where(eq(hardshipRequests.status, status));
+  }
+
+  return await query.orderBy(desc(hardshipRequests.createdAt));
+}
+
+export async function updateHardshipRequest(
+  id: number,
+  data: {
+    status?: string;
+    approvedDuration?: number;
+    approvedPaymentAmount?: number;
+    startDate?: Date;
+    endDate?: Date;
+    adminNotes?: string;
+    reviewedBy?: number;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { hardshipRequests } = await import("../drizzle/schema");
+
+  const result = await db
+    .update(hardshipRequests)
+    .set({
+      ...data,
+      reviewedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(hardshipRequests.id, id))
+    .returning();
+
+  return result[0];
+}
+
+// ========== Tax Documents ==========
+
+export async function createTaxDocument(data: {
+  userId: number;
+  loanApplicationId?: number;
+  documentType: string;
+  taxYear: number;
+  totalInterestPaid?: number;
+  totalPrincipalPaid?: number;
+  debtCancelled?: number;
+  documentPath?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { taxDocuments } = await import("../drizzle/schema");
+
+  const result = await db.insert(taxDocuments).values({
+    userId: data.userId,
+    loanApplicationId: data.loanApplicationId,
+    documentType: data.documentType as any,
+    taxYear: data.taxYear,
+    totalInterestPaid: data.totalInterestPaid,
+    totalPrincipalPaid: data.totalPrincipalPaid,
+    debtCancelled: data.debtCancelled,
+    documentPath: data.documentPath,
+  }).returning();
+
+  return result[0];
+}
+
+export async function getUserTaxDocuments(userId: number, taxYear?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { taxDocuments } = await import("../drizzle/schema");
+
+  let query = db
+    .select()
+    .from(taxDocuments)
+    .where(eq(taxDocuments.userId, userId))
+    .$dynamic();
+
+  if (taxYear) {
+    query = query.where(eq(taxDocuments.taxYear, taxYear));
+  }
+
+  return await query.orderBy(desc(taxDocuments.taxYear));
+}
+
+export async function markTaxDocumentSent(documentId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { taxDocuments } = await import("../drizzle/schema");
+
+  await db
+    .update(taxDocuments)
+    .set({ sentToUser: true, sentAt: new Date() })
+    .where(eq(taxDocuments.id, documentId));
+}
+
+// ========== Push Notifications ==========
+
+export async function createPushSubscription(data: {
+  userId: number;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  userAgent?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { pushSubscriptions } = await import("../drizzle/schema");
+
+  const result = await db.insert(pushSubscriptions).values(data).returning();
+  return result[0];
+}
+
+export async function getUserPushSubscriptions(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { pushSubscriptions } = await import("../drizzle/schema");
+
+  return await db
+    .select()
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.userId, userId));
+}
+
+export async function deletePushSubscription(endpoint: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { pushSubscriptions } = await import("../drizzle/schema");
+
+  await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+}
+
+export async function deleteAllUserPushSubscriptions(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { pushSubscriptions } = await import("../drizzle/schema");
+
+  await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+}
+
+export async function updatePushSubscriptionLastUsed(endpoint: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { pushSubscriptions } = await import("../drizzle/schema");
+
+  await db
+    .update(pushSubscriptions)
+    .set({ lastUsed: new Date() })
+    .where(eq(pushSubscriptions.endpoint, endpoint));
+}
+
+// ========== Co-Signers ==========
+
+export async function createCoSignerInvitation(data: {
+  loanApplicationId: number;
+  primaryBorrowerId: number;
+  coSignerEmail: string;
+  coSignerName?: string;
+  liabilitySplit?: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { coSigners } = await import("../drizzle/schema");
+  const crypto = await import("crypto");
+
+  const invitationToken = crypto.randomBytes(32).toString("hex");
+
+  const result = await db.insert(coSigners).values({
+    loanApplicationId: data.loanApplicationId,
+    primaryBorrowerId: data.primaryBorrowerId,
+    coSignerEmail: data.coSignerEmail,
+    coSignerName: data.coSignerName,
+    invitationToken,
+    liabilitySplit: data.liabilitySplit || 50,
+    status: "invited",
+  }).returning();
+
+  return result[0];
+}
+
+export async function getCoSignerByToken(token: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const { coSigners } = await import("../drizzle/schema");
+
+  const results = await db
+    .select()
+    .from(coSigners)
+    .where(eq(coSigners.invitationToken, token))
+    .limit(1);
+
+  return results[0] || null;
+}
+
+export async function updateCoSignerStatus(
+  id: number,
+  status: string,
+  coSignerUserId?: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { coSigners } = await import("../drizzle/schema");
+
+  const result = await db
+    .update(coSigners)
+    .set({
+      status: status as any,
+      coSignerUserId,
+      respondedAt: new Date(),
+    })
+    .where(eq(coSigners.id, id))
+    .returning();
+
+  return result[0];
+}
+
+export async function getLoanCoSigners(loanApplicationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { coSigners } = await import("../drizzle/schema");
+
+  return await db
+    .select()
+    .from(coSigners)
+    .where(eq(coSigners.loanApplicationId, loanApplicationId));
+}
+
+// ========== Account Closure ==========
+
+export async function createAccountClosureRequest(data: {
+  userId: number;
+  reason: string;
+  detailedReason?: string;
+  hasOutstandingLoans: boolean;
+  dataExportRequested: boolean;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { accountClosureRequests } = await import("../drizzle/schema");
+
+  const result = await db.insert(accountClosureRequests).values({
+    userId: data.userId,
+    reason: data.reason as any,
+    detailedReason: data.detailedReason,
+    hasOutstandingLoans: data.hasOutstandingLoans,
+    dataExportRequested: data.dataExportRequested,
+    status: "pending",
+  }).returning();
+
+  return result[0];
+}
+
+export async function getUserAccountClosureRequest(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { accountClosureRequests } = await import("../drizzle/schema");
+
+  const results = await db
+    .select()
+    .from(accountClosureRequests)
+    .where(eq(accountClosureRequests.userId, userId))
+    .orderBy(desc(accountClosureRequests.createdAt))
+    .limit(1);
+
+  return results[0] || null;
+}
+
+export async function getAllAccountClosureRequests(status?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const { accountClosureRequests, users } = await import("../drizzle/schema");
+
+  let query = db
+    .select({
+      id: accountClosureRequests.id,
+      userId: accountClosureRequests.userId,
+      userName: users.name,
+      userEmail: users.email,
+      reason: accountClosureRequests.reason,
+      detailedReason: accountClosureRequests.detailedReason,
+      hasOutstandingLoans: accountClosureRequests.hasOutstandingLoans,
+      dataExportRequested: accountClosureRequests.dataExportRequested,
+      status: accountClosureRequests.status,
+      createdAt: accountClosureRequests.createdAt,
+    })
+    .from(accountClosureRequests)
+    .leftJoin(users, eq(accountClosureRequests.userId, users.id))
+    .$dynamic();
+
+  if (status) {
+    query = query.where(eq(accountClosureRequests.status, status));
+  }
+
+  return await query.orderBy(desc(accountClosureRequests.createdAt));
+}
+
+export async function updateAccountClosureRequest(
+  id: number,
+  data: {
+    status?: string;
+    reviewedBy?: number;
+    adminNotes?: string;
+    scheduledDeletionDate?: Date;
+    dataExportedAt?: Date;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { accountClosureRequests } = await import("../drizzle/schema");
+
+  const result = await db
+    .update(accountClosureRequests)
+    .set({
+      ...data,
+      reviewedAt: new Date(),
+    })
+    .where(eq(accountClosureRequests.id, id))
+    .returning();
+
+  return result[0];
+}
+
+// ========== Payment Preferences ==========
+
+type AllocationStrategy = "standard" | "principal_first" | "future_payments" | "biweekly" | "round_up";
+
+export async function createOrUpdatePaymentPreference(data: {
+  userId: number;
+  loanApplicationId?: number;
+  allocationStrategy?: AllocationStrategy;
+  roundUpEnabled?: boolean;
+  roundUpToNearest?: number;
+  biweeklyEnabled?: boolean;
+  autoExtraPaymentAmount?: number;
+  autoExtraPaymentDay?: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { paymentPreferences } = await import("../drizzle/schema");
+
+  // Check if preference exists
+  const existing = await db
+    .select()
+    .from(paymentPreferences)
+    .where(eq(paymentPreferences.userId, data.userId))
+    .limit(1);
+
+  if (existing.length > 0) {
+    // Update
+    const result = await db
+      .update(paymentPreferences)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(paymentPreferences.userId, data.userId))
+      .returning();
+    return result[0];
+  } else {
+    // Insert
+    const result = await db.insert(paymentPreferences).values(data).returning();
+    return result[0];
+  }
+}
+
+export async function getUserPaymentPreference(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { paymentPreferences } = await import("../drizzle/schema");
+
+  const results = await db
+    .select()
+    .from(paymentPreferences)
+    .where(eq(paymentPreferences.userId, userId))
+    .limit(1);
+
+  return results[0] || null;
+}
+
+// ========== Fraud Detection ==========
+
+export async function createFraudCheck(data: {
+  userId?: number;
+  loanApplicationId?: number;
+  sessionId?: string;
+  deviceFingerprint?: string;
+  ipAddress: string;
+  ipCountry?: string;
+  ipCity?: string;
+  ipRiskScore?: number;
+  velocityScore?: number;
+  riskScore: number;
+  riskLevel: string;
+  flaggedReasons?: string;
+  requiresManualReview?: boolean;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { fraudChecks } = await import("../drizzle/schema");
+
+  const result = await db.insert(fraudChecks).values(data).returning();
+  return result[0];
+}
+
+export async function getFraudChecksByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { fraudChecks } = await import("../drizzle/schema");
+
+  return await db
+    .select()
+    .from(fraudChecks)
+    .where(eq(fraudChecks.userId, userId))
+    .orderBy(desc(fraudChecks.createdAt));
+}
+
+export async function getPendingFraudReviews() {
+  const db = await getDb();
+  if (!db) return [];
+  const { fraudChecks } = await import("../drizzle/schema");
+
+  return await db
+    .select()
+    .from(fraudChecks)
+    .where(eq(fraudChecks.requiresManualReview, true))
+    .orderBy(desc(fraudChecks.createdAt));
+}
+
+export async function updateFraudCheckReview(
+  id: number,
+  reviewedBy: number,
+  reviewNotes: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { fraudChecks } = await import("../drizzle/schema");
+
+  await db
+    .update(fraudChecks)
+    .set({
+      reviewedBy,
+      reviewedAt: new Date(),
+      reviewNotes,
+    })
+    .where(eq(fraudChecks.id, id));
+}
+
+// ========== Live Chat ==========
+
+export async function createChatSession(userId: number, subject?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { chatSessions } = await import("../drizzle/schema");
+
+  const result = await db.insert(chatSessions).values({
+    userId,
+    subject,
+    status: "active",
+  }).returning();
+
+  return result[0];
+}
+
+export async function getChatSession(sessionId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { chatSessions } = await import("../drizzle/schema");
+
+  const results = await db
+    .select()
+    .from(chatSessions)
+    .where(eq(chatSessions.id, sessionId))
+    .limit(1);
+
+  return results[0] || null;
+}
+
+export async function getUserActiveChatSession(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { chatSessions } = await import("../drizzle/schema");
+
+  const results = await db
+    .select()
+    .from(chatSessions)
+    .where(and(
+      eq(chatSessions.userId, userId),
+      eq(chatSessions.status, "active")
+    ))
+    .orderBy(desc(chatSessions.startedAt))
+    .limit(1);
+
+  return results[0] || null;
+}
+
+export async function assignChatToAgent(sessionId: number, agentId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { chatSessions } = await import("../drizzle/schema");
+
+  await db
+    .update(chatSessions)
+    .set({ assignedToAgentId: agentId })
+    .where(eq(chatSessions.id, sessionId));
+}
+
+export async function closeChatSession(
+  sessionId: number,
+  rating?: number,
+  feedbackComment?: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { chatSessions } = await import("../drizzle/schema");
+
+  await db
+    .update(chatSessions)
+    .set({
+      status: "closed",
+      closedAt: new Date(),
+      rating,
+      feedbackComment,
+    })
+    .where(eq(chatSessions.id, sessionId));
+}
+
+export async function createChatMessage(data: {
+  sessionId: number;
+  senderId: number;
+  message: string;
+  isFromAgent: boolean;
+  attachmentUrl?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { chatMessages } = await import("../drizzle/schema");
+
+  const result = await db.insert(chatMessages).values(data).returning();
+  return result[0];
+}
+
+export async function getChatMessages(sessionId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { chatMessages, users } = await import("../drizzle/schema");
+
+  return await db
+    .select({
+      id: chatMessages.id,
+      sessionId: chatMessages.sessionId,
+      senderId: chatMessages.senderId,
+      senderName: users.name,
+      message: chatMessages.message,
+      isFromAgent: chatMessages.isFromAgent,
+      status: chatMessages.status,
+      attachmentUrl: chatMessages.attachmentUrl,
+      createdAt: chatMessages.createdAt,
+      readAt: chatMessages.readAt,
+    })
+    .from(chatMessages)
+    .leftJoin(users, eq(chatMessages.senderId, users.id))
+    .where(eq(chatMessages.sessionId, sessionId))
+    .orderBy(chatMessages.createdAt);
+}
+
+export async function markChatMessageAsRead(messageId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { chatMessages } = await import("../drizzle/schema");
+
+  await db
+    .update(chatMessages)
+    .set({ status: "read", readAt: new Date() })
+    .where(eq(chatMessages.id, messageId));
+}
+
+export async function getActiveChatSessions() {
+  const db = await getDb();
+  if (!db) return [];
+  const { chatSessions, users } = await import("../drizzle/schema");
+
+  return await db
+    .select({
+      id: chatSessions.id,
+      userId: chatSessions.userId,
+      userName: users.name,
+      userEmail: users.email,
+      assignedToAgentId: chatSessions.assignedToAgentId,
+      subject: chatSessions.subject,
+      startedAt: chatSessions.startedAt,
+    })
+    .from(chatSessions)
+    .leftJoin(users, eq(chatSessions.userId, users.id))
+    .where(eq(chatSessions.status, "active"))
+    .orderBy(desc(chatSessions.startedAt));
+}
+
+// ========== Canned Responses ==========
+
+export async function createCannedResponse(data: {
+  category: string;
+  shortcut: string;
+  title: string;
+  message: string;
+  createdBy: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { cannedResponses } = await import("../drizzle/schema");
+
+  const result = await db.insert(cannedResponses).values(data).returning();
+  return result[0];
+}
+
+export async function getAllCannedResponses(category?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const { cannedResponses } = await import("../drizzle/schema");
+
+  let query = db
+    .select()
+    .from(cannedResponses)
+    .where(eq(cannedResponses.isActive, true))
+    .$dynamic();
+
+  if (category) {
+    query = query.where(eq(cannedResponses.category, category));
+  }
+
+  return await query.orderBy(cannedResponses.category, cannedResponses.title);
+}
+
+export async function getCannedResponseByShortcut(shortcut: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const { cannedResponses } = await import("../drizzle/schema");
+
+  const results = await db
+    .select()
+    .from(cannedResponses)
+    .where(and(
+      eq(cannedResponses.shortcut, shortcut),
+      eq(cannedResponses.isActive, true)
+    ))
+    .limit(1);
+
+  return results[0] || null;
+}
+
+// ========== E-Signatures ==========
+
+export async function createESignatureDocument(data: {
+  loanApplicationId: number;
+  userId: number;
+  documentType: string;
+  documentTitle: string;
+  documentPath: string;
+  signerEmail: string;
+  signerName: string;
+  expiresAt?: Date;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { eSignatureDocuments } = await import("../drizzle/schema");
+
+  const result = await db.insert(eSignatureDocuments).values({
+    ...data,
+    status: "pending",
+  }).returning();
+
+  return result[0];
+}
+
+export async function getESignatureDocument(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { eSignatureDocuments } = await import("../drizzle/schema");
+
+  const results = await db
+    .select()
+    .from(eSignatureDocuments)
+    .where(eq(eSignatureDocuments.id, id))
+    .limit(1);
+
+  return results[0] || null;
+}
+
+export async function updateESignatureStatus(
+  id: number,
+  status: string,
+  signedDocumentPath?: string,
+  ipAddress?: string,
+  auditTrail?: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { eSignatureDocuments } = await import("../drizzle/schema");
+
+  const updateData: any = {
+    status: status as any,
+  };
+
+  if (status === "signed") {
+    updateData.signedAt = new Date();
+    updateData.signedDocumentPath = signedDocumentPath;
+    updateData.ipAddress = ipAddress;
+    updateData.auditTrail = auditTrail;
+  }
+
+  await db
+    .update(eSignatureDocuments)
+    .set(updateData)
+    .where(eq(eSignatureDocuments.id, id));
+}
+
+export async function getLoanESignatureDocuments(loanApplicationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { eSignatureDocuments } = await import("../drizzle/schema");
+
+  return await db
+    .select()
+    .from(eSignatureDocuments)
+    .where(eq(eSignatureDocuments.loanApplicationId, loanApplicationId))
+    .orderBy(desc(eSignatureDocuments.createdAt));
+}
+
+// ========== Marketing & Attribution ==========
+
+export async function createMarketingCampaign(data: {
+  campaignName: string;
+  source?: string;
+  medium?: string;
+  campaignCode?: string;
+  startDate?: Date;
+  endDate?: Date;
+  budget?: number;
+  createdBy: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { marketingCampaigns } = await import("../drizzle/schema");
+
+  const result = await db.insert(marketingCampaigns).values(data).returning();
+  return result[0];
+}
+
+export async function createUserAttribution(data: {
+  userId: number;
+  campaignId?: number;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmTerm?: string;
+  utmContent?: string;
+  referrerUrl?: string;
+  landingPage?: string;
+  ipAddress?: string;
+  userAgent?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { userAttribution } = await import("../drizzle/schema");
+
+  const result = await db.insert(userAttribution).values(data).returning();
+  return result[0];
+}
+
+export async function getUserAttribution(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { userAttribution } = await import("../drizzle/schema");
+
+  const results = await db
+    .select()
+    .from(userAttribution)
+    .where(eq(userAttribution.userId, userId))
+    .limit(1);
+
+  return results[0] || null;
+}
+
+export async function getCampaignPerformance(campaignId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { userAttribution, users, loanApplications } = await import("../drizzle/schema");
+
+  const attributions = await db
+    .select({
+      userId: userAttribution.userId,
+      createdAt: userAttribution.createdAt,
+    })
+    .from(userAttribution)
+    .where(eq(userAttribution.campaignId, campaignId));
+
+  const userIds = attributions.map(a => a.userId);
+  
+  if (userIds.length === 0) {
+    return {
+      totalUsers: 0,
+      totalApplications: 0,
+      totalApproved: 0,
+      conversionRate: 0,
+    };
+  }
+
+  const applications = await db
+    .select()
+    .from(loanApplications)
+    .where(inArray(loanApplications.userId, userIds));
+
+  return {
+    totalUsers: attributions.length,
+    totalApplications: applications.length,
+    totalApproved: applications.filter(a => a.status === "approved" || a.status === "disbursed").length,
+    conversionRate: applications.length / attributions.length,
+  };
+}
+
+// ========== Delinquency & Collections ==========
+
+export async function createDelinquencyRecord(data: {
+  loanApplicationId: number;
+  userId: number;
+  status: string;
+  daysDelinquent: number;
+  totalAmountDue: number;
+  lastPaymentDate?: Date;
+  nextActionDate?: Date;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { delinquencyRecords } = await import("../drizzle/schema");
+
+  const result = await db.insert(delinquencyRecords).values({
+    ...data,
+    status: data.status as any,
+  }).returning();
+
+  return result[0];
+}
+
+export async function updateDelinquencyRecord(
+  id: number,
+  data: {
+    status?: string;
+    daysDelinquent?: number;
+    totalAmountDue?: number;
+    assignedCollectorId?: number;
+    collectionAttempts?: number;
+    lastContactDate?: Date;
+    lastContactMethod?: string;
+    promiseToPayDate?: Date;
+    promiseToPayAmount?: number;
+    settlementOffered?: boolean;
+    settlementAmount?: number;
+    notes?: string;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { delinquencyRecords } = await import("../drizzle/schema");
+
+  const updateData: any = { ...data };
+  if (data.status) {
+    updateData.status = data.status as any;
+  }
+
+  const result = await db
+    .update(delinquencyRecords)
+    .set({
+      ...updateData,
+      updatedAt: new Date(),
+    })
+    .where(eq(delinquencyRecords.id, id))
+    .returning();
+
+  return result[0];
+}
+
+export async function getActiveDelinquencies() {
+  const db = await getDb();
+  if (!db) return [];
+  const { delinquencyRecords, loanApplications, users } = await import("../drizzle/schema");
+
+  return await db
+    .select({
+      id: delinquencyRecords.id,
+      loanApplicationId: delinquencyRecords.loanApplicationId,
+      trackingNumber: loanApplications.trackingNumber,
+      userId: delinquencyRecords.userId,
+      userName: users.name,
+      userEmail: users.email,
+      status: delinquencyRecords.status,
+      daysDelinquent: delinquencyRecords.daysDelinquent,
+      totalAmountDue: delinquencyRecords.totalAmountDue,
+      lastContactDate: delinquencyRecords.lastContactDate,
+      nextActionDate: delinquencyRecords.nextActionDate,
+      assignedCollectorId: delinquencyRecords.assignedCollectorId,
+    })
+    .from(delinquencyRecords)
+    .leftJoin(loanApplications, eq(delinquencyRecords.loanApplicationId, loanApplications.id))
+    .leftJoin(users, eq(delinquencyRecords.userId, users.id))
+    .orderBy(desc(delinquencyRecords.daysDelinquent));
+}
+
+export async function createCollectionAction(data: {
+  delinquencyRecordId: number;
+  actionType: string;
+  performedBy?: number;
+  outcome?: string;
+  notes?: string;
+  nextActionDate?: Date;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { collectionActions } = await import("../drizzle/schema");
+
+  const result = await db.insert(collectionActions).values(data).returning();
+  return result[0];
+}
+
+export async function getCollectionActions(delinquencyRecordId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { collectionActions } = await import("../drizzle/schema");
+
+  return await db
+    .select()
+    .from(collectionActions)
+    .where(eq(collectionActions.delinquencyRecordId, delinquencyRecordId))
+    .orderBy(desc(collectionActions.actionDate));
+}
+
+// ============= Notification Preferences =============
+
+export async function getOrCreateNotificationPreferences(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { userNotificationSettings } = await import("../drizzle/schema");
+
+  // Try to get existing preferences
+  const existing = await db
+    .select()
+    .from(userNotificationSettings)
+    .where(eq(userNotificationSettings.userId, userId))
+    .limit(1);
+
+  if (existing.length > 0) {
+    return existing[0];
+  }
+
+  // Create default row with all defaults from schema
+  const row = await db
+    .insert(userNotificationSettings)
+    .values({ userId })
+    .returning();
+
+  return row[0];
+}
+
+export async function updateNotificationPreferences(
+  userId: number,
+  updates: Partial<{
+    paymentReminders: boolean;
+    paymentConfirmations: boolean;
+    loanStatusUpdates: boolean;
+    documentNotifications: boolean;
+    promotionalNotifications: boolean;
+    emailEnabled: boolean;
+    smsEnabled: boolean;
+    emailDigest: boolean;
+  }>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { userNotificationSettings } = await import("../drizzle/schema");
+
+  // Ensure a row exists for this user
+  const existing = await db
+    .select()
+    .from(userNotificationSettings)
+    .where(eq(userNotificationSettings.userId, userId))
+    .limit(1);
+
+  if (existing.length === 0) {
+    // Insert row with updates applied
+    const row = await db
+      .insert(userNotificationSettings)
+      .values({
+        userId,
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .returning();
+    return row[0];
+  }
+
+  // Update the existing row
+  const result = await db
+    .update(userNotificationSettings)
+    .set({
+      ...updates,
+      updatedAt: new Date(),
+    })
+    .where(eq(userNotificationSettings.userId, userId))
+    .returning();
+
+  return result[0];
+}
+
+// ========== Missing Router Functions ==========
+
+export async function reviewHardshipRequest(
+  requestId: number,
+  data: {
+    status: string;
+    approvedDuration?: number;
+    approvedPaymentAmount?: number;
+    startDate?: Date;
+    endDate?: Date;
+    adminNotes?: string;
+    reviewedBy: number;
+  }
+) {
+  return updateHardshipRequest(requestId, data);
+}
+
+/**
+ * Check whether a reminder of a given type was already sent recently.
+ * Returns the existing log row (with reminderCount) or null.
+ */
+export async function getRecentEmailReminder(
+  userId: number,
+  reminderType: string,
+  entityId: number | null,
+  cooldownMs: number
+): Promise<{ id: number; reminderCount: number } | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { emailReminderLog } = await import("../drizzle/schema");
+
+  const cutoff = new Date(Date.now() - cooldownMs);
+
+  let rows;
+  if (entityId != null) {
+    rows = await db
+      .select()
+      .from(emailReminderLog)
+      .where(
+        and(
+          eq(emailReminderLog.userId, userId),
+          eq(emailReminderLog.reminderType, reminderType),
+          eq(emailReminderLog.entityId, entityId),
+          gt(emailReminderLog.lastSentAt, cutoff)
+        )
+      )
+      .limit(1);
+  } else {
+    rows = await db
+      .select()
+      .from(emailReminderLog)
+      .where(
+        and(
+          eq(emailReminderLog.userId, userId),
+          eq(emailReminderLog.reminderType, reminderType),
+          gt(emailReminderLog.lastSentAt, cutoff)
+        )
+      )
+      .limit(1);
+  }
+
+  if (rows && rows.length > 0) {
+    return { id: rows[0].id, reminderCount: rows[0].reminderCount };
+  }
+  return null;
+}
+
+/**
+ * Get the total reminder count for a user+type+entity combo (lifetime, not just recent).
+ */
+export async function getEmailReminderCount(
+  userId: number,
+  reminderType: string,
+  entityId: number | null
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { emailReminderLog } = await import("../drizzle/schema");
+
+  let rows;
+  if (entityId != null) {
+    rows = await db
+      .select()
+      .from(emailReminderLog)
+      .where(
+        and(
+          eq(emailReminderLog.userId, userId),
+          eq(emailReminderLog.reminderType, reminderType),
+          eq(emailReminderLog.entityId, entityId)
+        )
+      )
+      .limit(1);
+  } else {
+    rows = await db
+      .select()
+      .from(emailReminderLog)
+      .where(
+        and(
+          eq(emailReminderLog.userId, userId),
+          eq(emailReminderLog.reminderType, reminderType)
+        )
+      )
+      .limit(1);
+  }
+
+  return rows && rows.length > 0 ? rows[0].reminderCount : 0;
+}
+
+/**
+ * Log or update a sent reminder. Upserts: inserts on first send, bumps count on subsequent.
+ */
+export async function logEmailReminder(
+  userId: number,
+  reminderType: string,
+  entityId: number | null
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { emailReminderLog } = await import("../drizzle/schema");
+
+  // Check for existing row (any age — lifetime tracking)
+  let rows;
+  if (entityId != null) {
+    rows = await db
+      .select()
+      .from(emailReminderLog)
+      .where(
+        and(
+          eq(emailReminderLog.userId, userId),
+          eq(emailReminderLog.reminderType, reminderType),
+          eq(emailReminderLog.entityId, entityId)
+        )
+      )
+      .limit(1);
+  } else {
+    rows = await db
+      .select()
+      .from(emailReminderLog)
+      .where(
+        and(
+          eq(emailReminderLog.userId, userId),
+          eq(emailReminderLog.reminderType, reminderType)
+        )
+      )
+      .limit(1);
+  }
+
+  const now = new Date();
+
+  if (rows && rows.length > 0) {
+    // Update existing row
+    await db
+      .update(emailReminderLog)
+      .set({
+        reminderCount: rows[0].reminderCount + 1,
+        lastSentAt: now,
+      })
+      .where(eq(emailReminderLog.id, rows[0].id));
+  } else {
+    // Insert new row
+    await db.insert(emailReminderLog).values({
+      userId,
+      reminderType,
+      entityId,
+      reminderCount: 1,
+      lastSentAt: now,
+    });
+  }
+}
+
+export async function generateTaxDocument(data: {
+  userId: number;
+  taxYear: number;
+  documentType: string;
+  loanApplicationId?: number;
+}) {
+  return createTaxDocument(data);
+}
+
+export async function getAllTaxDocuments(taxYear?: number, userId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { taxDocuments } = await import("../drizzle/schema");
+  const { and } = await import("drizzle-orm");
+
+  let conditions: any[] = [];
+  if (taxYear) conditions.push(eq(taxDocuments.taxYear, taxYear));
+  if (userId) conditions.push(eq(taxDocuments.userId, userId));
+
+  if (conditions.length > 0) {
+    return db.select().from(taxDocuments).where(and(...conditions));
+  }
+  return db.select().from(taxDocuments);
+}
+
+export async function updateUserNotificationPreferences(
+  userId: number,
+  updates: Partial<{
+    paymentReminders: boolean;
+    paymentConfirmations: boolean;
+    loanStatusUpdates: boolean;
+    documentNotifications: boolean;
+    promotionalNotifications: boolean;
+    emailEnabled: boolean;
+    smsEnabled: boolean;
+    emailDigest: boolean;
+  }>
+) {
+  // Delegate to the unified function that uses user_notification_settings table
+  return updateNotificationPreferences(userId, updates);
+}
+
+export async function getCoSignerInvitationsByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { coSigners } = await import("../drizzle/schema");
+  const { or } = await import("drizzle-orm");
+
+  return db.select().from(coSigners).where(
+    or(
+      eq(coSigners.primaryBorrowerId, userId),
+      eq(coSigners.coSignerUserId, userId)
+    )
+  );
+}
+
+export async function respondToCoSignerInvitation(
+  invitationToken: string,
+  accept: boolean,
+  userId: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { coSigners } = await import("../drizzle/schema");
+
+  const result = await db
+    .update(coSigners)
+    .set({
+      status: accept ? ("accepted" as any) : ("declined" as any),
+      coSignerUserId: userId,
+      respondedAt: new Date(),
+    })
+    .where(eq(coSigners.invitationToken, invitationToken))
+    .returning();
+
+  return result[0];
+}
+
+export async function cancelCoSignerInvitation(invitationId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { coSigners } = await import("../drizzle/schema");
+
+  await db.delete(coSigners).where(eq(coSigners.id, invitationId));
+}
+
+export async function releaseCoSigner(coSignerId: number, releasedBy: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { coSigners } = await import("../drizzle/schema");
+
+  const result = await db
+    .update(coSigners)
+    .set({
+      status: "released" as any,
+      releasedAt: new Date(),
+      releasedBy,
+    })
+    .where(eq(coSigners.id, coSignerId))
+    .returning();
+
+  return result[0];
+}
+
+export async function getUserClosureRequest(userId: number) {
+  return getUserAccountClosureRequest(userId);
+}
+
+export async function getAllClosureRequests(status?: string) {
+  return getAllAccountClosureRequests(status);
+}
+
+export async function reviewClosureRequest(
+  requestId: number,
+  data: {
+    status: string;
+    adminNotes?: string;
+    scheduledDeletionDate?: Date;
+    reviewedBy: number;
+  }
+) {
+  return updateAccountClosureRequest(requestId, data);
+}
+
+export async function getPaymentPreferences(userId: number, loanApplicationId?: number) {
+  return getUserPaymentPreference(userId);
+}
+
+export async function updatePaymentPreferences(userId: number, data: {
+  loanApplicationId?: number;
+  allocationStrategy?: AllocationStrategy;
+  roundUpEnabled?: boolean;
+  roundUpToNearest?: number;
+  biweeklyEnabled?: boolean;
+  autoExtraPaymentAmount?: number;
+  autoExtraPaymentDay?: number;
+}) {
+  return createOrUpdatePaymentPreference({ ...data, userId });
+}
+
+export async function getPendingFraudChecks() {
+  return getPendingFraudReviews();
+}
+
+export async function reviewFraudCheck(
+  fraudCheckId: number,
+  data: { reviewNotes: string; reviewedBy: number }
+) {
+  return updateFraudCheckReview(fraudCheckId, data.reviewedBy, data.reviewNotes);
+}
+
+export async function getLatestFraudCheck(userId: number) {
+  const checks = await getFraudChecksByUser(userId);
+  return checks.length > 0 ? checks[0] : null;
+}
+
+export async function getOrCreateChatSession(userId: number) {
+  const existing = await getUserActiveChatSession(userId);
+  if (existing) return existing;
+  return createChatSession(userId);
+}
+
+export async function assignChatSession(sessionId: number, agentId: number) {
+  return assignChatToAgent(sessionId, agentId);
+}
+
+export async function getCannedResponses() {
+  const db = await getDb();
+  if (!db) return [];
+  const { cannedResponses } = await import("../drizzle/schema");
+
+  return db.select().from(cannedResponses).where(eq(cannedResponses.isActive, true));
+}
+
+export async function getUserESignatureDocuments(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { eSignatureDocuments } = await import("../drizzle/schema");
+
+  return db.select().from(eSignatureDocuments).where(eq(eSignatureDocuments.userId, userId));
+}
+
+export async function signESignatureDocument(
+  documentId: number,
+  data: { ipAddress?: string }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { eSignatureDocuments } = await import("../drizzle/schema");
+
+  const result = await db
+    .update(eSignatureDocuments)
+    .set({
+      status: "signed" as any,
+      signedAt: new Date(),
+      ipAddress: data.ipAddress,
+    })
+    .where(eq(eSignatureDocuments.id, documentId))
+    .returning();
+
+  return result[0];
+}
+
+export async function getAllESignatureDocuments(status?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const { eSignatureDocuments } = await import("../drizzle/schema");
+
+  if (status) {
+    return db
+      .select()
+      .from(eSignatureDocuments)
+      .where(eq(eSignatureDocuments.status, status as any));
+  }
+  return db.select().from(eSignatureDocuments);
+}
+
+export async function getAllMarketingCampaigns() {
+  const db = await getDb();
+  if (!db) return [];
+  const { marketingCampaigns } = await import("../drizzle/schema");
+
+  return db.select().from(marketingCampaigns);
+}
+
+// ── Promo Code Functions ──────────────────────────────────────────────
+
+export async function createPromoCode(data: {
+  code: string;
+  campaignId?: number;
+  description?: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number;
+  maxUses?: number;
+  minLoanAmount?: number;
+  expiresAt?: Date;
+  createdBy: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { promoCodes } = await import("../drizzle/schema");
+
+  const result = await db.insert(promoCodes).values(data).returning();
+  return result[0];
+}
+
+export async function getAllPromoCodes() {
+  const db = await getDb();
+  if (!db) return [];
+  const { promoCodes } = await import("../drizzle/schema");
+
+  return db.select().from(promoCodes).orderBy(desc(promoCodes.createdAt));
+}
+
+export async function validatePromoCode(code: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const { promoCodes } = await import("../drizzle/schema");
+
+  const results = await db
+    .select()
+    .from(promoCodes)
+    .where(eq(promoCodes.code, code.toUpperCase()))
+    .limit(1);
+
+  const promo = results[0];
+  if (!promo) return null;
+  if (!promo.isActive) return null;
+  if (promo.expiresAt && promo.expiresAt < new Date()) return null;
+  if (promo.maxUses && promo.currentUses >= promo.maxUses) return null;
+
+  return promo;
+}
+
+export async function incrementPromoCodeUsage(promoCodeId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { promoCodes } = await import("../drizzle/schema");
+
+  await db
+    .update(promoCodes)
+    .set({ currentUses: sql`${promoCodes.currentUses} + 1` })
+    .where(eq(promoCodes.id, promoCodeId));
+}
+
+export async function deactivatePromoCode(promoCodeId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { promoCodes } = await import("../drizzle/schema");
+
+  const result = await db
+    .update(promoCodes)
+    .set({ isActive: false })
+    .where(eq(promoCodes.id, promoCodeId))
+    .returning();
+
+  return result[0];
+}
+
+// ── Marketing Email Functions ─────────────────────────────────────────
+
+export async function getMarketingEligibleUsers() {
+  const db = await getDb();
+  if (!db) return [];
+  const { users, userPreferences, userNotificationSettings } = await import("../drizzle/schema");
+
+  // Get users who have opted into marketing emails
+  // First, get all active users with their preferences
+  const allUsers = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+    })
+    .from(users)
+    .where(eq(users.accountStatus, "active"));
+
+  // Filter by preferences – check both userPreferences.receiveMarketingEmails
+  // and userNotificationSettings.promotionalNotifications
+  const eligibleUsers = [];
+  for (const user of allUsers) {
+    const prefs = await db
+      .select()
+      .from(userPreferences)
+      .where(eq(userPreferences.userId, user.id))
+      .limit(1);
+
+    const notifSettings = await db
+      .select()
+      .from(userNotificationSettings)
+      .where(eq(userNotificationSettings.userId, user.id))
+      .limit(1);
+
+    // Default: eligible unless explicitly opted out
+    const marketingOptIn = prefs[0]?.receiveMarketingEmails ?? true;
+    const promoOptIn = notifSettings[0]?.promotionalNotifications ?? false;
+
+    // User must have marketing emails enabled (default true)
+    // AND not have explicitly disabled promotional notifications
+    if (marketingOptIn) {
+      eligibleUsers.push(user);
+    }
+  }
+
+  return eligibleUsers;
+}
+
+export async function logMarketingEmail(data: {
+  campaignId?: number;
+  subject: string;
+  recipientCount: number;
+  sentBy: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { marketingEmailLog } = await import("../drizzle/schema");
+
+  const result = await db.insert(marketingEmailLog).values(data).returning();
+  return result[0];
+}
+
+export async function getMarketingEmailHistory() {
+  const db = await getDb();
+  if (!db) return [];
+  const { marketingEmailLog } = await import("../drizzle/schema");
+
+  return db
+    .select()
+    .from(marketingEmailLog)
+    .orderBy(desc(marketingEmailLog.sentAt));
+}
+
+export async function updateDelinquencyPromise(
+  delinquencyRecordId: number,
+  data: { promiseToPayDate: Date; promiseToPayAmount: number }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const { delinquencyRecords } = await import("../drizzle/schema");
+
+  const result = await db
+    .update(delinquencyRecords)
+    .set({
+      promiseToPayDate: data.promiseToPayDate,
+      promiseToPayAmount: data.promiseToPayAmount,
+      updatedAt: new Date(),
+    })
+    .where(eq(delinquencyRecords.id, delinquencyRecordId))
+    .returning();
+
+  return result[0];
+}
+
+// =====================
+// Comprehensive Admin User Management Functions
+// =====================
+
+export async function listAllUsersWithPagination(params: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  role?: string;
+  accountStatus?: string;
+  sortBy?: string;
+  sortOrder?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const page = params.page || 1;
+  const limit = params.limit || 20;
+  const offset = (page - 1) * limit;
+
+  const conditions: any[] = [];
+  
+  if (params.search) {
+    const searchTerm = `%${params.search.toLowerCase()}%`;
+    conditions.push(
+      or(
+        sql`LOWER(${users.name}) LIKE ${searchTerm}`,
+        sql`LOWER(${users.email}) LIKE ${searchTerm}`,
+        sql`LOWER(${users.firstName}) LIKE ${searchTerm}`,
+        sql`LOWER(${users.lastName}) LIKE ${searchTerm}`,
+        sql`LOWER(${users.phoneNumber}) LIKE ${searchTerm}`
+      )
+    );
+  }
+
+  if (params.role && params.role !== "all") {
+    conditions.push(eq(users.role, params.role as any));
+  }
+
+  if (params.accountStatus && params.accountStatus !== "all") {
+    conditions.push(eq(users.accountStatus, params.accountStatus as any));
+  }
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const countResult = await db.select({ count: sql`count(*)` }).from(users).where(whereClause);
+  const totalCount = Number(countResult[0]?.count || 0);
+
+  // Determine sort column and direction
+  const sortColumn = params.sortBy === "name" ? users.name
+    : params.sortBy === "email" ? users.email
+    : params.sortBy === "role" ? users.role
+    : params.sortBy === "lastSignedIn" ? users.lastSignedIn
+    : users.createdAt;
+  
+  const orderFn = params.sortOrder === "asc" ? asc : desc;
+
+  const results = await db.select().from(users).where(whereClause).orderBy(orderFn(sortColumn)).limit(limit).offset(offset);
+
+  return {
+    users: results,
+    totalCount,
+    page,
+    limit,
+    totalPages: Math.ceil(totalCount / limit),
+  };
+}
+
+export async function getUserFullProfile(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const user = await db.select().from(users).where(eq(users.id, userId)).then(rows => rows[0] || null);
+  if (!user) return null;
+
+  const { userSessions, loginAttempts } = await import("../drizzle/schema");
+
+  // Run all independent queries in parallel to avoid N+1 sequential roundtrips
+  const [loans, userPayments, userDisbursements, sessions, recentLogins, userDocuments, userTickets] = await Promise.all([
+    db.select().from(loanApplications).where(eq(loanApplications.userId, userId)).orderBy(desc(loanApplications.createdAt)),
+    db.select().from(payments).where(eq(payments.userId, userId)).orderBy(desc(payments.createdAt)),
+    db.select().from(disbursements).where(eq(disbursements.userId, userId)).orderBy(desc(disbursements.createdAt)),
+    db.select().from(userSessions).where(eq(userSessions.userId, userId)).orderBy(desc(userSessions.lastActivityAt)),
+    db.select().from(loginAttempts).where(eq(loginAttempts.email, user.email || "")).orderBy(desc(loginAttempts.createdAt)).limit(20),
+    db.select().from(verificationDocuments).where(eq(verificationDocuments.userId, userId)),
+    db.select().from(supportTickets).where(eq(supportTickets.userId, userId)).orderBy(desc(supportTickets.createdAt)),
+  ]);
+
+  return {
+    ...user,
+    loans,
+    payments: userPayments,
+    disbursements: userDisbursements,
+    sessions,
+    recentLogins,
+    documents: userDocuments,
+    supportTickets: userTickets,
+  };
+}
+
+export async function adminUpdateUserFull(userId: number, updates: {
+  name?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  phoneNumber?: string;
+  dateOfBirth?: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  role?: "user" | "admin";
+  accountStatus?: "active" | "suspended" | "banned" | "deactivated";
+  adminNotes?: string;
+  forcePasswordReset?: boolean;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const updateData: any = { updatedAt: new Date() };
+  
+  if (updates.name !== undefined) updateData.name = updates.name || null;
+  if (updates.email !== undefined) updateData.email = updates.email || null;
+  if (updates.firstName !== undefined) updateData.firstName = updates.firstName || null;
+  if (updates.lastName !== undefined) updateData.lastName = updates.lastName || null;
+  if (updates.phoneNumber !== undefined) updateData.phoneNumber = updates.phoneNumber || null;
+  if (updates.dateOfBirth !== undefined) updateData.dateOfBirth = updates.dateOfBirth || null;
+  if (updates.street !== undefined) updateData.street = updates.street || null;
+  if (updates.city !== undefined) updateData.city = updates.city || null;
+  if (updates.state !== undefined) updateData.state = updates.state || null;
+  if (updates.zipCode !== undefined) updateData.zipCode = updates.zipCode || null;
+  if (updates.role !== undefined) updateData.role = updates.role;
+  if (updates.accountStatus !== undefined) updateData.accountStatus = updates.accountStatus;
+  if (updates.adminNotes !== undefined) updateData.adminNotes = updates.adminNotes;
+  if (updates.forcePasswordReset !== undefined) updateData.forcePasswordReset = updates.forcePasswordReset;
+
+  await db.update(users).set(updateData).where(eq(users.id, userId));
+}
+
+export async function suspendUser(userId: number, adminId: number, reason: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(users)
+    .set({
+      accountStatus: "suspended",
+      suspendedAt: new Date(),
+      suspendedReason: reason,
+      suspendedBy: adminId,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+}
+
+export async function activateUser(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(users)
+    .set({
+      accountStatus: "active",
+      suspendedAt: null,
+      suspendedReason: null,
+      suspendedBy: null,
+      bannedAt: null,
+      bannedReason: null,
+      bannedBy: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+}
+
+export async function banUser(userId: number, adminId: number, reason: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(users)
+    .set({
+      accountStatus: "banned",
+      bannedAt: new Date(),
+      bannedReason: reason,
+      bannedBy: adminId,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+}
+
+export async function deactivateUser(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(users)
+    .set({ accountStatus: "deactivated", updatedAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
+export async function forceLogoutUser(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const { userSessions } = await import("../drizzle/schema");
+  await db.delete(userSessions).where(eq(userSessions.userId, userId));
+}
+
+export async function setForcePasswordReset(userId: number, force: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(users)
+    .set({ forcePasswordReset: force, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
+export async function adminDeleteUser(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const { userSessions } = await import("../drizzle/schema");
+  await db.delete(userSessions).where(eq(userSessions.userId, userId));
+  
+  const userTickets = await db.select({ id: supportTickets.id }).from(supportTickets).where(eq(supportTickets.userId, userId));
+  for (const ticket of userTickets) {
+    await db.delete(ticketMessages).where(eq(ticketMessages.ticketId, ticket.id));
+  }
+  await db.delete(supportTickets).where(eq(supportTickets.userId, userId));
+  await db.delete(verificationDocuments).where(eq(verificationDocuments.userId, userId));
+  await db.delete(payments).where(eq(payments.userId, userId));
+  await db.delete(disbursements).where(eq(disbursements.userId, userId));
+  await db.delete(loanApplications).where(eq(loanApplications.userId, userId));
+  await db.delete(users).where(eq(users.id, userId));
+}
+
+export async function getUserLoginHistory(userId: number, limit = 20) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const user = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).then(r => r[0]);
+  if (!user?.email) return [];
+
+  const { loginAttempts } = await import("../drizzle/schema");
+  return db.select().from(loginAttempts)
+    .where(eq(loginAttempts.email, user.email))
+    .orderBy(desc(loginAttempts.createdAt))
+    .limit(limit);
+}
+
+export async function updateAdminNotes(userId: number, notes: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(users)
+    .set({ adminNotes: notes, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
+export async function resetUserPassword(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(users)
+    .set({ passwordHash: null, forcePasswordReset: true, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
+// ============================================
+// AUTOMATION RULES
+// ============================================
+
+export async function getAutomationRules() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.select().from(automationRules).orderBy(automationRules.createdAt);
+}
+
+export async function createAutomationRule(data: {
+  name: string;
+  enabled: boolean;
+  type: string;
+  conditions: string;
+  action: string;
+  createdBy?: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [rule] = await db.insert(automationRules).values({
+    name: data.name,
+    enabled: data.enabled,
+    type: data.type,
+    conditions: data.conditions,
+    action: data.action,
+    createdBy: data.createdBy || null,
+  }).returning();
+  return rule;
+}
+
+export async function updateAutomationRule(id: number, data: Partial<{
+  name: string;
+  enabled: boolean;
+  type: string;
+  conditions: string;
+  action: string;
+}>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(automationRules)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(automationRules.id, id));
+}
+
+export async function deleteAutomationRule(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(automationRules).where(eq(automationRules.id, id));
+}
+
+// ============================================
+// DOCUMENT GENERATION HELPERS
+// ============================================
+
+export async function getLoanApplicationForDocument(loanId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [loan] = await db.select().from(loanApplications)
+    .where(eq(loanApplications.id, loanId));
+  
+  if (!loan) return null;
+  if (loan.userId !== userId) return null;
+  
+  // Get user info
+  const [user] = await db.select().from(users).where(eq(users.id, userId));
+  
+  return { loan, user };
+}
+
+// ============================================
+// Job Applications
+// ============================================
+
+export async function createJobApplication(data: {
+  fullName: string;
+  email: string;
+  phone: string;
+  position: string;
+  resumeFileName?: string;
+  resumeFileUrl?: string;
+  coverLetter: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { jobApplications } = await import("../drizzle/schema");
+
+  const [app] = await db.insert(jobApplications).values({
+    fullName: data.fullName,
+    email: data.email,
+    phone: data.phone,
+    position: data.position,
+    resumeFileName: data.resumeFileName,
+    resumeFileUrl: data.resumeFileUrl,
+    coverLetter: data.coverLetter,
+    status: "pending",
+  }).returning();
+
+  return app;
+}
+
+/**
+ * Find a recent job application from the same email for the same position.
+ * Used to dedupe accidental double-submits (page refreshes, double-clicks,
+ * stale tabs). Returns the most recent match within the window or undefined.
+ */
+export async function findRecentJobApplication(
+  email: string,
+  position: string,
+  withinMs: number = 24 * 60 * 60 * 1000,
+) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const { jobApplications } = await import("../drizzle/schema");
+  const cutoff = new Date(Date.now() - withinMs);
+
+  const result = await db
+    .select()
+    .from(jobApplications)
+    .where(
+      and(
+        eq(jobApplications.email, email),
+        eq(jobApplications.position, position),
+        gte(jobApplications.createdAt, cutoff),
+      ),
+    )
+    .orderBy(desc(jobApplications.createdAt))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getAllJobApplications() {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection unavailable");
+
+  const { jobApplications } = await import("../drizzle/schema");
+
+  return await db.select()
+    .from(jobApplications)
+    .orderBy(desc(jobApplications.createdAt));
+}
+
+export async function getJobApplicationById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const { jobApplications } = await import("../drizzle/schema");
+
+  const [app] = await db.select()
+    .from(jobApplications)
+    .where(eq(jobApplications.id, id));
+
+  return app || null;
+}
+
+export async function updateJobApplicationStatus(
+  id: number,
+  status: "pending" | "under_review" | "approved" | "rejected",
+  adminId: number,
+  adminNotes?: string,
+  replyMessage?: string,
+  rejectionReasons?: string[],
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const { jobApplications } = await import("../drizzle/schema");
+
+  const [updated] = await db.update(jobApplications)
+    .set({
+      status: status as any,
+      reviewedBy: adminId,
+      reviewedAt: new Date(),
+      adminNotes: adminNotes ?? null,
+      replyMessage: replyMessage ?? null,
+      rejectionReasons: rejectionReasons && rejectionReasons.length > 0 ? JSON.stringify(rejectionReasons) : null,
+      updatedAt: new Date(),
+    })
+    .where(eq(jobApplications.id, id))
+    .returning();
+
+  return updated;
+}

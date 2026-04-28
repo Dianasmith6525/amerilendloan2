@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +15,8 @@ import {
   ShieldCheck, Settings, Wallet, Search, LogOut,
   TrendingUp, Clock, AlertCircle, CheckCircle, XCircle,
   Banknote, CreditCard, Activity, Eye, MessageSquare,
-  Send, Download, Loader2, Upload, FileCheck, Zap, Bell
+  Send, Download, Loader2, Upload, FileCheck, Zap, Bell,
+  UserCheck, MessageCircle, Shield, Landmark, Megaphone, Bot, Briefcase
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
@@ -26,6 +28,11 @@ import { NotificationBell } from "@/components/NotificationBell";
 import AdvancedAnalytics from "@/components/AdvancedAnalytics";
 import AutomatedWorkflows from "@/components/AutomatedWorkflows";
 import AdminPaymentVerification from "@/components/AdminPaymentVerification";
+import AdminInvitations from "@/components/AdminInvitations";
+import AdminAiAssistant from "@/components/AdminAiAssistant";
+import AdminJobApplications from "./admin/AdminJobApplications";
+import AdminSystemHealth from "./admin/AdminSystemHealth";
+import AdminStaleWork from "./admin/AdminStaleWork";
 
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
@@ -38,7 +45,7 @@ const statusColors: Record<string, string> = {
   cancelled: "bg-gray-100 text-gray-800 border-gray-300",
 };
 
-type ViewType = "dashboard" | "applications" | "tracking" | "verification" | "support" | "audit" | "fees" | "crypto" | "workflows" | "payments";
+type ViewType = "dashboard" | "applications" | "tracking" | "verification" | "support" | "audit" | "fees" | "crypto" | "workflows" | "payments" | "invitations" | "virtual_cards" | "user_management" | "live_chat" | "fraud" | "collections" | "marketing" | "settings" | "ai_assistant" | "job_applications" | "system_health" | "stale_work";
 
 export default function AdminDashboardFalcon() {
   const [, setLocation] = useLocation();
@@ -47,7 +54,14 @@ export default function AdminDashboardFalcon() {
   // Navigation states
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [currentView, setCurrentView] = useState<ViewType>("dashboard");
+
+  // Read ?view= URL param on mount so email deep-links land on the right panel
+  const getInitialView = (): ViewType => {
+    const param = new URLSearchParams(window.location.search).get("view");
+    const valid: ViewType[] = ["dashboard","applications","tracking","verification","support","audit","fees","crypto","workflows","payments","invitations","virtual_cards","user_management","live_chat","fraud","collections","marketing","settings","ai_assistant","job_applications","system_health","stale_work"];
+    return (valid.includes(param as ViewType) ? param : "dashboard") as ViewType;
+  };
+  const [currentView, setCurrentView] = useState<ViewType>(getInitialView);
 
   // Dialog states
   const [approvalDialog, setApprovalDialog] = useState<{ open: boolean; applicationId: number | null }>({ open: false, applicationId: null });
@@ -58,6 +72,8 @@ export default function AdminDashboardFalcon() {
   const [rejectionReason, setRejectionReason] = useState("");
 
   const [disbursementDialog, setDisbursementDialog] = useState<{ open: boolean; applicationId: number | null }>({ open: false, applicationId: null });
+  const [disbursementTarget, setDisbursementTarget] = useState<"amerilend_account" | "external_account">("amerilend_account");
+  const [selectedAmeriLendAccount, setSelectedAmeriLendAccount] = useState<number | "">("");
   const [accountHolderName, setAccountHolderName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [routingNumber, setRoutingNumber] = useState("");
@@ -110,8 +126,16 @@ export default function AdminDashboardFalcon() {
   const { data: disbursements, isLoading: disbursementsLoading } = trpc.disbursements.adminList.useQuery();
   const { data: stats, isLoading: statsLoading } = trpc.loans.adminStatistics.useQuery();
   const { data: feeConfig } = trpc.feeConfig.getActive.useQuery();
+  const { data: userBankAccounts } = trpc.disbursements.getUserBankAccounts.useQuery(
+    { loanApplicationId: disbursementDialog.applicationId! },
+    { enabled: disbursementDialog.open && !!disbursementDialog.applicationId }
+  );
   const { data: ticketsData, refetch: refetchTickets, isLoading: ticketsLoading } = trpc.supportTickets.adminGetAll.useQuery({ status: ticketStatusFilter });
-  const tickets = ticketsData?.data || [];
+  // Tolerate both `{ success, data }` and bare-array response shapes
+  const tickets: any[] =
+    Array.isArray(ticketsData)
+      ? ticketsData
+      : (ticketsData as any)?.data || [];
   const { data: ticketMessagesData, refetch: refetchTicketMessages } = trpc.supportTickets.getMessages.useQuery(
     { ticketId: selectedTicket || 0 },
     { enabled: !!selectedTicket }
@@ -150,10 +174,16 @@ export default function AdminDashboardFalcon() {
   });
 
   const disburseMutation = trpc.disbursements.adminInitiate.useMutation({
-    onSuccess: () => {
-      toast.success("Disbursement initiated successfully");
+    onSuccess: (result) => {
+      const msg = result.disbursementTarget === "amerilend_account"
+        ? `Disbursement of ${result.amountFormatted} credited to AmeriLend account instantly`
+        : `Disbursement of ${result.amountFormatted} initiated to external account`;
+      toast.success(msg);
       utils.loans.adminList.invalidate();
+      utils.disbursements.adminList.invalidate();
       setDisbursementDialog({ open: false, applicationId: null });
+      setDisbursementTarget("amerilend_account");
+      setSelectedAmeriLendAccount("");
       setAccountHolderName("");
       setAccountNumber("");
       setRoutingNumber("");
@@ -240,7 +270,6 @@ export default function AdminDashboardFalcon() {
       return;
     }
     const amountInCents = Math.round(amount * 100);
-    console.log(`[Frontend] Approving: amount entered=$${amount}, sending to backend=${amountInCents} cents`);
     approveMutation.mutate({
       id: approvalDialog.applicationId,
       approvedAmount: amountInCents,
@@ -261,17 +290,31 @@ export default function AdminDashboardFalcon() {
 
   const handleDisburse = () => {
     if (!disbursementDialog.applicationId) return;
-    if (!accountHolderName || !accountNumber || !routingNumber) {
-      toast.error("Please fill in all bank account details");
-      return;
+    if (disbursementTarget === "amerilend_account") {
+      if (!selectedAmeriLendAccount) {
+        toast.error("Please select an AmeriLend bank account");
+        return;
+      }
+      disburseMutation.mutate({
+        loanApplicationId: disbursementDialog.applicationId,
+        disbursementTarget: "amerilend_account",
+        amerilendBankAccountId: selectedAmeriLendAccount as number,
+        adminNotes: disbursementNotes || undefined,
+      });
+    } else {
+      if (!accountHolderName || !accountNumber || !routingNumber) {
+        toast.error("Please fill in all bank account details");
+        return;
+      }
+      disburseMutation.mutate({
+        loanApplicationId: disbursementDialog.applicationId,
+        disbursementTarget: "external_account",
+        accountHolderName,
+        accountNumber,
+        routingNumber,
+        adminNotes: disbursementNotes || undefined,
+      });
     }
-    disburseMutation.mutate({
-      loanApplicationId: disbursementDialog.applicationId,
-      accountHolderName,
-      accountNumber,
-      routingNumber,
-      adminNotes: disbursementNotes || undefined,
-    });
   };
 
   const handleUpdateTracking = () => {
@@ -355,11 +398,14 @@ export default function AdminDashboardFalcon() {
 
   // Filter applications
   const filteredApplications = applications?.filter(app => {
-    // Basic search (name, email, phone)
-    const matchesSearch = searchTerm === "" || 
-      app.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.phone?.includes(searchTerm);
+    // Basic search (name, email, phone, tracking number, loan account number)
+    const q = searchTerm.trim().toLowerCase();
+    const matchesSearch = q === "" || 
+      app.fullName?.toLowerCase().includes(q) ||
+      app.email?.toLowerCase().includes(q) ||
+      app.phone?.toLowerCase().includes(q) ||
+      app.trackingNumber?.toLowerCase().includes(q) ||
+      (app as any).loanAccountNumber?.toLowerCase().includes(q);
     
     // Basic status filter
     const matchesStatus = statusFilter === "all" || app.status === statusFilter;
@@ -382,8 +428,11 @@ export default function AdminDashboardFalcon() {
   }) || [];
 
   // Navigation items
-  const navItems = [
+  // `path` items navigate directly to a dedicated admin page (single-click).
+  // Items without `path` switch the in-dashboard `currentView` panel.
+  const navItems: { id: ViewType; icon: any; label: string; path?: string }[] = [
     { id: "dashboard" as ViewType, icon: Home, label: "Dashboard" },
+    { id: "user_management" as ViewType, icon: Users, label: "User Management", path: "/admin/users" },
     { id: "applications" as ViewType, icon: FileText, label: "Applications" },
     { id: "tracking" as ViewType, icon: Package, label: "Tracking" },
     { id: "verification" as ViewType, icon: ShieldCheck, label: "Verification" },
@@ -391,8 +440,19 @@ export default function AdminDashboardFalcon() {
     { id: "audit" as ViewType, icon: BarChart3, label: "Analytics" },
     { id: "workflows" as ViewType, icon: Zap, label: "Workflows" },
     { id: "payments" as ViewType, icon: CreditCard, label: "Payments" },
+    { id: "invitations" as ViewType, icon: Send, label: "Invitations" },
     { id: "fees" as ViewType, icon: Settings, label: "Fee Settings" },
     { id: "crypto" as ViewType, icon: Wallet, label: "Crypto Wallet" },
+    { id: "virtual_cards" as ViewType, icon: CreditCard, label: "Virtual Cards", path: "/admin/virtual-cards" },
+    { id: "live_chat" as ViewType, icon: MessageCircle, label: "Live Chat", path: "/admin/chat" },
+    { id: "fraud" as ViewType, icon: Shield, label: "Fraud Detection", path: "/admin/fraud" },
+    { id: "collections" as ViewType, icon: Landmark, label: "Collections", path: "/admin/collections" },
+    { id: "marketing" as ViewType, icon: Megaphone, label: "Marketing", path: "/admin/marketing" },
+    { id: "settings" as ViewType, icon: Settings, label: "Settings", path: "/admin/settings" },
+    { id: "ai_assistant" as ViewType, icon: Bot, label: "AI Assistant" },
+    { id: "job_applications" as ViewType, icon: Briefcase, label: "Job Applications" },
+    { id: "stale_work" as ViewType, icon: AlertCircle, label: "Stale Work" },
+    { id: "system_health" as ViewType, icon: Activity, label: "System Health" },
   ];
 
   return (
@@ -442,7 +502,11 @@ export default function AdminDashboardFalcon() {
               <button
                 key={item.id}
                 onClick={() => {
-                  setCurrentView(item.id);
+                  if (item.path) {
+                    setLocation(item.path);
+                  } else {
+                    setCurrentView(item.id);
+                  }
                   setMobileMenuOpen(false);
                 }}
                 className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
@@ -508,7 +572,7 @@ export default function AdminDashboardFalcon() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   type="search"
-                  placeholder="Search..."
+                  placeholder="Search name, email, tracking #, account #"
                   className="pl-10 w-40 lg:w-64"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -526,7 +590,12 @@ export default function AdminDashboardFalcon() {
             <div className="space-y-4 md:space-y-6">
               {/* Colorful Metric Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-                <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+                <button
+                  type="button"
+                  onClick={() => { setStatusFilter("all"); setCurrentView("applications"); }}
+                  className="text-left"
+                >
+                <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all cursor-pointer">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium opacity-90">Total Applications</CardTitle>
                   </CardHeader>
@@ -537,8 +606,14 @@ export default function AdminDashboardFalcon() {
                     </div>
                   </CardContent>
                 </Card>
+                </button>
 
-                <Card className="bg-gradient-to-br from-amber-500 to-orange-500 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+                <button
+                  type="button"
+                  onClick={() => { setStatusFilter("pending"); setCurrentView("applications"); }}
+                  className="text-left"
+                >
+                <Card className="bg-gradient-to-br from-amber-500 to-orange-500 text-white border-0 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all cursor-pointer">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium opacity-90">Pending Review</CardTitle>
                   </CardHeader>
@@ -549,8 +624,14 @@ export default function AdminDashboardFalcon() {
                     </div>
                   </CardContent>
                 </Card>
+                </button>
 
-                <Card className="bg-gradient-to-br from-green-500 to-emerald-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+                <button
+                  type="button"
+                  onClick={() => { setStatusFilter("approved"); setCurrentView("applications"); }}
+                  className="text-left"
+                >
+                <Card className="bg-gradient-to-br from-green-500 to-emerald-600 text-white border-0 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all cursor-pointer">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium opacity-90">Approved</CardTitle>
                   </CardHeader>
@@ -561,8 +642,14 @@ export default function AdminDashboardFalcon() {
                     </div>
                   </CardContent>
                 </Card>
+                </button>
 
-                <Card className="bg-gradient-to-br from-blue-500 to-cyan-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+                <button
+                  type="button"
+                  onClick={() => { setStatusFilter("disbursed"); setCurrentView("applications"); }}
+                  className="text-left"
+                >
+                <Card className="bg-gradient-to-br from-blue-500 to-cyan-600 text-white border-0 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all cursor-pointer">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium opacity-90">Disbursed</CardTitle>
                   </CardHeader>
@@ -573,11 +660,17 @@ export default function AdminDashboardFalcon() {
                     </div>
                   </CardContent>
                 </Card>
+                </button>
               </div>
 
               {/* Secondary Metrics */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="border-l-4 border-l-red-500 shadow-md hover:shadow-lg transition-shadow">
+                <button
+                  type="button"
+                  onClick={() => { setStatusFilter("rejected"); setCurrentView("applications"); }}
+                  className="text-left"
+                >
+                <Card className="border-l-4 border-l-red-500 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium text-gray-600">Rejected</CardTitle>
                   </CardHeader>
@@ -588,8 +681,14 @@ export default function AdminDashboardFalcon() {
                     </div>
                   </CardContent>
                 </Card>
+                </button>
 
-                <Card className="border-l-4 border-l-yellow-500 shadow-md hover:shadow-lg transition-shadow">
+                <button
+                  type="button"
+                  onClick={() => { setStatusFilter("under_review"); setCurrentView("applications"); }}
+                  className="text-left"
+                >
+                <Card className="border-l-4 border-l-yellow-500 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium text-gray-600">Under Review</CardTitle>
                   </CardHeader>
@@ -600,8 +699,14 @@ export default function AdminDashboardFalcon() {
                     </div>
                   </CardContent>
                 </Card>
+                </button>
 
-                <Card className="border-l-4 border-l-emerald-500 shadow-md hover:shadow-lg transition-shadow">
+                <button
+                  type="button"
+                  onClick={() => { setStatusFilter("fee_paid"); setCurrentView("applications"); }}
+                  className="text-left"
+                >
+                <Card className="border-l-4 border-l-emerald-500 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium text-gray-600">Fee Paid</CardTitle>
                   </CardHeader>
@@ -612,6 +717,7 @@ export default function AdminDashboardFalcon() {
                     </div>
                   </CardContent>
                 </Card>
+                </button>
               </div>
 
               {/* Analytics Dashboard */}
@@ -657,7 +763,7 @@ export default function AdminDashboardFalcon() {
                                   <p className="text-sm text-gray-500">{app.email}</p>
                                 </div>
                               </td>
-                              <td className="py-3 px-4 font-medium">${(app.requestedAmount / 100).toFixed(2)}</td>
+                              <td className="py-3 px-4 font-medium">{formatCurrency(app.requestedAmount)}</td>
                               <td className="py-3 px-4">
                                 <Badge className={statusColors[app.status]}>{app.status}</Badge>
                               </td>
@@ -666,7 +772,7 @@ export default function AdminDashboardFalcon() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => setCurrentView("applications")}
+                                  onClick={() => setLocation(`/admin/application/${app.id}`)}
                                 >
                                   <Eye className="h-4 w-4" />
                                 </Button>
@@ -818,7 +924,7 @@ export default function AdminDashboardFalcon() {
                               <td className="py-3 px-4 font-mono text-sm text-gray-600">#{app.id}</td>
                               <td className="py-3 px-4 font-medium text-gray-900">{app.fullName}</td>
                               <td className="py-3 px-4 text-gray-600">{app.email}</td>
-                              <td className="py-3 px-4 font-semibold text-gray-900">${(app.requestedAmount / 100).toFixed(2)}</td>
+                              <td className="py-3 px-4 font-semibold text-gray-900">{formatCurrency(app.requestedAmount)}</td>
                               <td className="py-3 px-4">
                                 <Badge className={statusColors[app.status]}>{app.status}</Badge>
                               </td>
@@ -848,6 +954,15 @@ export default function AdminDashboardFalcon() {
                               <td className="py-3 px-4 text-gray-600">{new Date(app.createdAt).toLocaleDateString()}</td>
                               <td className="py-3 px-4">
                                 <div className="flex justify-end space-x-2 flex-wrap gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setLocation(`/admin/application/${app.id}`)}
+                                    title="View full application details"
+                                  >
+                                    <Eye className="h-4 w-4 mr-1" />
+                                    View
+                                  </Button>
                                   {app.status === "pending" && (
                                     <>
                                       <Button
@@ -856,7 +971,6 @@ export default function AdminDashboardFalcon() {
                                         className="bg-green-600 hover:bg-green-700"
                                         onClick={() => {
                                           const requestedInDollars = app.requestedAmount / 100;
-                                          console.log(`[Approve Dialog] Opening for app ${app.id}: requestedAmount=${app.requestedAmount} cents, pre-filling dialog with $${requestedInDollars}`);
                                           setApprovalDialog({ open: true, applicationId: app.id });
                                           setApprovalAmount(requestedInDollars.toString());
                                         }}
@@ -972,7 +1086,7 @@ export default function AdminDashboardFalcon() {
                             <tr key={disb.id} className="border-b hover:bg-gray-50">
                               <td className="py-3 px-4 font-mono text-sm">#{disb.id}</td>
                               <td className="py-3 px-4 font-mono text-sm">#{disb.loanApplicationId}</td>
-                              <td className="py-3 px-4 font-semibold">${(disb.amount / 100).toFixed(2)}</td>
+                              <td className="py-3 px-4 font-semibold">{formatCurrency(disb.amount)}</td>
                               <td className="py-3 px-4">{disb.accountHolderName}</td>
                               <td className="py-3 px-4">
                                 <Badge className={disb.status === "completed" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
@@ -1043,20 +1157,28 @@ export default function AdminDashboardFalcon() {
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle>Support Tickets</CardTitle>
-                      <CardDescription>Manage customer support requests</CardDescription>
+                      <CardDescription>
+                        {tickets.length} ticket{tickets.length !== 1 ? "s" : ""} found
+                      </CardDescription>
                     </div>
-                    <Select value={ticketStatusFilter || "all"} onValueChange={(val) => setTicketStatusFilter(val === "all" ? undefined : val)}>
-                      <SelectTrigger className="w-48">
-                        <SelectValue placeholder="Filter by status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Tickets</SelectItem>
-                        <SelectItem value="open">Open</SelectItem>
-                        <SelectItem value="in_progress">In Progress</SelectItem>
-                        <SelectItem value="resolved">Resolved</SelectItem>
-                        <SelectItem value="closed">Closed</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={() => refetchTickets()}>
+                        <Loader2 className={`h-4 w-4 mr-2 ${ticketsLoading ? "animate-spin" : "hidden"}`} />
+                        Refresh
+                      </Button>
+                      <Select value={ticketStatusFilter || "all"} onValueChange={(val) => setTicketStatusFilter(val === "all" ? undefined : val)}>
+                        <SelectTrigger className="w-48">
+                          <SelectValue placeholder="Filter by status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Tickets</SelectItem>
+                          <SelectItem value="open">Open</SelectItem>
+                          <SelectItem value="in_progress">In Progress</SelectItem>
+                          <SelectItem value="resolved">Resolved</SelectItem>
+                          <SelectItem value="closed">Closed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -1073,7 +1195,14 @@ export default function AdminDashboardFalcon() {
                               <div className="flex-1">
                                 <CardTitle className="text-lg">#{ticket.id} - {ticket.subject}</CardTitle>
                                 <CardDescription className="mt-1">
-                                  Category: {ticket.category} | Priority: {ticket.priority}
+                                  {(ticket.userName || ticket.userEmail) && (
+                                    <span className="font-medium text-gray-700">
+                                      From: {ticket.userName || "—"}{ticket.userEmail ? ` <${ticket.userEmail}>` : ""}
+                                    </span>
+                                  )}
+                                  <span className="block text-xs text-gray-500 mt-0.5">
+                                    Category: {ticket.category} · Priority: {ticket.priority}
+                                  </span>
                                 </CardDescription>
                               </div>
                               <Badge className={
@@ -1219,7 +1348,7 @@ export default function AdminDashboardFalcon() {
                       <div className="bg-gray-50 p-4 rounded-lg space-y-2">
                         <p><span className="font-medium">Mode:</span> {feeConfig.calculationMode}</p>
                         <p><span className="font-medium">Percentage Rate:</span> {(feeConfig.percentageRate / 100).toFixed(2)}%</p>
-                        <p><span className="font-medium">Fixed Fee:</span> ${(feeConfig.fixedFeeAmount / 100).toFixed(2)}</p>
+                        <p><span className="font-medium">Fixed Fee:</span> {formatCurrency(feeConfig.fixedFeeAmount)}</p>
                       </div>
                     )}
                   </div>
@@ -1242,6 +1371,13 @@ export default function AdminDashboardFalcon() {
             </div>
           )}
 
+          {/* Invitations View */}
+          {currentView === "invitations" && (
+            <div className="space-y-6">
+              <AdminInvitations />
+            </div>
+          )}
+
           {/* Crypto Wallet View */}
           {currentView === "crypto" && (
             <div className="space-y-6">
@@ -1254,6 +1390,34 @@ export default function AdminDashboardFalcon() {
                   <CryptoWalletSettings />
                 </CardContent>
               </Card>
+            </div>
+          )}
+
+          {/* AI Assistant View */}
+          {currentView === "ai_assistant" && (
+            <div className="space-y-6">
+              <AdminAiAssistant />
+            </div>
+          )}
+
+          {/* Job Applications View */}
+          {currentView === "job_applications" && (
+            <div className="space-y-6">
+              <AdminJobApplications />
+            </div>
+          )}
+
+          {/* System Health View */}
+          {currentView === "system_health" && (
+            <div className="space-y-6">
+              <AdminSystemHealth />
+            </div>
+          )}
+
+          {/* Stale Work View */}
+          {currentView === "stale_work" && (
+            <div className="space-y-6">
+              <AdminStaleWork />
             </div>
           )}
         </div>
@@ -1330,45 +1494,137 @@ export default function AdminDashboardFalcon() {
 
       {/* Disbursement Dialog */}
       <Dialog open={disbursementDialog.open} onOpenChange={(open) => !open && setDisbursementDialog({ open: false, applicationId: null })}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Initiate Disbursement</DialogTitle>
-            <DialogDescription>Enter bank account details for check disbursement</DialogDescription>
+            <DialogDescription>Choose where to send the approved loan funds</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Disbursement Target Selection */}
             <div>
-              <Label>Account Holder Name</Label>
-              <Input
-                value={accountHolderName}
-                onChange={(e) => setAccountHolderName(e.target.value)}
-                placeholder="Full name on account"
-              />
+              <Label className="mb-2 block">Disbursement Target</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDisbursementTarget("amerilend_account")}
+                  className={`p-3 rounded-lg border-2 text-left transition-all ${
+                    disbursementTarget === "amerilend_account"
+                      ? "border-green-500 bg-green-50 ring-1 ring-green-200"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <div className="font-semibold text-sm flex items-center gap-1">
+                    🏦 AmeriLend Account
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Instant deposit to user's linked bank account</p>
+                  <Badge className="mt-1 bg-green-100 text-green-800 text-[10px]">Recommended</Badge>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDisbursementTarget("external_account")}
+                  className={`p-3 rounded-lg border-2 text-left transition-all ${
+                    disbursementTarget === "external_account"
+                      ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <div className="font-semibold text-sm flex items-center gap-1">
+                    🔗 External Account
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Wire via routing & account number (1-2 days)</p>
+                </button>
+              </div>
             </div>
-            <div>
-              <Label>Account Number</Label>
-              <Input
-                value={accountNumber}
-                onChange={(e) => setAccountNumber(e.target.value)}
-                placeholder="Bank account number"
-              />
-            </div>
-            <div>
-              <Label>Routing Number</Label>
-              <Input
-                value={routingNumber}
-                onChange={(e) => setRoutingNumber(e.target.value)}
-                placeholder="Bank routing number"
-              />
-            </div>
+
+            {/* AmeriLend account selector */}
+            {disbursementTarget === "amerilend_account" && (
+              <div>
+                <Label className="mb-2 block">Select User's Bank Account</Label>
+                {!userBankAccounts || userBankAccounts.length === 0 ? (
+                  <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    This user has no AmeriLend bank accounts. They must add one first, or choose external account.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {userBankAccounts.map((acc: any) => (
+                      <button
+                        key={acc.id}
+                        type="button"
+                        onClick={() => setSelectedAmeriLendAccount(acc.id)}
+                        className={`w-full p-3 rounded-lg border-2 text-left transition-all flex items-center justify-between ${
+                          selectedAmeriLendAccount === acc.id
+                            ? "border-green-500 bg-green-50"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div>
+                          <div className="font-medium text-sm">{acc.bankName} — {acc.accountType}</div>
+                          <div className="text-xs text-gray-500">****{acc.accountNumberLast4} {acc.isPrimary ? "• Primary" : ""}</div>
+                          <div className="text-xs text-gray-400 mt-0.5">
+                            Balance: {formatCurrency(acc.balance || 0)} • Available: {formatCurrency(acc.availableBalance || 0)}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {acc.isVerified ? (
+                            <Badge className="bg-green-100 text-green-700 text-[10px]">Verified</Badge>
+                          ) : (
+                            <Badge className="bg-yellow-100 text-yellow-700 text-[10px]">Unverified</Badge>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* External account fields */}
+            {disbursementTarget === "external_account" && (
+              <>
+                <div>
+                  <Label>Account Holder Name</Label>
+                  <Input value={accountHolderName} onChange={(e) => setAccountHolderName(e.target.value)} placeholder="Full name on account" />
+                </div>
+                <div>
+                  <Label>Account Number</Label>
+                  <Input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="Bank account number" />
+                </div>
+                <div>
+                  <Label>Routing Number</Label>
+                  <Input value={routingNumber} onChange={(e) => setRoutingNumber(e.target.value)} placeholder="9-digit routing number" />
+                </div>
+              </>
+            )}
+
             <div>
               <Label>Admin Notes (Optional)</Label>
               <Textarea
                 value={disbursementNotes}
                 onChange={(e) => setDisbursementNotes(e.target.value)}
                 placeholder="Add any notes about this disbursement"
-                rows={3}
+                rows={2}
               />
             </div>
+
+            {/* Loan amount summary */}
+            {disbursementDialog.applicationId && (() => {
+              const app = applications?.find((a: any) => a.id === disbursementDialog.applicationId);
+              if (!app?.approvedAmount) return null;
+              return (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Approved Amount</span>
+                    <span className="font-bold text-green-700">{formatCurrency(app.approvedAmount)}</span>
+                  </div>
+                  {app.loanAccountNumber && (
+                    <div className="flex justify-between text-xs text-gray-500 mt-1 pt-1 border-t border-gray-200">
+                      <span>Loan Account</span>
+                      <span className="font-mono">{app.loanAccountNumber}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDisbursementDialog({ open: false, applicationId: null })}>
@@ -1376,7 +1632,7 @@ export default function AdminDashboardFalcon() {
             </Button>
             <Button onClick={handleDisburse} disabled={disburseMutation.isPending} className="bg-purple-600 hover:bg-purple-700">
               {disburseMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Initiate Disbursement
+              {disbursementTarget === "amerilend_account" ? "Disburse to AmeriLend" : "Disburse to External"}
             </Button>
           </DialogFooter>
         </DialogContent>

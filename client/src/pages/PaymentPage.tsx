@@ -1,202 +1,60 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { APP_LOGO, APP_TITLE } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle2, Loader2, CreditCard, Bitcoin, Wallet, Copy, Check } from "lucide-react";
-import { useState, useEffect } from "react";
+import { CheckCircle2, Loader2, Wallet, Zap } from "lucide-react";
+import { lazy, Suspense, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import { SkeletonPaymentCard, SkeletonDetailSection } from "@/components/SkeletonCard";
+import { TrustIndicators } from "@/components/SecuritySeal";
+import StripePaymentForm from "@/components/StripePaymentForm";
+import {
+  COMPANY_PHONE_DISPLAY_SHORT,
+  COMPANY_PHONE_RAW,
+  COMPANY_SUPPORT_EMAIL,
+  SUPPORT_HOURS_WEEKDAY,
+  SUPPORT_HOURS_WEEKEND,
+} from "@/const";
 
-// Declare Accept.js types
-declare global {
-  interface Window {
-    Accept?: {
-      dispatchData: (secureData: any, callback: (response: any) => void) => void;
-    };
-  }
-}
+// Lazy-loaded so all crypto keywords stay in a separate JS chunk
+const CryptoPaymentTab = lazy(() => import("@/components/CryptoPaymentTab"));
 
 export default function PaymentPage() {
+  const { t } = useTranslation();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const [, params] = useRoute("/payment/:id");
   const applicationId = params?.id ? parseInt(params.id) : null;
   const [paymentComplete, setPaymentComplete] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "crypto">("card");
+  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "digital">("stripe");
   const [processing, setProcessing] = useState(false);
-  
-  // Card payment fields
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvc, setCardCvc] = useState("");
-  const [cardName, setCardName] = useState("");
-  
-  // Crypto payment fields
-  const [selectedCrypto, setSelectedCrypto] = useState<"BTC" | "ETH" | "USDT" | "USDC">("USDT");
-  const [cryptoAddress, setCryptoAddress] = useState("");
-  const [cryptoAmount, setCryptoAmount] = useState("");
-  const [addressCopied, setAddressCopied] = useState(false);
-  
-  // Accept.js loading state
-  const [acceptJsLoaded, setAcceptJsLoaded] = useState(false);
 
-  const { data: application, isLoading } = trpc.loans.getById.useQuery(
+  const { data: application, isLoading, error: queryError } = trpc.loans.getById.useQuery(
     { id: applicationId! },
-    { enabled: !!applicationId && isAuthenticated }
+    { enabled: !!applicationId && isAuthenticated, retry: 2 }
   );
 
   const { data: feeConfig } = trpc.feeConfig.getActive.useQuery();
-  
-  const { data: authorizeNetConfig } = trpc.payments.getAuthorizeNetConfig.useQuery();
-  
-  const { data: cryptoConversion } = trpc.payments.convertToCrypto.useQuery(
-    { usdCents: application?.processingFeeAmount || 0, currency: selectedCrypto },
-    { enabled: !!application?.processingFeeAmount && paymentMethod === "crypto" }
-  );
-
-  const { data: cryptoAddressData } = trpc.payments.getCryptoAddress.useQuery(
-    { currency: selectedCrypto },
-    { enabled: paymentMethod === "crypto" }
-  );
-
-  const createPaymentMutation = trpc.payments.createIntent.useMutation({
-    onSuccess: (data) => {
-      setPaymentComplete(true);
-      toast.success("Payment successful!");
-    },
-    onError: (error) => {
-      toast.error(error.message || "Payment failed - please try again");
-      setProcessing(false);
-    },
-  });
-
-  // Load Authorize.Net Accept.js script
-  useEffect(() => {
-    if (paymentMethod === "card" && authorizeNetConfig && !window.Accept) {
-      const script = document.createElement("script");
-      script.src = authorizeNetConfig.environment === "production"
-        ? "https://js.authorize.net/v1/Accept.js"
-        : "https://jstest.authorize.net/v1/Accept.js";
-      script.async = true;
-      script.onload = () => {
-        setAcceptJsLoaded(true);
-      };
-      script.onerror = () => {
-        toast.error("Failed to load payment processor. Please refresh the page.");
-        setAcceptJsLoaded(false);
-      };
-      document.body.appendChild(script);
-      
-      return () => {
-        document.body.removeChild(script);
-        setAcceptJsLoaded(false);
-      };
-    } else if (window.Accept) {
-      setAcceptJsLoaded(true);
-    }
-  }, [paymentMethod, authorizeNetConfig]);
-
-  // Update crypto address when switching currency or when address data loads
-  useEffect(() => {
-    if (paymentMethod === "crypto" && cryptoAddressData?.address) {
-      setCryptoAddress(cryptoAddressData.address);
-      setCryptoAmount(cryptoConversion?.amount || "0");
-    }
-  }, [paymentMethod, selectedCrypto, cryptoAddressData, cryptoConversion]);
-
-  const handleCardPayment = async () => {
-    if (!applicationId || !authorizeNetConfig) return;
-    
-    // Validate card fields
-    if (!cardNumber || !cardExpiry || !cardCvc || !cardName) {
-      toast.error("Please fill in all card details");
-      return;
-    }
-    
-    setProcessing(true);
-    
-    try {
-      // Check if Accept.js is loaded
-      // @ts-ignore - Accept.js is loaded dynamically
-      if (!window.Accept) {
-        toast.error("Payment system is still loading. Please wait a moment and try again.");
-        setProcessing(false);
-        return;
-      }
-
-      // Tokenize card data with Accept.js
-      const secureData = {
-        cardData: {
-          cardNumber: cardNumber.replace(/\s/g, ""),
-          month: cardExpiry.split("/")[0],
-          year: "20" + cardExpiry.split("/")[1],
-          cardCode: cardCvc,
-        },
-        authData: {
-          clientKey: authorizeNetConfig.clientKey,
-          apiLoginID: authorizeNetConfig.apiLoginId,
-        },
-      };
-
-      // @ts-ignore - Accept.js is loaded dynamically
-      window.Accept.dispatchData(secureData, async (response: any) => {
-        if (response.messages.resultCode === "Error") {
-          toast.error(response.messages.message[0].text);
-          setProcessing(false);
-          return;
-        }
-
-        // Send opaque data to server
-        await createPaymentMutation.mutateAsync({
-          loanApplicationId: applicationId,
-          paymentMethod: "card",
-          paymentProvider: "authorizenet",
-          opaqueData: {
-            dataDescriptor: response.opaqueData.dataDescriptor,
-            dataValue: response.opaqueData.dataValue,
-          },
-        });
-      });
-    } catch (error) {
-      console.error("Card payment error:", error);
-      toast.error("Payment processing failed");
-      setProcessing(false);
-    }
-  };
-
-  const handleCryptoPayment = async () => {
-    if (!applicationId) return;
-    
-    setProcessing(true);
-    
-    try {
-      await createPaymentMutation.mutateAsync({
-        loanApplicationId: applicationId,
-        paymentMethod: "crypto",
-        paymentProvider: "crypto",
-        cryptoCurrency: selectedCrypto,
-      });
-    } catch (error) {
-      console.error("Crypto payment error:", error);
-      setProcessing(false);
-    }
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setAddressCopied(true);
-    toast.success("Address copied to clipboard");
-    setTimeout(() => setAddressCopied(false), 2000);
-  };
 
   if (authLoading || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
+        <div className="max-w-3xl mx-auto">
+          <div className="mb-8">
+            <div className="h-8 bg-gray-300 rounded w-1/3 mb-4"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <SkeletonPaymentCard />
+              <SkeletonPaymentCard />
+            </div>
+            <SkeletonDetailSection />
+          </div>
+        </div>
       </div>
     );
   }
@@ -213,6 +71,46 @@ export default function PaymentPage() {
             <Button className="w-full" asChild>
               <a href="/login">Sign In</a>
             </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!applicationId) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-muted/30">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>Invalid Application</CardTitle>
+            <CardDescription>No application ID provided</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" onClick={() => setLocation("/dashboard")}>
+              Return to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (queryError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-muted/30">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-600">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              Unable to Load Payment
+            </CardTitle>
+            <CardDescription>
+              {queryError.message || "A network error occurred. Please check your connection and try again."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex gap-2">
+            <Button className="flex-1" onClick={() => window.location.reload()}>Try Again</Button>
+            <Button variant="outline" className="flex-1" onClick={() => setLocation("/dashboard")}>Dashboard</Button>
           </CardContent>
         </Card>
       </div>
@@ -264,7 +162,7 @@ export default function PaymentPage() {
           <div className="container mx-auto px-4 py-4 flex items-center justify-between h-32">
             <Link href="/">
               <div className="flex items-center gap-3 cursor-pointer">
-                <img src="/logo.jpg" alt="AmeriLend" className="h-32 w-auto" style={{ mixBlendMode: 'multiply' }} />
+                <img src="/logo.jpg" alt="AmeriLend" className="h-32 w-auto mix-blend-multiply" />
               </div>
             </Link>
           </div>
@@ -324,7 +222,7 @@ export default function PaymentPage() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between h-32">
           <Link href="/">
             <div className="flex items-center gap-3 cursor-pointer">
-              <img src="/logo.jpg" alt="AmeriLend" className="h-32 w-auto" style={{ mixBlendMode: 'multiply' }} />
+              <img src="/logo.jpg" alt="AmeriLend" className="h-32 w-auto mix-blend-multiply" />
             </div>
           </Link>
           <Link href="/dashboard">
@@ -413,224 +311,51 @@ export default function PaymentPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "card" | "crypto")}>
+              <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "stripe" | "digital")}>
                 <TabsList className="grid w-full grid-cols-2 mb-6">
-                  <TabsTrigger value="card">
-                    <CreditCard className="mr-2 h-4 w-4" />
-                    Credit/Debit Card
+                  <TabsTrigger value="stripe">
+                    <Zap className="mr-2 h-4 w-4" />
+                    Card Payment
                   </TabsTrigger>
-                  <TabsTrigger value="crypto">
-                    <Bitcoin className="mr-2 h-4 w-4" />
-                    Cryptocurrency
+                  <TabsTrigger value="digital">
+                    <Wallet className="mr-2 h-4 w-4" />
+                    Digital Payment
                   </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="card" className="space-y-4">
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                    <p className="text-sm text-blue-900">
-                      <strong>Secure Payment:</strong> Your card information is encrypted and processed securely through Authorize.Net.
+                <TabsContent value="stripe" className="space-y-4">
+                  <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-indigo-900">
+                      <strong>Stripe Checkout:</strong> Pay securely with Stripe. Supports all major cards, Apple Pay, and Google Pay.
                     </p>
                   </div>
 
-                  {/* Accepted Cards */}
-                  <div className="flex items-center justify-center gap-3 pb-4 border-b">
-                    <span className="text-sm text-muted-foreground mr-2">We accept:</span>
-                    <div className="flex items-center gap-2">
-                      <div className="bg-white border rounded px-2 py-1 h-8 flex items-center">
-                        <svg className="h-5" viewBox="0 0 48 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <rect width="48" height="32" rx="4" fill="#1434CB"/>
-                          <path d="M18 10h12v12h-12z" fill="#EB001B"/>
-                          <path d="M20 16c0-2.4 1.1-4.5 2.8-5.9 1.7 1.4 2.8 3.5 2.8 5.9s-1.1 4.5-2.8 5.9c-1.7-1.4-2.8-3.5-2.8-5.9z" fill="#FF5F00"/>
-                        </svg>
-                      </div>
-                      <div className="bg-white border rounded px-2 py-1 h-8 flex items-center">
-                        <svg className="h-5" viewBox="0 0 48 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <rect width="48" height="32" rx="4" fill="#00579F"/>
-                          <text x="24" y="20" fontSize="12" fill="white" fontWeight="bold" textAnchor="middle" fontFamily="Arial">VISA</text>
-                        </svg>
-                      </div>
-                      <div className="bg-white border rounded px-2 py-1 h-8 flex items-center">
-                        <svg className="h-5" viewBox="0 0 48 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <rect width="48" height="32" rx="4" fill="#016FD0"/>
-                          <text x="24" y="20" fontSize="9" fill="white" fontWeight="bold" textAnchor="middle" fontFamily="Arial">AMEX</text>
-                        </svg>
-                      </div>
-                      <div className="bg-white border rounded px-2 py-1 h-8 flex items-center">
-                        <svg className="h-5" viewBox="0 0 48 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <rect width="48" height="32" rx="4" fill="#FF6000"/>
-                          <circle cx="18" cy="16" r="8" fill="#EB001B"/>
-                          <circle cx="30" cy="16" r="8" fill="#F79E1B"/>
-                          <path d="M24 10c1.7 1.4 2.8 3.5 2.8 5.9s-1.1 4.5-2.8 5.9c-1.7-1.4-2.8-3.5-2.8-5.9s1.1-4.5 2.8-5.9z" fill="#FF5F00"/>
-                        </svg>
-                      </div>
-                      <div className="bg-white border rounded px-2 py-1 h-8 flex items-center">
-                        <svg className="h-5" viewBox="0 0 48 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <rect width="48" height="32" rx="4" fill="#0079BE"/>
-                          <text x="24" y="12" fontSize="7" fill="white" fontWeight="bold" textAnchor="middle" fontFamily="Arial">discover</text>
-                          <rect x="28" y="16" width="12" height="8" rx="1" fill="#FF6000"/>
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="cardName">Cardholder Name</Label>
-                      <Input
-                        id="cardName"
-                        placeholder="John Doe"
-                        value={cardName}
-                        onChange={(e) => setCardName(e.target.value)}
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="cardNumber">Card Number</Label>
-                      <Input
-                        id="cardNumber"
-                        placeholder="1234 5678 9012 3456"
-                        value={cardNumber}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/\s/g, "");
-                          const formatted = value.match(/.{1,4}/g)?.join(" ") || value;
-                          setCardNumber(formatted);
-                        }}
-                        maxLength={19}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="cardExpiry">Expiry Date</Label>
-                        <Input
-                          id="cardExpiry"
-                          placeholder="MM/YY"
-                          value={cardExpiry}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/\D/g, "");
-                            if (value.length <= 2) {
-                              setCardExpiry(value);
-                            } else {
-                              setCardExpiry(value.slice(0, 2) + "/" + value.slice(2, 4));
-                            }
-                          }}
-                          maxLength={5}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="cardCvc">CVC</Label>
-                        <Input
-                          id="cardCvc"
-                          placeholder="123"
-                          value={cardCvc}
-                          onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, ""))}
-                          maxLength={4}
-                          type="password"
-                        />
-                      </div>
-                    </div>
-
-                    <Button
-                      size="lg"
-                      className="w-full"
-                      onClick={handleCardPayment}
-                      disabled={processing}
-                    >
-                      {processing ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Processing Payment...
-                        </>
-                      ) : (
-                        <>
-                          <CreditCard className="mr-2 h-4 w-4" />
-                          Pay ${((application.processingFeeAmount || 0) / 100).toFixed(2)}
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                  {applicationId && application && (
+                    <StripePaymentForm
+                      loanApplicationId={applicationId}
+                      amount={application.processingFeeAmount || 0}
+                      onSuccess={() => {
+                        setPaymentComplete(true);
+                        toast.success("Payment successful!");
+                      }}
+                      onError={(error) => {
+                        toast.error(error || "Payment failed - please try again");
+                      }}
+                      onProcessing={setProcessing}
+                    />
+                  )}
                 </TabsContent>
 
-                <TabsContent value="crypto" className="space-y-4">
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                    <p className="text-sm text-blue-900">
-                      <strong>Crypto Payment:</strong> Send the exact amount to the address below. Payment is confirmed automatically.
-                    </p>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Select Cryptocurrency</Label>
-                      <div className="grid grid-cols-4 gap-2 mt-2">
-                        {(["BTC", "ETH", "USDT", "USDC"] as const).map((crypto) => (
-                          <Button
-                            key={crypto}
-                            variant={selectedCrypto === crypto ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setSelectedCrypto(crypto)}
-                          >
-                            {crypto}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-100 rounded-lg p-4 space-y-3">
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Amount to Send</Label>
-                        <p className="text-2xl font-bold">
-                          {cryptoConversion?.amount || "0"} {selectedCrypto}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          ≈ ${((application.processingFeeAmount || 0) / 100).toFixed(2)} USD
-                        </p>
-                      </div>
-
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Payment Address</Label>
-                        <div className="flex gap-2 mt-1">
-                          <Input
-                            value={cryptoAddress}
-                            readOnly
-                            className="font-mono text-xs"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => copyToClipboard(cryptoAddress)}
-                          >
-                            {addressCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                      <p className="text-xs text-yellow-900">
-                        <strong>Important:</strong> Send only {selectedCrypto} to this address. 
-                        Sending other cryptocurrencies may result in permanent loss of funds.
-                      </p>
-                    </div>
-
-                    <Button
-                      size="lg"
-                      className="w-full"
-                      onClick={handleCryptoPayment}
-                      disabled={processing}
-                    >
-                      {processing ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Confirming Transaction...
-                        </>
-                      ) : (
-                        <>
-                          <Bitcoin className="mr-2 h-4 w-4" />
-                          I've Sent the Payment
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                <TabsContent value="digital" className="space-y-4">
+                  <Suspense fallback={<div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>}>
+                    {applicationId && application && (
+                      <CryptoPaymentTab
+                        variant="simple"
+                        applicationId={applicationId}
+                        processingFeeAmount={application.processingFeeAmount || 0}
+                      />
+                    )}
+                  </Suspense>
                 </TabsContent>
               </Tabs>
 
@@ -647,36 +372,43 @@ export default function PaymentPage() {
         </div>
       </div>
 
+      {/* Trust Indicators */}
+      <div className="container mx-auto px-4 max-w-2xl mt-6 mb-2">
+        <TrustIndicators />
+      </div>
+
       {/* Footer */}
-      <footer className="bg-gradient-to-r from-[#0033A0] to-[#003366] text-white py-8 mt-12">
+      <footer className="bg-gradient-to-r from-[#0A2540] to-[#003366] text-white py-8 mt-12">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-6">
             <div>
               <h4 className="font-semibold mb-3">Need Help?</h4>
               <div className="space-y-2 text-sm text-white/80">
-                <p>📞 <a href="tel:+19452121609" className="hover:text-[#FFA500] transition-colors">(945) 212-1609</a></p>
-                <p>📧 <a href="mailto:support@amerilendloan.com" className="hover:text-[#FFA500] transition-colors">support@amerilendloan.com</a></p>
+                <p>📞 <a href={`tel:${COMPANY_PHONE_RAW}`} className="hover:text-[#C9A227] transition-colors">{COMPANY_PHONE_DISPLAY_SHORT}</a></p>
+                <p>📧 <a href={`mailto:${COMPANY_SUPPORT_EMAIL}`} className="hover:text-[#C9A227] transition-colors">{COMPANY_SUPPORT_EMAIL}</a></p>
+                <p>🕒 {SUPPORT_HOURS_WEEKDAY}</p>
+                <p>🕒 {SUPPORT_HOURS_WEEKEND}</p>
               </div>
             </div>
             <div>
               <h4 className="font-semibold mb-3">Quick Links</h4>
               <ul className="space-y-2 text-sm text-white/80">
-                <li><a href="/" className="hover:text-[#FFA500] transition-colors">Home</a></li>
-                <li><a href="/dashboard" className="hover:text-[#FFA500] transition-colors">Dashboard</a></li>
-                <li><a href="/#faq" className="hover:text-[#FFA500] transition-colors">FAQ</a></li>
+                <li><a href="/" className="hover:text-[#C9A227] transition-colors">Home</a></li>
+                <li><a href="/dashboard" className="hover:text-[#C9A227] transition-colors">Dashboard</a></li>
+                <li><a href="/#faq" className="hover:text-[#C9A227] transition-colors">FAQ</a></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-3">Legal</h4>
               <ul className="space-y-2 text-sm text-white/80">
-                <li><a href="/public/legal/privacy-policy" className="hover:text-[#FFA500] transition-colors">Privacy Policy</a></li>
-                <li><a href="/public/legal/terms-of-service" className="hover:text-[#FFA500] transition-colors">Terms of Service</a></li>
-                <li><a href="/public/legal/loan-agreement" className="hover:text-[#FFA500] transition-colors">Loan Agreement</a></li>
+                <li><a href="/legal/privacy-policy" className="hover:text-[#C9A227] transition-colors">Privacy Policy</a></li>
+                <li><a href="/legal/terms-of-service" className="hover:text-[#C9A227] transition-colors">Terms of Service</a></li>
+                <li><a href="/legal/loan-agreement" className="hover:text-[#C9A227] transition-colors">Loan Agreement</a></li>
               </ul>
             </div>
           </div>
           <div className="border-t border-white/20 pt-6 text-center text-xs text-white/70">
-            <p>© 2025 AmeriLend, LLC. All Rights Reserved.</p>
+            <p>© {new Date().getFullYear()} AmeriLend, LLC. All Rights Reserved.</p>
             <p className="mt-2">Secure payment processing with end-to-end encryption.</p>
           </div>
         </div>

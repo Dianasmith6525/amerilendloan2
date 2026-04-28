@@ -1,41 +1,31 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { getPersistentIdempotencyKey } from "@/lib/idempotency";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
-import { CreditCard, Wallet, ArrowLeft, CheckCircle2, XCircle, Loader2, DollarSign } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Wallet, ArrowLeft, CheckCircle2, XCircle, Loader2, Zap, Building2, Copy, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import StripePaymentForm from "@/components/StripePaymentForm";
 
-// Declare Accept.js types
-declare global {
-  interface Window {
-    Accept?: {
-      dispatchData: (secureData: any, callback: (response: any) => void) => void;
-    };
-  }
-}
+// Lazy-loaded so all digital-payment keywords stay in a separate JS chunk
+const CryptoPaymentTab = lazy(() => import("@/components/CryptoPaymentTab"));
 
 export default function PayFee() {
   const [, setLocation] = useLocation();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
 
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "crypto">("card");
+  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "digital" | "wire">("stripe");
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
 
-  // Card payment fields
-  const [cardNumber, setCardNumber] = useState("");
-  const [expiryDate, setExpiryDate] = useState("");
-  const [cvv, setCvv] = useState("");
-  const [cardholderName, setCardholderName] = useState("");
-
-  // Crypto payment fields
-  const [cryptoCurrency, setCryptoCurrency] = useState<"BTC" | "ETH" | "USDT">("USDT");
-  const [acceptJsLoaded, setAcceptJsLoaded] = useState(false);
+  // Wire transfer confirmation fields
+  const [wireConfirmationNumber, setWireConfirmationNumber] = useState("");
+  const [wireSenderName, setWireSenderName] = useState("");;
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -44,30 +34,13 @@ export default function PayFee() {
     }
   }, [isAuthenticated, authLoading, setLocation]);
 
-  // Get Authorize.Net config
-  const { data: authorizeNetConfig } = trpc.payments.getAuthorizeNetConfig.useQuery();
-
-  // Load Authorize.Net Accept.js script
-  useEffect(() => {
-    if (!authorizeNetConfig) return;
-    
-    const script = document.createElement('script');
-    script.src = authorizeNetConfig.environment === 'production'
-      ? 'https://js.authorize.net/v1/Accept.js'
-      : 'https://jstest.authorize.net/v1/Accept.js';
-    script.async = true;
-    script.onload = () => setAcceptJsLoaded(true);
-    document.body.appendChild(script);
-    
-    return () => {
-      if (script && document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
-  }, [authorizeNetConfig]);
-
   // Get user's pending loans with fees
   const { data: loans, isLoading: loansLoading } = trpc.loans.myApplications.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+
+  // Get company bank details for wire/ACH transfers
+  const { data: companyBank } = trpc.companyBank.getForPayment.useQuery(undefined, {
     enabled: isAuthenticated,
   });
 
@@ -79,108 +52,43 @@ export default function PayFee() {
   const [selectedLoan, setSelectedLoan] = useState<number | null>(null);
   const selectedLoanData = feePendingLoans.find((loan) => loan.id === selectedLoan);
 
-  // Card payment mutation
-  const cardPaymentMutation = trpc.payments.createIntent.useMutation({
-    onSuccess: () => {
-      setPaymentSuccess(true);
-      toast.success("Payment Successful!", {
-        description: "Your processing fee has been paid. Your loan will be disbursed shortly.",
-      });
-      setTimeout(() => setLocation("/dashboard"), 3000);
-    },
-    onError: (error: any) => {
-      toast.error("Payment Failed", {
-        description: error.message || "An error occurred while processing your payment.",
-      });
-      setIsProcessing(false);
-    },
-  });
-
-  // Crypto payment mutation
-  const cryptoPaymentMutation = trpc.payments.createIntent.useMutation({
+  // Wire payment confirmation mutation
+  const wirePaymentMutation = trpc.payments.createIntent.useMutation({
     onSuccess: (data: any) => {
-      if (data.paymentAddress || data.cryptoAddress) {
-        toast.success("Payment Address Generated", {
-          description: `Send the specified amount to the address shown below.`,
-        });
-      }
+      toast.success("Wire Transfer Submitted", {
+        description: "Your transfer confirmation has been recorded. We'll verify and process your payment within 1-3 business days.",
+      });
+      setWireConfirmationNumber("");
+      setWireSenderName("");
       setIsProcessing(false);
     },
     onError: (error: any) => {
-      toast.error("Payment Failed", {
-        description: error.message || "An error occurred while generating payment address.",
+      toast.error("Submission Failed", {
+        description: error.message || "An error occurred while submitting your wire transfer details.",
       });
       setIsProcessing(false);
     },
   });
 
-  const handleCardPayment = async () => {
+  const handleWirePayment = async () => {
     if (!selectedLoan || !selectedLoanData) {
       toast.error("Please select a loan to pay for.");
       return;
     }
-
-    if (!cardNumber || !expiryDate || !cvv || !cardholderName) {
-      toast.error("Please fill in all card details.");
-      return;
-    }
-
-    if (!window.Accept) {
-      toast.error("Payment system not loaded. Please refresh the page.");
+    if (!wireConfirmationNumber.trim()) {
+      toast.error("Please enter your wire confirmation/reference number.");
       return;
     }
 
     setIsProcessing(true);
 
-    const [expiryMonth, expiryYear] = expiryDate.split("/");
-
-    const secureData = {
-      authData: {
-        clientKey: authorizeNetConfig?.clientKey || "",
-        apiLoginID: authorizeNetConfig?.apiLoginId || "",
-      },
-      cardData: {
-        cardNumber: cardNumber.replace(/\s/g, ""),
-        month: expiryMonth?.trim() || "",
-        year: expiryYear?.trim() || "",
-        cardCode: cvv,
-      },
-    };
-
-    window.Accept.dispatchData(secureData, (response: any) => {
-      if (response.messages.resultCode === "Error") {
-        toast.error("Card Validation Failed", {
-          description: response.messages.message[0].text,
-        });
-        setIsProcessing(false);
-        return;
-      }
-
-      const opaqueData = response.opaqueData;
-
-      cardPaymentMutation.mutate({
-        loanApplicationId: selectedLoan,
-        paymentMethod: "card",
-        opaqueData: {
-          dataDescriptor: opaqueData.dataDescriptor,
-          dataValue: opaqueData.dataValue,
-        },
-      });
-    });
-  };
-
-  const handleCryptoPayment = async () => {
-    if (!selectedLoan || !selectedLoanData) {
-      toast.error("Please select a loan to pay for.");
-      return;
-    }
-
-    setIsProcessing(true);
-
-    cryptoPaymentMutation.mutate({
+    wirePaymentMutation.mutate({
       loanApplicationId: selectedLoan,
-      paymentMethod: "crypto",
-      cryptoCurrency: cryptoCurrency,
+      paymentMethod: "wire",
+      wireConfirmationNumber: wireConfirmationNumber.trim(),
+      wireSenderName: wireSenderName.trim() || undefined,
+      // Compute at submit time — selectedLoan is null at mount.
+      idempotencyKey: getPersistentIdempotencyKey(selectedLoan, "wire"),
     });
   };
 
@@ -293,148 +201,197 @@ export default function PayFee() {
                   <CardDescription>Choose how you want to pay</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "card" | "crypto")}>
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="card">
-                        <CreditCard className="h-4 w-4 mr-2" />
-                        Credit/Debit Card
+                  <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "stripe" | "digital" | "wire")}>
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="stripe">
+                        <Zap className="h-4 w-4 mr-2" />
+                        Card
                       </TabsTrigger>
-                      <TabsTrigger value="crypto">
+                      <TabsTrigger value="wire">
+                        <Building2 className="h-4 w-4 mr-2" />
+                        Wire/ACH
+                      </TabsTrigger>
+                      <TabsTrigger value="digital">
                         <Wallet className="h-4 w-4 mr-2" />
-                        Cryptocurrency
+                        Digital
                       </TabsTrigger>
                     </TabsList>
 
-                    {/* Card Payment */}
-                    <TabsContent value="card" className="space-y-4 mt-6">
-                      <div className="space-y-2">
-                        <Label htmlFor="cardholderName">Cardholder Name</Label>
-                        <Input
-                          id="cardholderName"
-                          placeholder="John Doe"
-                          value={cardholderName}
-                          onChange={(e) => setCardholderName(e.target.value)}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="cardNumber">Card Number</Label>
-                        <Input
-                          id="cardNumber"
-                          placeholder="1234 5678 9012 3456"
-                          maxLength={19}
-                          value={cardNumber}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/\s/g, "");
-                            const formatted = value.match(/.{1,4}/g)?.join(" ") || value;
-                            setCardNumber(formatted);
+                    {/* Stripe Payment */}
+                    <TabsContent value="stripe" className="mt-6">
+                      {selectedLoan && selectedLoanData && (
+                        <StripePaymentForm
+                          loanApplicationId={selectedLoan}
+                          amount={selectedLoanData.processingFeeAmount || 0}
+                          onSuccess={(data) => {
+                            setPaymentSuccess(true);
+                            toast.success("Payment Successful!", {
+                              description: `Transaction ${data.transactionId} confirmed. Your loan will be disbursed shortly.`,
+                            });
+                            setTimeout(() => setLocation("/dashboard"), 3000);
                           }}
+                          onError={(error) => {
+                            toast.error("Payment Failed", { description: error });
+                          }}
+                          onProcessing={setIsProcessing}
                         />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="expiry">Expiry Date</Label>
-                          <Input
-                            id="expiry"
-                            placeholder="MM/YY"
-                            maxLength={5}
-                            value={expiryDate}
-                            onChange={(e) => {
-                              let value = e.target.value.replace(/\D/g, "");
-                              if (value.length >= 2) {
-                                value = value.slice(0, 2) + "/" + value.slice(2, 4);
-                              }
-                              setExpiryDate(value);
-                            }}
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="cvv">CVV</Label>
-                          <Input
-                            id="cvv"
-                            placeholder="123"
-                            maxLength={4}
-                            type="password"
-                            value={cvv}
-                            onChange={(e) => setCvv(e.target.value.replace(/\D/g, ""))}
-                          />
-                        </div>
-                      </div>
-
-                      <Button
-                        onClick={handleCardPayment}
-                        disabled={isProcessing}
-                        className="w-full"
-                        size="lg"
-                      >
-                        {isProcessing ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <DollarSign className="h-4 w-4 mr-2" />
-                            Pay ${((selectedLoanData?.processingFeeAmount || 0) / 100).toFixed(2)}
-                          </>
-                        )}
-                      </Button>
+                      )}
                     </TabsContent>
 
-                    {/* Crypto Payment */}
-                    <TabsContent value="crypto" className="space-y-4 mt-6">
-                      <div className="space-y-2">
-                        <Label>Select Cryptocurrency</Label>
-                        <div className="grid grid-cols-3 gap-3">
-                          {(["BTC", "ETH", "USDT"] as const).map((crypto) => (
+                    {/* Wire/ACH Transfer */}
+                    <TabsContent value="wire" className="space-y-4 mt-6">
+                      {!companyBank ? (
+                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="h-5 w-5 text-amber-600" />
+                            <p className="text-sm font-medium text-amber-900">
+                              Wire/ACH payment is not currently available. Please contact support or use another payment method.
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Bank Details Card */}
+                          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <h4 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                              <Building2 className="h-4 w-4" />
+                              Transfer to Our Bank Account
+                            </h4>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between items-center p-2 bg-white rounded">
+                                <span className="text-gray-600">Bank Name:</span>
+                                <span className="font-medium">{companyBank.bankName}</span>
+                              </div>
+                              <div className="flex justify-between items-center p-2 bg-white rounded">
+                                <span className="text-gray-600">Account Holder:</span>
+                                <span className="font-medium">{companyBank.accountHolderName}</span>
+                              </div>
+                              <div className="flex justify-between items-center p-2 bg-white rounded group">
+                                <span className="text-gray-600">Routing Number:</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-medium">{companyBank.routingNumber}</span>
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(companyBank.routingNumber);
+                                      toast.success("Routing number copied!");
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Copy routing number"
+                                  >
+                                    <Copy className="h-4 w-4 text-gray-500 hover:text-blue-600" />
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex justify-between items-center p-2 bg-white rounded group">
+                                <span className="text-gray-600">Account Number:</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-medium">{companyBank.accountNumber}</span>
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(companyBank.accountNumber);
+                                      toast.success("Account number copied!");
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Copy account number"
+                                  >
+                                    <Copy className="h-4 w-4 text-gray-500 hover:text-blue-600" />
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex justify-between items-center p-2 bg-white rounded">
+                                <span className="text-gray-600">Account Type:</span>
+                                <span className="font-medium capitalize">{companyBank.accountType}</span>
+                              </div>
+                              {companyBank.swiftCode && (
+                                <div className="flex justify-between items-center p-2 bg-white rounded">
+                                  <span className="text-gray-600">SWIFT Code:</span>
+                                  <span className="font-mono font-medium">{companyBank.swiftCode}</span>
+                                </div>
+                              )}
+                              {companyBank.bankAddress && (
+                                <div className="p-2 bg-white rounded">
+                                  <span className="text-gray-600">Bank Address:</span>
+                                  <p className="font-medium mt-1">{companyBank.bankAddress}</p>
+                                </div>
+                              )}
+                            </div>
+                            {companyBank.instructions && (
+                              <div className="mt-3 p-2 bg-amber-100 rounded text-sm">
+                                <p className="font-medium text-amber-900">Instructions:</p>
+                                <p className="text-amber-800 mt-1">{companyBank.instructions}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Amount to Send */}
+                          <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                            <p className="text-sm text-green-800">Amount to Transfer:</p>
+                            <p className="text-2xl font-bold text-green-900">
+                              ${((selectedLoanData?.processingFeeAmount || 0) / 100).toFixed(2)} USD
+                            </p>
+                            <p className="text-xs text-green-700 mt-1">
+                              Include Loan #{selectedLoan} in the memo/reference field
+                            </p>
+                          </div>
+
+                          {/* Confirmation Form */}
+                          <div className="space-y-3 pt-4 border-t">
+                            <h4 className="font-semibold text-gray-900">After you send the transfer:</h4>
+                            <div className="space-y-2">
+                              <Label htmlFor="wireConfirmation">Confirmation/Reference Number *</Label>
+                              <Input
+                                id="wireConfirmation"
+                                value={wireConfirmationNumber}
+                                onChange={(e) => setWireConfirmationNumber(e.target.value)}
+                                placeholder="Enter your bank's confirmation number"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="wireSender">Sender Name (optional)</Label>
+                              <Input
+                                id="wireSender"
+                                value={wireSenderName}
+                                onChange={(e) => setWireSenderName(e.target.value)}
+                                placeholder="Name on the sending account"
+                              />
+                            </div>
                             <Button
-                              key={crypto}
-                              variant={cryptoCurrency === crypto ? "default" : "outline"}
-                              onClick={() => setCryptoCurrency(crypto)}
+                              onClick={handleWirePayment}
+                              disabled={isProcessing || !wireConfirmationNumber.trim()}
                               className="w-full"
+                              size="lg"
                             >
-                              {crypto}
+                              {isProcessing ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Submitting...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                                  I've Sent the Transfer
+                                </>
+                              )}
                             </Button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {cryptoPaymentMutation.data?.paymentAddress && (
-                        <div className="p-4 bg-gray-50 rounded-lg space-y-2">
-                          <p className="text-sm font-semibold text-gray-900">Payment Address:</p>
-                          <p className="text-xs font-mono break-all bg-white p-2 rounded border">
-                            {cryptoPaymentMutation.data.paymentAddress}
-                          </p>
-                          <p className="text-sm font-semibold text-gray-900">Amount:</p>
-                          <p className="text-lg font-bold text-blue-600">
-                            {cryptoPaymentMutation.data.cryptoAmount} {cryptoCurrency}
-                          </p>
-                          <p className="text-xs text-gray-600">
-                            Send exact amount to the address above. Payment will be confirmed automatically.
-                          </p>
-                        </div>
+                            <p className="text-xs text-gray-500 text-center">
+                              Wire transfers typically take 1-3 business days to process
+                            </p>
+                          </div>
+                        </>
                       )}
+                    </TabsContent>
 
-                      <Button
-                        onClick={handleCryptoPayment}
-                        disabled={isProcessing}
-                        className="w-full"
-                        size="lg"
-                      >
-                        {isProcessing ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Generating Address...
-                          </>
-                        ) : (
-                          <>
-                            <Wallet className="h-4 w-4 mr-2" />
-                            Generate Payment Address
-                          </>
+                    {/* Digital Payment (lazy-loaded) */}
+                    <TabsContent value="digital" className="space-y-4 mt-6">
+                      <Suspense fallback={<div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>}>
+                        {selectedLoan && selectedLoanData && (
+                          <CryptoPaymentTab
+                            variant="simple"
+                            applicationId={selectedLoan}
+                            processingFeeAmount={selectedLoanData.processingFeeAmount || 0}
+                          />
                         )}
-                      </Button>
+                      </Suspense>
                     </TabsContent>
                   </Tabs>
                 </CardContent>

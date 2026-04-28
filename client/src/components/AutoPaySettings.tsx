@@ -1,10 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { 
   CreditCard, 
   Building2, 
@@ -13,9 +12,11 @@ import {
   CheckCircle2,
   AlertCircle,
   Info,
-  Zap
+  Zap,
+  Loader2
 } from "lucide-react";
 import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
 
 interface AutoPaySettingsProps {
   loans?: Array<{
@@ -27,50 +28,81 @@ interface AutoPaySettingsProps {
 }
 
 export default function AutoPaySettings({ loans = [] }: AutoPaySettingsProps) {
-  const [autoPayEnabled, setAutoPayEnabled] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"bank" | "card">("bank");
+  const [paymentMethod, setPaymentMethod] = useState<"bank_account" | "card">("bank_account");
   const [paymentDay, setPaymentDay] = useState("1");
-  const [bankLinked, setBankLinked] = useState(false);
-  const [cardAdded, setCardAdded] = useState(false);
 
   const activeLoans = loans.filter(
     loan => loan.status === "disbursed"
   );
 
-  const handleLinkBank = () => {
-    // Mock Plaid integration
-    toast.success("Bank account linked successfully!");
-    setBankLinked(true);
-  };
+  // Fetch existing auto-pay settings
+  const { data: settingsData, isLoading: settingsLoading, refetch: refetchSettings } =
+    trpc.autoPay.getSettings.useQuery();
 
-  const handleAddCard = () => {
-    // Mock card addition
-    toast.success("Card added successfully!");
-    setCardAdded(true);
-  };
+  const existingSettings: any[] = (settingsData as any)?.data || settingsData || [];
+  
+  // Find setting for selected loan
+  const currentSetting = selectedLoan
+    ? existingSettings.find((s: any) => String(s.loanApplicationId) === selectedLoan)
+    : null;
+
+  const autoPayEnabled = currentSetting?.isEnabled ?? false;
+
+  // Sync form state when a setting is loaded
+  useEffect(() => {
+    if (currentSetting) {
+      setPaymentMethod(currentSetting.paymentMethod || "bank_account");
+      setPaymentDay(String(currentSetting.paymentDay || 1));
+    }
+  }, [currentSetting?.id]);
+
+  // Fetch bank info
+  const { data: bankData } = trpc.auth.getBankInfo.useQuery(undefined, {
+    retry: false,
+  });
+  const bankInfo = (bankData as any)?.data || bankData;
+  const hasBankAccount = !!(bankInfo?.bankName && bankInfo?.bankAccountNumber);
+
+  // Update settings mutation
+  const updateSettings = trpc.autoPay.updateSettings.useMutation({
+    onSuccess: () => {
+      refetchSettings();
+      toast.success("Auto-pay settings updated!");
+    },
+    onError: (err) => toast.error(err.message || "Failed to update auto-pay"),
+  });
 
   const handleEnableAutoPay = () => {
     if (!selectedLoan) {
       toast.error("Please select a loan");
       return;
     }
-    if (paymentMethod === "bank" && !bankLinked) {
-      toast.error("Please link your bank account first");
-      return;
-    }
-    if (paymentMethod === "card" && !cardAdded) {
-      toast.error("Please add a payment card first");
+    if (paymentMethod === "bank_account" && !hasBankAccount) {
+      toast.error("Please add a bank account in your profile first");
       return;
     }
 
-    setAutoPayEnabled(true);
-    toast.success("Auto-Pay enabled! Your payments will be processed automatically.");
+    updateSettings.mutate({
+      id: currentSetting?.id,
+      loanApplicationId: parseInt(selectedLoan),
+      isEnabled: true,
+      paymentMethod,
+      paymentDay: parseInt(paymentDay),
+      amount: 0, // 0 = full payment
+    });
   };
 
   const handleDisableAutoPay = () => {
-    setAutoPayEnabled(false);
-    toast.success("Auto-Pay disabled");
+    if (!selectedLoan || !currentSetting) return;
+    updateSettings.mutate({
+      id: currentSetting.id,
+      loanApplicationId: parseInt(selectedLoan),
+      isEnabled: false,
+      paymentMethod: currentSetting.paymentMethod,
+      paymentDay: currentSetting.paymentDay,
+      amount: 0,
+    });
   };
 
   return (
@@ -147,7 +179,7 @@ export default function AutoPaySettings({ loans = [] }: AutoPaySettingsProps) {
                       handleDisableAutoPay();
                     }
                   }}
-                  disabled={!selectedLoan || (paymentMethod === "bank" && !bankLinked) || (paymentMethod === "card" && !cardAdded)}
+                  disabled={!selectedLoan || updateSettings.isPending}
                 />
               </div>
 
@@ -185,9 +217,9 @@ export default function AutoPaySettings({ loans = [] }: AutoPaySettingsProps) {
                 
                 <div className="grid grid-cols-2 gap-3">
                   <button
-                    onClick={() => setPaymentMethod("bank")}
+                    onClick={() => setPaymentMethod("bank_account")}
                     className={`p-4 border-2 rounded-lg transition-colors ${
-                      paymentMethod === "bank"
+                      paymentMethod === "bank_account"
                         ? "border-[#0033A0] bg-blue-50"
                         : "border-gray-200 hover:border-gray-300"
                     }`}
@@ -211,38 +243,47 @@ export default function AutoPaySettings({ loans = [] }: AutoPaySettingsProps) {
                   </button>
                 </div>
 
-                {/* Link Bank or Add Card */}
-                {paymentMethod === "bank" && !bankLinked && (
-                  <Button onClick={handleLinkBank} variant="outline" className="w-full">
-                    <Building2 className="w-4 h-4 mr-2" />
-                    Link Bank Account (Plaid)
-                  </Button>
-                )}
-
-                {paymentMethod === "bank" && bankLinked && (
-                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                {/* Bank Account Status */}
+                {paymentMethod === "bank_account" && !hasBankAccount && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
                     <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      <p className="text-sm font-medium text-green-900">
-                        Chase Bank ****1234 (Checking)
+                      <AlertCircle className="w-4 h-4 text-amber-600" />
+                      <p className="text-sm font-medium text-amber-900">
+                        No bank account on file. Please add one in your profile settings.
                       </p>
                     </div>
                   </div>
                 )}
 
-                {paymentMethod === "card" && !cardAdded && (
-                  <Button onClick={handleAddCard} variant="outline" className="w-full">
-                    <CreditCard className="w-4 h-4 mr-2" />
-                    Add Debit Card
-                  </Button>
-                )}
-
-                {paymentMethod === "card" && cardAdded && (
+                {paymentMethod === "bank_account" && hasBankAccount && (
                   <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-green-600" />
                       <p className="text-sm font-medium text-green-900">
-                        Visa ****5678
+                        {bankInfo.bankName} ****{bankInfo.bankAccountNumber?.slice(-4)} ({bankInfo.accountType || "Checking"})
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Card Status */}
+                {paymentMethod === "card" && currentSetting?.cardLast4 && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      <p className="text-sm font-medium text-green-900">
+                        {currentSetting.cardBrand || "Card"} ****{currentSetting.cardLast4}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {paymentMethod === "card" && !currentSetting?.cardLast4 && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600" />
+                      <p className="text-sm font-medium text-amber-900">
+                        Card will be saved when you enable auto-pay via the payment page.
                       </p>
                     </div>
                   </div>
@@ -286,14 +327,14 @@ export default function AutoPaySettings({ loans = [] }: AutoPaySettingsProps) {
               </div>
 
               {/* Auto-Pay Schedule Preview */}
-              {autoPayEnabled && (
+              {autoPayEnabled && currentSetting && (
                 <div className="border-t pt-6">
                   <h4 className="font-semibold text-gray-900 mb-3">Upcoming Auto-Payments</h4>
                   <div className="space-y-2">
                     {[0, 1, 2].map((month) => {
                       const date = new Date();
                       date.setMonth(date.getMonth() + month);
-                      date.setDate(parseInt(paymentDay));
+                      date.setDate(currentSetting.paymentDay || parseInt(paymentDay));
                       
                       return (
                         <div key={month} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -301,10 +342,12 @@ export default function AutoPaySettings({ loans = [] }: AutoPaySettingsProps) {
                             <Calendar className="w-4 h-4 text-gray-600" />
                             <div>
                               <p className="font-medium text-sm">{date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
-                              <p className="text-xs text-gray-600">{paymentMethod === "bank" ? "Bank Account" : "Debit Card"}</p>
+                              <p className="text-xs text-gray-600">{currentSetting.paymentMethod === "bank_account" ? "Bank Account" : "Debit Card"}</p>
                             </div>
                           </div>
-                          <p className="font-bold text-green-600">$250.00</p>
+                          <p className="font-bold text-green-600">
+                            {currentSetting.amount ? `$${(currentSetting.amount / 100).toFixed(2)}` : "Full Payment"}
+                          </p>
                         </div>
                       );
                     })}

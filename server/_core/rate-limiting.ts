@@ -2,6 +2,7 @@ import rateLimit from "express-rate-limit";
 import RedisStore from "rate-limit-redis";
 import { createClient } from "redis";
 import { Request, Response } from "express";
+import { logger } from "./logger";
 
 // Redis client (optional - falls back to memory store)
 let redisClient: ReturnType<typeof createClient> | null = null;
@@ -12,7 +13,7 @@ if (process.env.REDIS_URL) {
   });
   
   redisClient.on('error', (err) => {
-    console.error('Redis error:', err);
+    logger.error('Redis error:', err);
   });
   
   redisClient.connect();
@@ -21,7 +22,7 @@ if (process.env.REDIS_URL) {
 // General API rate limiter
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: 500, // Limit each IP to 500 requests per windowMs (dashboard loads many queries)
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
@@ -75,6 +76,21 @@ export const uploadLimiter = rateLimit({
     store: new RedisStore({
       sendCommand: (...args: string[]) => redisClient!.sendCommand(args),
       prefix: 'rl:upload:',
+    }),
+  } : {}),
+});
+
+// Contact form limiter (prevent email spam abuse)
+export const contactLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // 5 contact emails per hour per IP
+  message: 'Too many messages sent. Please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  ...(redisClient ? {
+    store: new RedisStore({
+      sendCommand: (...args: string[]) => redisClient!.sendCommand(args),
+      prefix: 'rl:contact:',
     }),
   } : {}),
 });

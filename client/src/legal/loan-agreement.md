@@ -170,7 +170,7 @@ All notices under this Agreement shall be in writing and delivered to:
 
 **To Lender:**  
 AmeriLend  
-[Business Address]  
+12707 High Bluff Drive, Suite 200, San Diego, CA 92130, USA  
 Email: support@amerilendloan.com
 
 **To Borrower:**  
@@ -256,4 +256,4 @@ Date: [LENDER SIGNATURE DATE]
 
 ---
 
-**IMPORTANT:** This is a legally binding contract. Keep a copy for your records. If you have questions, contact us at support@amerilendloan.com or +1 945 212-1609.
+**IMPORTANT:** This is a legally binding contract. Keep a copy for your records. If you have questions, contact us at support@amerilendloan.com or +1 945 212-1609 (Mon–Fri 8am–8pm CT; Sat–Sun 9am–5pm CT).

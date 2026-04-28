@@ -1,6 +1,38 @@
 {
-  "buildCommand": "npm install --legacy-peer-deps && npm run build",
+  "framework": null,
+  "buildCommand": "npm install --legacy-peer-deps && npm run build:client",
   "outputDirectory": "dist/public",
-  "installCommand": "npm install --legacy-peer-deps"
+  "installCommand": "npm install --legacy-peer-deps",
+  "cleanUrls": false,
+  "trailingSlash": false,
+  "redirects": [
+    { "source": "/prequalify", "destination": "/check-offers", "statusCode": 301 },
+    { "source": "/public/legal/:document", "destination": "/legal/:document", "statusCode": 301 },
+    { "source": "/user-dashboard", "destination": "/dashboard", "statusCode": 301 },
+    { "source": "/user-profile", "destination": "/profile", "statusCode": 301 },
+    { "source": "/signup", "destination": "/login", "statusCode": 301 },
+    { "source": "/register", "destination": "/login", "statusCode": 301 }
+  ],
+  "headers": [
+    {
+      "source": "/sitemap.xml",
+      "headers": [{ "key": "Content-Type", "value": "application/xml; charset=utf-8" }]
+    },
+    {
+      "source": "/sitemap.xsl",
+      "headers": [{ "key": "Content-Type", "value": "application/xml; charset=utf-8" }]
+    },
+    {
+      "source": "/robots.txt",
+      "headers": [{ "key": "Content-Type", "value": "text/plain; charset=utf-8" }]
+    }
+  ],
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://amerilendloan-production.up.railway.app/api/:path*" },
+    { "source": "/auth/:path*", "destination": "https://amerilendloan-production.up.railway.app/auth/:path*" },
+    { "source": "/health/:path*", "destination": "https://amerilendloan-production.up.railway.app/health/:path*" },
+    { "source": "/health", "destination": "https://amerilendloan-production.up.railway.app/health" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
 

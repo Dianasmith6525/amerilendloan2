@@ -8,6 +8,8 @@ import rateLimit from 'express-rate-limit';
 import geoip from 'geoip-lite';
 import { Request } from 'express';
 import * as db from '../db';
+import { sendSuspiciousActivityAlert } from './email';
+import { getIPLocation, formatLocation } from './geolocation';
 
 /**
  * Common validation schemas to prevent injection attacks
@@ -101,10 +103,20 @@ export function sanitizeString(input: string): string {
  * Validate that a string is not a SQL injection attempt
  */
 export function isSafeString(input: string): boolean {
+  // Only flag multi-keyword injection patterns, not standalone common words
   const dangerousPatterns = [
-    /(\b(UNION|SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|SCRIPT)\b)/i,
-    /(-{2}|\/\*|\*\/|;|\||&&)/,  // SQL comments and terminators
-    /(['"`].*['"`])/,  // Quoted strings
+    /\bUNION\s+(ALL\s+)?SELECT\b/i,
+    /\bSELECT\s+.*\bFROM\b/i,
+    /\bINSERT\s+INTO\b/i,
+    /\bUPDATE\s+.*\bSET\b/i,
+    /\bDELETE\s+FROM\b/i,
+    /\bDROP\s+(TABLE|DATABASE|INDEX)\b/i,
+    /\bALTER\s+TABLE\b/i,
+    /\bEXEC(UTE)?\s*\(/i,
+    /<script\b/i,
+    /(-{2})/,              // SQL line comments
+    /(\/\*|\*\/)/,        // SQL block comments
+    /(;\s*(DROP|DELETE|UPDATE|INSERT|ALTER))/i,  // Chained SQL statements
   ];
 
   return !dangerousPatterns.some(pattern => pattern.test(input));
@@ -177,7 +189,7 @@ export function logSecurityEvent(
   details: string,
   timestamp: Date = new Date()
 ): void {
-  console.warn(`[SECURITY] ${eventType.toUpperCase()} - User: ${userId || 'unknown'} - ${timestamp.toISOString()} - ${details}`);
+  logger.warn(`[SECURITY] ${eventType.toUpperCase()} - User: ${userId || 'unknown'} - ${timestamp.toISOString()} - ${details}`);
   
   // In production, send to security monitoring service
   // await sendToSecurityMonitoring({ eventType, userId, details, timestamp });
@@ -223,6 +235,7 @@ export function isSafeNumber(num: number, min: number = -2147483648, max: number
  * Hash sensitive data for logging (never log actual values)
  */
 import crypto from 'crypto';
+import { logger } from "./logger";
 
 export function hashForLogging(input: string): string {
   return crypto.createHash('sha256').update(input).digest('hex').substring(0, 8);
@@ -392,12 +405,20 @@ export async function logLoginActivity(
   success: boolean,
   userAgent?: string
 ): Promise<void> {
-  const location = getGeoLocation(ipAddress);
+  // Use the async IP geolocation API for accurate location
+  const ipLocationData = await getIPLocation(ipAddress);
+  const location: GeoLocation = {
+    ip: ipAddress,
+    country: ipLocationData.country,
+    region: ipLocationData.state,
+    city: ipLocationData.city,
+    latitude: ipLocationData.latitude,
+    longitude: ipLocationData.longitude,
+    timezone: ipLocationData.timezone,
+  };
   
-  // Format location as "City, Country" for storage
-  const locationString = location.city && location.country
-    ? `${location.city}, ${location.country}`
-    : location.country || 'Unknown';
+  // Format location as "City, State, Country" for storage
+  const locationString = formatLocation(ipLocationData);
   
   await db.logLoginActivity(
     userId,
@@ -413,9 +434,24 @@ export async function logLoginActivity(
   if (success) {
     const suspiciousCheck = await isSuspiciousLocation(userId, location);
     if (suspiciousCheck.suspicious) {
-      console.log(`[Security] ⚠️ Suspicious login for user ${userId}: ${suspiciousCheck.reason}`);
-      // TODO: Send email notification to user about suspicious login
-      // await sendSuspiciousLoginAlert(userId, location, suspiciousCheck.reason);
+      logger.info(`[Security] ⚠️ Suspicious login for user ${userId}: ${suspiciousCheck.reason}`);
+      // Send email notification to user about suspicious login
+      try {
+        const user = await db.getUserById(userId);
+        if (user?.email) {
+          const locationStr = location.city && location.country
+            ? `${location.city}, ${location.country}`
+            : location.country || 'Unknown location';
+          await sendSuspiciousActivityAlert(
+            user.email,
+            user.name || user.email,
+            `Suspicious login detected from ${locationStr}. Reason: ${suspiciousCheck.reason}`,
+            ipAddress
+          );
+        }
+      } catch (emailErr) {
+        logger.error('[Security] Failed to send suspicious login alert email:', emailErr);
+      }
     }
   }
 }

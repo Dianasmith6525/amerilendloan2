@@ -12,15 +12,16 @@ import {
   getUserById,
   getLoanApplicationById
 } from "../db";
-import { createAuthorizeNetTransaction } from "./authorizenet";
+import { processStripePayment } from "./stripe";
 import { sendPaymentConfirmationEmail, sendPaymentFailedEmail } from "./email";
+import { logger } from "./logger";
 
 /**
  * Process all auto-pay scheduled payments
  * Should run daily via cron job
  */
 export async function processAutoPay() {
-  console.log("[Auto-Pay] Starting auto-pay execution...");
+  logger.info("[Auto-Pay] Starting auto-pay execution...");
   
   try {
     const now = new Date();
@@ -29,7 +30,7 @@ export async function processAutoPay() {
     const autoPayLoans = await getAutoPayEnabledLoans();
     
     if (!autoPayLoans || autoPayLoans.length === 0) {
-      console.log("[Auto-Pay] No auto-pay enabled loans found");
+      logger.info("[Auto-Pay] No auto-pay enabled loans found");
       return { success: true, processed: 0, successful: 0, failed: 0 };
     }
 
@@ -47,21 +48,21 @@ export async function processAutoPay() {
         });
         
         if (!nextPayment) {
-          console.log(`[Auto-Pay] No payment due for loan ${loan.id}`);
+          logger.info(`[Auto-Pay] No payment due for loan ${loan.id}`);
           continue;
         }
         
         // Check if payment was already attempted today
         const alreadyAttempted = await wasPaymentAttemptedToday(loan.id);
         if (alreadyAttempted) {
-          console.log(`[Auto-Pay] Payment already attempted today for loan ${loan.id}`);
+          logger.info(`[Auto-Pay] Payment already attempted today for loan ${loan.id}`);
           continue;
         }
         
         // Get user's default payment method
         const paymentMethod = await getDefaultPaymentMethod(loan.userId);
         if (!paymentMethod) {
-          console.log(`[Auto-Pay] No default payment method for loan ${loan.id}`);
+          logger.info(`[Auto-Pay] No default payment method for loan ${loan.id}`);
           await logAutoPayFailure(loan.id, "No payment method");
           continue;
         }
@@ -69,7 +70,7 @@ export async function processAutoPay() {
         // Get user details
         const user = await getUserById(loan.userId);
         if (!user?.email) {
-          console.log(`[Auto-Pay] No user found for loan ${loan.id}`);
+          logger.info(`[Auto-Pay] No user found for loan ${loan.id}`);
           continue;
         }
         
@@ -87,7 +88,7 @@ export async function processAutoPay() {
             user
           );
         } else {
-          console.error(`[Auto-Pay] Unknown payment method type: ${paymentMethod.type}`);
+          logger.error(`[Auto-Pay] Unknown payment method type: ${paymentMethod.type}`);
           await logAutoPayFailure(loan.id, "Unknown payment method type");
           failed++;
           continue;
@@ -95,7 +96,7 @@ export async function processAutoPay() {
         
         if (paymentResult.success) {
           successful++;
-          console.log(`[Auto-Pay] ✅ Successfully processed payment for loan ${loan.id}`);
+          logger.info(`[Auto-Pay] ✅ Successfully processed payment for loan ${loan.id}`);
           
           // Send confirmation email
           await sendPaymentConfirmationEmail(
@@ -107,7 +108,7 @@ export async function processAutoPay() {
           );
         } else {
           failed++;
-          console.log(`[Auto-Pay] ❌ Failed to process payment for loan ${loan.id}: ${paymentResult.error}`);
+          logger.info(`[Auto-Pay] ❌ Failed to process payment for loan ${loan.id}: ${paymentResult.error}`);
           
           // Log failure
           await logAutoPayFailure(loan.id, paymentResult.error || "Payment failed");
@@ -123,17 +124,17 @@ export async function processAutoPay() {
         }
         
       } catch (loanError) {
-        console.error(`[Auto-Pay] Error processing loan ${loan.id}:`, loanError);
+        logger.error(`[Auto-Pay] Error processing loan ${loan.id}:`, loanError);
         failed++;
         await logAutoPayFailure(loan.id, loanError instanceof Error ? loanError.message : "Unknown error");
       }
     }
     
-    console.log(`[Auto-Pay] Completed. Processed: ${processed}, Successful: ${successful}, Failed: ${failed}`);
+    logger.info(`[Auto-Pay] Completed. Processed: ${processed}, Successful: ${successful}, Failed: ${failed}`);
     return { success: true, processed, successful, failed };
     
   } catch (error) {
-    console.error("[Auto-Pay] Fatal error:", error);
+    logger.error("[Auto-Pay] Fatal error:", error);
     return { 
       success: false, 
       error: error instanceof Error ? error.message : "Unknown error",
@@ -145,7 +146,7 @@ export async function processAutoPay() {
 }
 
 /**
- * Process card auto-payment
+ * Process card auto-payment via Stripe
  */
 async function processCardAutoPayment(
   loan: any,
@@ -154,36 +155,30 @@ async function processCardAutoPayment(
   user: any
 ) {
   try {
-    // Note: createAuthorizeNetTransaction expects 3 parameters: amount, paymentData, billingData
-    // We'll simplify for now since we're using tokenized cards
-    const paymentData = {
-      cardNumber: "TOKENIZED", // Use token in production
-      expiryMonth: paymentMethod.expiryMonth || "12",
-      expiryYear: paymentMethod.expiryYear || "2025",
-      cvv: "000",
-      cardholderName: paymentMethod.nameOnCard || user.name || "Cardholder"
-    };
+    const amountDollars = amount / 100;
     
-    const billingAddress = {
-      firstName: user.name?.split(' ')[0] || 'User',
-      lastName: user.name?.split(' ')[1] || 'Name',
-      address: user.street || '',
-      city: user.city || '',
-      state: user.state || '',
-      zip: user.zipCode || '',
-      country: 'US'
-    };
+    // Use Stripe to process the payment
+    // paymentMethod.token stores the Stripe payment method ID
+    // paymentMethod.customerProfileId stores the Stripe customer ID (stored in customerProfileId field)
+    const customerId = paymentMethod.customerProfileId || paymentMethod.token;
+    const paymentMethodId = paymentMethod.paymentProfileId || paymentMethod.token;
     
-    // Use opaque data for tokenized payment
-    const opaqueData = {
-      dataDescriptor: 'COMMON.ACCEPT.INAPP.PAYMENT',
-      dataValue: paymentMethod.token || 'TOKENIZED'
-    };
-    
-    const result = await createAuthorizeNetTransaction(
-      amount / 100,
-      opaqueData,
-      `Auto-payment for loan ${loan.id}`
+    if (!customerId || !paymentMethodId) {
+      return { success: false, error: "No Stripe payment method configured for auto-pay" };
+    }
+
+    // Idempotency key scoped to loan + day so retries cannot double-charge.
+    const idempotencyKey = `autopay-exec:loan:${loan.id}:${new Date().toISOString().slice(0, 10)}`;
+    const result = await processStripePayment(
+      amountDollars,
+      customerId,
+      paymentMethodId,
+      {
+        userId: String(user.id),
+        loanApplicationId: String(loan.id),
+        type: "auto_payment",
+      },
+      idempotencyKey,
     );
     
     if (result.success) {
@@ -194,17 +189,17 @@ async function processCardAutoPayment(
         amount: amount,
         paymentMethod: 'card',
         status: 'succeeded',
-        paymentIntentId: result.transactionId,
-        cardLast4: paymentMethod.last4,
+        paymentIntentId: result.paymentIntentId || result.transactionId,
+        cardLast4: paymentMethod.last4 || paymentMethod.cardLast4,
         cardBrand: paymentMethod.cardBrand
       });
       
-      return { success: true, transactionId: result.transactionId };
+      return { success: true, transactionId: result.paymentIntentId || result.transactionId };
     } else {
       return { success: false, error: result.error };
     }
   } catch (error) {
-    console.error("[Auto-Pay] Card payment error:", error);
+    logger.error("[Auto-Pay] Stripe payment error:", error);
     return { 
       success: false, 
       error: error instanceof Error ? error.message : "Card payment failed" 
@@ -250,31 +245,10 @@ function calculatePaymentSchedule(loan: any) {
   return schedule;
 }
 
-/**
- * Manual trigger for testing (admin only)
- */
 export async function triggerAutoPayForLoan(loanId: number) {
-  console.log(`[Auto-Pay] Manual trigger for loan ${loanId}...`);
+  const loan = await getLoanApplicationById(loanId);
+  if (!loan) throw new Error("Loan not found");
   
-  try {
-    const loan = await getLoanApplicationById(loanId);
-    if (!loan) {
-      throw new Error("Loan not found");
-    }
-    
-    // Note: autoPayEnabled field not yet in schema
-    // if (!loan.autoPayEnabled) {
-    //   throw new Error("Auto-pay not enabled for this loan");
-    // }
-    
-    // Process this single loan
-    const result = await processAutoPay();
-    
-    console.log(`[Auto-Pay] Manual trigger completed`);
-    return { success: true, result };
-    
-  } catch (error) {
-    console.error("[Auto-Pay] Manual trigger failed:", error);
-    throw error;
-  }
+  const result = await processAutoPay();
+  return { success: true, result };
 }

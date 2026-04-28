@@ -2,11 +2,7 @@ import speakeasy from "speakeasy";
 import QRCode from "qrcode";
 import bcrypt from "bcryptjs";
 import { ENV } from "./env";
-import twilio from "twilio";
-
-const twilioClient = ENV.twilioAccountSid && ENV.twilioAuthToken 
-  ? twilio(ENV.twilioAccountSid, ENV.twilioAuthToken)
-  : null;
+import { logger } from "./logger";
 
 /**
  * Generate a TOTP secret for authenticator apps
@@ -32,7 +28,7 @@ export async function generateQRCode(otpauthUrl: string): Promise<string> {
     const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
     return qrCodeDataUrl;
   } catch (error) {
-    console.error("Error generating QR code:", error);
+    logger.error("Error generating QR code:", error);
     throw new Error("Failed to generate QR code");
   }
 }
@@ -97,22 +93,11 @@ export async function verifyBackupCode(
  * Send 2FA code via SMS using Twilio
  */
 export async function send2FASMS(phoneNumber: string, code: string): Promise<boolean> {
-  if (!twilioClient || !ENV.twilioPhoneNumber) {
-    console.error("Twilio not configured");
-    return false;
-  }
-
-  try {
-    await twilioClient.messages.create({
-      body: `Your AmeriLend verification code is: ${code}`,
-      from: ENV.twilioPhoneNumber,
-      to: phoneNumber,
-    });
-    return true;
-  } catch (error) {
-    console.error("Error sending 2FA SMS:", error);
-    return false;
-  }
+  // Use the centralized SMS module for consistent delivery
+  const { sendSMS } = await import("./sms");
+  const message = `Your AmeriLend verification code is: ${code}`;
+  const result = await sendSMS(phoneNumber, message);
+  return result.success;
 }
 
 /**

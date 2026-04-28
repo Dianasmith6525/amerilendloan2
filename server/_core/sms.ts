@@ -4,13 +4,14 @@
  */
 
 import { ENV } from "./env";
+import { logger } from "./logger";
 
 /**
  * Send SMS using Twilio
  */
 export async function sendSMS(to: string, message: string): Promise<{ success: boolean; error?: string }> {
   if (!ENV.twilioAccountSid || !ENV.twilioAuthToken || !ENV.twilioPhoneNumber) {
-    console.error("Twilio credentials not configured");
+    logger.error("Twilio credentials not configured");
     return { success: false, error: "SMS service not configured" };
   }
 
@@ -35,15 +36,15 @@ export async function sendSMS(to: string, message: string): Promise<{ success: b
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      console.error('Twilio API error:', errorData);
+      logger.error('Twilio API error:', errorData);
       return { success: false, error: errorData.message || 'Failed to send SMS' };
     }
 
     const data = await response.json();
-    console.log(`SMS sent successfully to ${to}. SID: ${data.sid}`);
+    logger.info(`SMS sent successfully to ${to}. SID: ${data.sid}`);
     return { success: true };
   } catch (error) {
-    console.error('Error sending SMS:', error);
+    logger.error('Error sending SMS:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
@@ -51,28 +52,22 @@ export async function sendSMS(to: string, message: string): Promise<{ success: b
 /**
  * Send OTP code via SMS
  */
-export async function sendOTPSMS(phone: string, code: string, purpose: "signup" | "login" | "reset"): Promise<void> {
+export async function sendOTPSMS(phone: string, code: string, purpose: "signup" | "login" | "reset"): Promise<{ success: boolean; error?: string }> {
   const purposeText = purpose === "reset" ? "account recovery" : purpose;
   const message = `Your AmeriLend ${purposeText} verification code is: ${code}. This code will expire in 10 minutes.`;
   
   const result = await sendSMS(phone, message);
   
   if (!result.success) {
-    console.error(`Failed to send OTP SMS to ${phone}:`, result.error);
-    // Log but don't throw - we'll still log to console as fallback
+    logger.error(`Failed to send OTP SMS to ${phone}:`, result.error);
   }
   
-  // Also log to console for development
-  console.log(`
-═══════════════════════════════════════
-  OTP CODE FOR ${purpose.toUpperCase()} (SMS)
-═══════════════════════════════════════
-  Phone: ${phone}
-  Code: ${code}
-  Purpose: ${purposeText}
-  Expires in: 10 minutes
-═══════════════════════════════════════
-  `);
+  // Log OTP delivery (code redacted for security)
+  if (process.env.NODE_ENV === "development") {
+    logger.info(`[OTP] Code sent to ${phone.slice(0, 3)}****${phone.slice(-2)} for ${purposeText}`);
+  }
+
+  return result;
 }
 
 /**

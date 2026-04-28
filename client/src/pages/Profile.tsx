@@ -3,10 +3,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Edit2, Save, X } from "lucide-react";
+import { ArrowLeft, Edit2, Save, X, Loader2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
+import {
+  COMPANY_PHONE_DISPLAY_SHORT,
+  COMPANY_PHONE_RAW,
+  COMPANY_SUPPORT_EMAIL,
+  SUPPORT_HOURS_WEEKDAY,
+  SUPPORT_HOURS_WEEKEND,
+} from "@/const";
 
 export default function Profile() {
   const { user, isAuthenticated } = useAuth();
@@ -15,6 +23,32 @@ export default function Profile() {
   const [formData, setFormData] = useState({
     name: user?.name || "",
     email: user?.email || "",
+  });
+
+  // Fetch latest user data from server
+  const { data: meData } = trpc.auth.me.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+
+  // Sync server data to form when not editing
+  useEffect(() => {
+    if (meData && !isEditing) {
+      const userData = (meData as any)?.data || meData;
+      setFormData({
+        name: userData?.name || user?.name || "",
+        email: userData?.email || user?.email || "",
+      });
+    }
+  }, [meData, isEditing]);
+
+  const updateProfile = trpc.auth.updateUserProfile.useMutation({
+    onSuccess: () => {
+      toast.success("Profile updated successfully!");
+      setIsEditing(false);
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update profile");
+    },
   });
 
   if (!isAuthenticated) {
@@ -35,9 +69,14 @@ export default function Profile() {
   }
 
   const handleSave = () => {
-    // In a real app, you would send this to the server
-    toast.success("Profile updated successfully!");
-    setIsEditing(false);
+    const nameParts = formData.name.trim().split(" ");
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || "";
+    
+    updateProfile.mutate({
+      firstName,
+      lastName,
+    });
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -112,14 +151,19 @@ export default function Profile() {
               <div className="space-y-2">
                 <Label htmlFor="email">Email Address</Label>
                 {isEditing ? (
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    className="border-gray-300"
-                  />
+                  <div>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={formData.email}
+                      disabled
+                      className="border-gray-300 bg-gray-100 text-gray-500 cursor-not-allowed"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Email address cannot be changed here. Please contact support to update your email.
+                    </p>
+                  </div>
                 ) : (
                   <div className="px-3 py-2 bg-gray-50 rounded-md border border-gray-200">
                     <p className="text-gray-800">{formData.email || "Not provided"}</p>
@@ -132,9 +176,19 @@ export default function Profile() {
                   <Button
                     onClick={handleSave}
                     className="bg-[#FFA500] hover:bg-[#FF8C00] text-white flex-1"
+                    disabled={updateProfile.isPending}
                   >
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Changes
+                    {updateProfile.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        Save Changes
+                      </>
+                    )}
                   </Button>
                 </div>
               )}
@@ -153,12 +207,22 @@ export default function Profile() {
               <div className="flex items-center justify-between py-3 border-b">
                 <span className="text-gray-600">Member Since</span>
                 <span className="font-semibold text-gray-800">
-                  {new Date().toLocaleDateString()}
+                  {(() => {
+                    const userData = (meData as any)?.data || meData;
+                    return userData?.createdAt 
+                      ? new Date(userData.createdAt).toLocaleDateString()
+                      : new Date().toLocaleDateString();
+                  })()}
                 </span>
               </div>
               <div className="flex items-center justify-between py-3">
                 <span className="text-gray-600">Account Type</span>
-                <span className="font-semibold text-gray-800">Premium</span>
+                <span className="font-semibold text-gray-800 capitalize">
+                  {(() => {
+                    const userData = (meData as any)?.data || meData;
+                    return userData?.role || "Member";
+                  })()}
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -172,8 +236,10 @@ export default function Profile() {
             <div>
               <h4 className="font-semibold mb-3">Need Help?</h4>
               <div className="space-y-2 text-sm text-white/80">
-                <p>📞 <a href="tel:+19452121609" className="hover:text-[#FFA500] transition-colors">(945) 212-1609</a></p>
-                <p>📧 <a href="mailto:support@amerilendloan.com" className="hover:text-[#FFA500] transition-colors">support@amerilendloan.com</a></p>
+                <p>📞 <a href={`tel:${COMPANY_PHONE_RAW}`} className="hover:text-[#FFA500] transition-colors">{COMPANY_PHONE_DISPLAY_SHORT}</a></p>
+                <p>📧 <a href={`mailto:${COMPANY_SUPPORT_EMAIL}`} className="hover:text-[#FFA500] transition-colors">{COMPANY_SUPPORT_EMAIL}</a></p>
+                <p>🕒 {SUPPORT_HOURS_WEEKDAY}</p>
+                <p>🕒 {SUPPORT_HOURS_WEEKEND}</p>
               </div>
             </div>
             <div>
@@ -194,7 +260,7 @@ export default function Profile() {
             </div>
           </div>
           <div className="border-t border-white/20 pt-6 text-center text-xs text-white/70">
-            <p>© 2025 AmeriLend, LLC. All Rights Reserved.</p>
+            <p>© {new Date().getFullYear()} AmeriLend, LLC. All Rights Reserved.</p>
             <p className="mt-2">Your trusted partner for consumer loans.</p>
           </div>
         </div>

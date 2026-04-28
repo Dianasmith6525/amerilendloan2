@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { ENV } from './env';
+import { logger } from './logger';
 
 /**
  * Stripe Payment Gateway Integration
@@ -12,14 +13,14 @@ let stripeClient: Stripe | undefined;
 if (ENV.stripeSecretKey) {
   try {
     stripeClient = new Stripe(ENV.stripeSecretKey, {
-      apiVersion: '2025-11-17.clover',
+      apiVersion: '2026-02-25.clover',
     });
-    console.log('[Stripe] Client initialized successfully');
+    logger.info('[Stripe] Client initialized successfully');
   } catch (error) {
-    console.error('[Stripe] Failed to initialize client:', error);
+    logger.error('[Stripe] Failed to initialize client:', error);
   }
 } else {
-  console.warn('[Stripe] STRIPE_SECRET_KEY not provided - Stripe payments disabled');
+  logger.warn('[Stripe] STRIPE_SECRET_KEY not provided - Stripe payments disabled');
 }
 
 export interface StripePaymentIntent {
@@ -48,7 +49,8 @@ export interface StripePaymentResult {
 export async function createStripePaymentIntent(
   amount: number,
   currency: string = 'usd',
-  metadata?: Record<string, string>
+  metadata?: Record<string, string>,
+  idempotencyKey?: string
 ): Promise<StripePaymentIntent> {
   if (!stripeClient) {
     return {
@@ -61,14 +63,17 @@ export async function createStripePaymentIntent(
     // Amount must be in cents for Stripe
     const amountInCents = Math.round(amount * 100);
 
-    const paymentIntent = await stripeClient.paymentIntents.create({
-      amount: amountInCents,
-      currency,
-      metadata: metadata || {},
-      automatic_payment_methods: {
-        enabled: true,
+    const paymentIntent = await stripeClient.paymentIntents.create(
+      {
+        amount: amountInCents,
+        currency,
+        metadata: metadata || {},
+        automatic_payment_methods: {
+          enabled: true,
+        },
       },
-    });
+      idempotencyKey ? { idempotencyKey } : undefined,
+    );
 
     return {
       success: true,
@@ -77,7 +82,7 @@ export async function createStripePaymentIntent(
       status: paymentIntent.status,
     };
   } catch (error: any) {
-    console.error('[Stripe] Payment Intent creation failed:', error);
+    logger.error('[Stripe] Payment Intent creation failed:', error);
     return {
       success: false,
       error: error.message || 'Failed to create payment intent',
@@ -135,7 +140,7 @@ export async function confirmStripePayment(
       };
     }
   } catch (error: any) {
-    console.error('[Stripe] Payment confirmation failed:', error);
+    logger.error('[Stripe] Payment confirmation failed:', error);
     return {
       success: false,
       error: error.message || 'Payment confirmation failed',
@@ -156,7 +161,7 @@ export async function getStripePaymentIntent(
   try {
     return await stripeClient.paymentIntents.retrieve(paymentIntentId);
   } catch (error) {
-    console.error('[Stripe] Failed to retrieve payment intent:', error);
+    logger.error('[Stripe] Failed to retrieve payment intent:', error);
     return null;
   }
 }
@@ -188,7 +193,7 @@ export async function createStripeCustomer(
       customerId: customer.id,
     };
   } catch (error: any) {
-    console.error('[Stripe] Customer creation failed:', error);
+    logger.error('[Stripe] Customer creation failed:', error);
     return {
       success: false,
       error: error.message || 'Failed to create customer',
@@ -202,7 +207,7 @@ export async function createStripeCustomer(
 export async function attachPaymentMethodToCustomer(
   paymentMethodId: string,
   customerId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; last4?: string; brand?: string }> {
   if (!stripeClient) {
     return {
       success: false,
@@ -211,13 +216,17 @@ export async function attachPaymentMethodToCustomer(
   }
 
   try {
-    await stripeClient.paymentMethods.attach(paymentMethodId, {
+    const pm = await stripeClient.paymentMethods.attach(paymentMethodId, {
       customer: customerId,
     });
 
-    return { success: true };
+    return {
+      success: true,
+      last4: pm.card?.last4 || undefined,
+      brand: pm.card?.brand || undefined,
+    };
   } catch (error: any) {
-    console.error('[Stripe] Payment method attachment failed:', error);
+    logger.error('[Stripe] Payment method attachment failed:', error);
     return {
       success: false,
       error: error.message || 'Failed to attach payment method',
@@ -232,7 +241,8 @@ export async function processStripePayment(
   amount: number,
   customerId: string,
   paymentMethodId: string,
-  metadata?: Record<string, string>
+  metadata?: Record<string, string>,
+  idempotencyKey?: string
 ): Promise<StripePaymentResult> {
   if (!stripeClient) {
     return {
@@ -244,15 +254,18 @@ export async function processStripePayment(
   try {
     const amountInCents = Math.round(amount * 100);
 
-    const paymentIntent = await stripeClient.paymentIntents.create({
-      amount: amountInCents,
-      currency: 'usd',
-      customer: customerId,
-      payment_method: paymentMethodId,
-      off_session: true,
-      confirm: true,
-      metadata: metadata || {},
-    });
+    const paymentIntent = await stripeClient.paymentIntents.create(
+      {
+        amount: amountInCents,
+        currency: 'usd',
+        customer: customerId,
+        payment_method: paymentMethodId,
+        off_session: true,
+        confirm: true,
+        metadata: metadata || {},
+      },
+      idempotencyKey ? { idempotencyKey } : undefined,
+    );
 
     if (paymentIntent.status === 'succeeded') {
       const pm = await stripeClient.paymentMethods.retrieve(paymentMethodId);
@@ -272,7 +285,7 @@ export async function processStripePayment(
       };
     }
   } catch (error: any) {
-    console.error('[Stripe] Payment processing failed:', error);
+    logger.error('[Stripe] Payment processing failed:', error);
     return {
       success: false,
       error: error.message || 'Payment processing failed',

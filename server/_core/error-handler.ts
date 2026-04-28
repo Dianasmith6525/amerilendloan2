@@ -5,6 +5,7 @@
 
 import { Request, Response, NextFunction } from "express";
 import { TRPCError } from "@trpc/server";
+import { logger } from "./logger";
 
 export interface StandardErrorResponse {
   success: false;
@@ -200,7 +201,7 @@ export function errorHandlerMiddleware(
   res: Response,
   next: NextFunction
 ): void {
-  console.error("[Error Handler]", {
+  logger.error("[Error Handler]", {
     path: req.path,
     method: req.method,
     error: err.message,

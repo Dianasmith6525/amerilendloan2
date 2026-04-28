@@ -76,27 +76,14 @@ export function SocialAuthButtons({ purpose = "login", className = "" }: SocialA
     try {
       setError(null);
       setLoadingProvider("github");
-      
-      const githubClientId = import.meta.env.VITE_GITHUB_CLIENT_ID;
-      if (!validateProvider("GitHub", githubClientId)) return;
 
-      const redirectUri = `${window.location.origin}/auth/github/callback`;
-      const scope = "read:user user:email";
-      const state = btoa(JSON.stringify({ 
-        purpose, 
-        timestamp: Date.now(),
-        nonce: Math.random().toString(36).substring(7)
-      }));
-      
       const params = new URLSearchParams({
-        client_id: githubClientId,
-        redirect_uri: redirectUri,
-        scope: scope,
-        state: state,
-        allow_signup: purpose === "signup" ? "true" : "false",
+        purpose,
       });
-      
-      redirectToOAuth(`https://github.com/login/oauth/authorize?${params}`, "GitHub");
+
+      // Delegate provider configuration to the server route so GitHub auth
+      // still works when VITE_GITHUB_CLIENT_ID is not exposed to the client.
+      redirectToOAuth(`/auth/github/start?${params.toString()}`, "GitHub");
     } catch (error) {
       console.error("[Auth] GitHub auth error:", error);
       const message = "Failed to initialize GitHub authentication";

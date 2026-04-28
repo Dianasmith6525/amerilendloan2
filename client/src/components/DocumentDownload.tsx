@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Download, FileText, Receipt, FileCheck, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
 
 interface DocumentDownloadProps {
   loanId: number;
@@ -15,25 +16,37 @@ interface DocumentDownloadProps {
 export default function DocumentDownload({ loanId, trackingNumber, status, approvedAmount, processingFeeAmount }: DocumentDownloadProps) {
   const [downloading, setDownloading] = useState<string | null>(null);
 
+  const generateDoc = trpc.documents.generate.useMutation();
+
   const handleDownload = async (docType: string) => {
     setDownloading(docType);
     
     try {
-      // Simulate document generation
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const result = await generateDoc.mutateAsync({
+        loanId,
+        documentType: docType as any,
+      });
+
+      const docData = (result as any)?.data || result;
       
-      // In production, this would call an API endpoint
-      // const response = await fetch(`/api/documents/${docType}/${loanId}`);
-      // const blob = await response.blob();
-      // const url = window.URL.createObjectURL(blob);
-      // const a = document.createElement('a');
-      // a.href = url;
-      // a.download = `${docType}_${trackingNumber}.pdf`;
-      // a.click();
-      
-      toast.success(`${docType} downloaded successfully!`);
-    } catch (error) {
-      toast.error("Failed to download document. Please try again.");
+      if (docData?.content && docData?.filename) {
+        // Create a text file blob and trigger download
+        const blob = new Blob([docData.content], { type: docData.mimeType || 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = docData.filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        toast.success(`${docType.replace(/_/g, ' ')} downloaded successfully!`);
+      } else {
+        toast.error("Document generation returned empty content");
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to download document. Please try again.");
     } finally {
       setDownloading(null);
     }

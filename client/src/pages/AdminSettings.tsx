@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { APP_LOGO } from "@/const";
+import { APP_LOGO, COMPANY_PHONE_DISPLAY_SHORT, COMPANY_SUPPORT_EMAIL } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { 
   Loader2, 
@@ -22,7 +22,10 @@ import {
   Lock,
   Users,
   FileText,
-  ArrowLeft
+  ArrowLeft,
+  Building2,
+  Wallet,
+  CreditCard
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -92,20 +95,36 @@ export default function AdminSettings() {
   const [smtpPort, setSmtpPort] = useState("587");
   const [smtpUser, setSmtpUser] = useState("");
   const [smtpPassword, setSmtpPassword] = useState("");
-  const [fromEmail, setFromEmail] = useState("noreply@amerilend.com");
+  const [fromEmail, setFromEmail] = useState("noreply@amerilendloan.com");
   const [fromName, setFromName] = useState("AmeriLend");
 
   // API Keys States
-  const [authnetLoginId, setAuthnetLoginId] = useState("");
-  const [authnetTransKey, setAuthnetTransKey] = useState("");
   const [sendgridKey, setSendgridKey] = useState("");
   const [twilioSid, setTwilioSid] = useState("");
+
+  // Company Bank Settings States (Wire/ACH)
+  const [bankName, setBankName] = useState("");
+  const [accountHolderName, setAccountHolderName] = useState("");
+  const [routingNumber, setRoutingNumber] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [bankAccountType, setBankAccountType] = useState<"checking" | "savings">("checking");
+  const [swiftCode, setSwiftCode] = useState("");
+  const [bankAddress, setBankAddress] = useState("");
+  const [bankInstructions, setBankInstructions] = useState("");
+
+  // Crypto Wallet Settings States
+  const [btcAddress, setBtcAddress] = useState("");
+  const [ethAddress, setEthAddress] = useState("");
+  const [usdtAddress, setUsdtAddress] = useState("");
+  const [usdcAddress, setUsdcAddress] = useState("");
 
   // Queries
   const { data: feeConfig } = trpc.feeConfig.getActive.useQuery();
   const { data: systemConfig } = trpc.systemConfig.get.useQuery();
   const { data: notificationSettings } = trpc.notificationConfig.get.useQuery();
   const { data: emailConfig } = trpc.emailConfig.get.useQuery();
+  const { data: companyBankSettings } = trpc.adminCompanyBank.get.useQuery();
+  const { data: cryptoWalletSettings } = trpc.adminCryptoWallet.get.useQuery();
 
   // Update fee config mutation
   const updateFeeConfigMutation = trpc.feeConfig.adminUpdate.useMutation({
@@ -161,6 +180,28 @@ export default function AdminSettings() {
     },
   });
 
+  // Company bank settings mutation
+  const updateCompanyBankMutation = trpc.adminCompanyBank.update.useMutation({
+    onSuccess: () => {
+      toast.success("Company bank settings updated successfully");
+      utils.adminCompanyBank.get.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update company bank settings");
+    },
+  });
+
+  // Crypto wallet settings mutation
+  const updateCryptoWalletMutation = trpc.adminCryptoWallet.update.useMutation({
+    onSuccess: () => {
+      toast.success("Crypto wallet settings updated successfully");
+      utils.adminCryptoWallet.get.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update crypto wallet settings");
+    },
+  });
+
   // Load existing fee config
   useEffect(() => {
     if (feeConfig) {
@@ -206,10 +247,34 @@ export default function AdminSettings() {
       setSmtpHost(emailConfig.smtpHost || "");
       setSmtpPort(String(emailConfig.smtpPort || 587));
       setSmtpUser(emailConfig.smtpUser || "");
-      setFromEmail(emailConfig.fromEmail || "noreply@amerilend.com");
+      setFromEmail(emailConfig.fromEmail || "noreply@amerilendloan.com");
       setFromName(emailConfig.fromName || "AmeriLend");
     }
   }, [emailConfig]);
+
+  // Load company bank settings
+  useEffect(() => {
+    if (companyBankSettings) {
+      setBankName(companyBankSettings.bankName || "");
+      setAccountHolderName(companyBankSettings.accountHolderName || "");
+      setRoutingNumber(companyBankSettings.routingNumber || "");
+      setAccountNumber(companyBankSettings.accountNumber || "");
+      setBankAccountType((companyBankSettings.accountType as "checking" | "savings") || "checking");
+      setSwiftCode(companyBankSettings.swiftCode || "");
+      setBankAddress(companyBankSettings.bankAddress || "");
+      setBankInstructions(companyBankSettings.instructions || "");
+    }
+  }, [companyBankSettings]);
+
+  // Load crypto wallet settings
+  useEffect(() => {
+    if (cryptoWalletSettings) {
+      setBtcAddress(cryptoWalletSettings.btcAddress || "");
+      setEthAddress(cryptoWalletSettings.ethAddress || "");
+      setUsdtAddress(cryptoWalletSettings.usdtAddress || "");
+      setUsdcAddress(cryptoWalletSettings.usdcAddress || "");
+    }
+  }, [cryptoWalletSettings]);
 
   const handleUpdateFeeConfig = () => {
     if (feeMode === "percentage") {
@@ -277,24 +342,6 @@ export default function AdminSettings() {
 
   const handleSaveAPIKeys = () => {
     const promises = [];
-    if (authnetLoginId) {
-      promises.push(
-        saveAPIKeyMutation.mutateAsync({
-          provider: "authorizenet",
-          keyName: "api_login_id",
-          value: authnetLoginId,
-        })
-      );
-    }
-    if (authnetTransKey) {
-      promises.push(
-        saveAPIKeyMutation.mutateAsync({
-          provider: "authorizenet",
-          keyName: "transaction_key",
-          value: authnetTransKey,
-        })
-      );
-    }
     if (sendgridKey) {
       promises.push(
         saveAPIKeyMutation.mutateAsync({
@@ -320,14 +367,46 @@ export default function AdminSettings() {
     Promise.all(promises)
       .then(() => {
         toast.success("All API keys saved successfully");
-        setAuthnetLoginId("");
-        setAuthnetTransKey("");
         setSendgridKey("");
         setTwilioSid("");
       })
       .catch((error) => {
         toast.error("Failed to save some API keys");
       });
+  };
+
+  const handleSaveCompanyBank = () => {
+    if (!bankName || !accountHolderName || !routingNumber || !accountNumber) {
+      toast.error("Please fill in all required bank fields");
+      return;
+    }
+    if (routingNumber.length < 9) {
+      toast.error("Routing number must be at least 9 digits");
+      return;
+    }
+    updateCompanyBankMutation.mutate({
+      bankName,
+      accountHolderName,
+      routingNumber,
+      accountNumber,
+      accountType: bankAccountType,
+      swiftCode: swiftCode || undefined,
+      bankAddress: bankAddress || undefined,
+      instructions: bankInstructions || undefined,
+    });
+  };
+
+  const handleSaveCryptoWallet = () => {
+    if (!btcAddress && !ethAddress && !usdtAddress && !usdcAddress) {
+      toast.error("Please enter at least one crypto address");
+      return;
+    }
+    updateCryptoWalletMutation.mutate({
+      btcAddress: btcAddress || undefined,
+      ethAddress: ethAddress || undefined,
+      usdtAddress: usdtAddress || undefined,
+      usdcAddress: usdcAddress || undefined,
+    });
   };
 
   return (
@@ -362,10 +441,14 @@ export default function AdminSettings() {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="fees" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5">
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6">
             <TabsTrigger value="fees" className="gap-2">
               <DollarSign className="h-4 w-4" />
               Fee Config
+            </TabsTrigger>
+            <TabsTrigger value="payment" className="gap-2">
+              <CreditCard className="h-4 w-4" />
+              Payment
             </TabsTrigger>
             <TabsTrigger value="notifications" className="gap-2">
               <Bell className="h-4 w-4" />
@@ -483,6 +566,192 @@ export default function AdminSettings() {
             </Card>
           </TabsContent>
 
+          {/* Payment Settings Tab */}
+          <TabsContent value="payment">
+            <div className="grid gap-6">
+              {/* Company Bank Settings for Wire/ACH */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    Company Bank Account (Wire/ACH)
+                  </CardTitle>
+                  <CardDescription>
+                    Configure your company bank account for receiving wire and ACH transfers
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="bankName">Bank Name *</Label>
+                      <Input
+                        id="bankName"
+                        value={bankName}
+                        onChange={(e) => setBankName(e.target.value)}
+                        placeholder="e.g., Chase Bank, Bank of America"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="accountHolderName">Account Holder Name *</Label>
+                      <Input
+                        id="accountHolderName"
+                        value={accountHolderName}
+                        onChange={(e) => setAccountHolderName(e.target.value)}
+                        placeholder="e.g., AmeriLend LLC"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="routingNumber">Routing Number (ABA) *</Label>
+                      <Input
+                        id="routingNumber"
+                        value={routingNumber}
+                        onChange={(e) => setRoutingNumber(e.target.value)}
+                        placeholder="e.g., 021000021"
+                        maxLength={9}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="accountNumber">Account Number *</Label>
+                      <Input
+                        id="accountNumber"
+                        value={accountNumber}
+                        onChange={(e) => setAccountNumber(e.target.value)}
+                        placeholder="e.g., 123456789012"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="bankAccountType">Account Type</Label>
+                      <Select value={bankAccountType} onValueChange={(v) => setBankAccountType(v as "checking" | "savings")}>
+                        <SelectTrigger id="bankAccountType">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="checking">Checking</SelectItem>
+                          <SelectItem value="savings">Savings</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="swiftCode">SWIFT Code (International)</Label>
+                      <Input
+                        id="swiftCode"
+                        value={swiftCode}
+                        onChange={(e) => setSwiftCode(e.target.value)}
+                        placeholder="e.g., CHASUS33"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bankAddress">Bank Address</Label>
+                    <Input
+                      id="bankAddress"
+                      value={bankAddress}
+                      onChange={(e) => setBankAddress(e.target.value)}
+                      placeholder="e.g., 270 Park Avenue, New York, NY 10017"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bankInstructions">Special Instructions</Label>
+                    <Textarea
+                      id="bankInstructions"
+                      value={bankInstructions}
+                      onChange={(e) => setBankInstructions(e.target.value)}
+                      placeholder="e.g., Include loan ID in memo/reference field"
+                      rows={3}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleSaveCompanyBank}
+                    disabled={updateCompanyBankMutation.isPending}
+                    className="w-full"
+                  >
+                    {updateCompanyBankMutation.isPending ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
+                    ) : (
+                      "Save Bank Settings"
+                    )}
+                  </Button>
+
+                  {/* Current Bank Preview */}
+                  {companyBankSettings && (
+                    <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <h4 className="font-semibold text-green-900 mb-2">Current Bank Account</h4>
+                      <div className="text-sm text-green-800 space-y-1">
+                        <p><strong>Bank:</strong> {companyBankSettings.bankName}</p>
+                        <p><strong>Account Holder:</strong> {companyBankSettings.accountHolderName}</p>
+                        <p><strong>Routing:</strong> {companyBankSettings.routingNumber}</p>
+                        <p><strong>Account:</strong> ****{companyBankSettings.accountNumber.slice(-4)}</p>
+                        <p><strong>Type:</strong> {companyBankSettings.accountType}</p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Crypto Wallet Settings */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Wallet className="h-5 w-5" />
+                    Cryptocurrency Wallets
+                  </CardTitle>
+                  <CardDescription>
+                    Configure wallet addresses for receiving cryptocurrency payments
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="btcAddress">Bitcoin (BTC) Address</Label>
+                    <Input
+                      id="btcAddress"
+                      value={btcAddress}
+                      onChange={(e) => setBtcAddress(e.target.value)}
+                      placeholder="e.g., bc1q..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ethAddress">Ethereum (ETH) Address</Label>
+                    <Input
+                      id="ethAddress"
+                      value={ethAddress}
+                      onChange={(e) => setEthAddress(e.target.value)}
+                      placeholder="e.g., 0x..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="usdtAddress">USDT (Tether) Address</Label>
+                    <Input
+                      id="usdtAddress"
+                      value={usdtAddress}
+                      onChange={(e) => setUsdtAddress(e.target.value)}
+                      placeholder="e.g., 0x... (ERC-20)"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="usdcAddress">USDC Address</Label>
+                    <Input
+                      id="usdcAddress"
+                      value={usdcAddress}
+                      onChange={(e) => setUsdcAddress(e.target.value)}
+                      placeholder="e.g., 0x... (ERC-20)"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleSaveCryptoWallet}
+                    disabled={updateCryptoWalletMutation.isPending}
+                    className="w-full"
+                  >
+                    {updateCryptoWalletMutation.isPending ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
+                    ) : (
+                      "Save Crypto Wallet Settings"
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
           {/* Notifications Tab */}
           <TabsContent value="notifications">
             <div className="grid gap-6">
@@ -570,7 +839,7 @@ export default function AdminSettings() {
                     <Label htmlFor="smtp-user">SMTP Username</Label>
                     <Input 
                       id="smtp-user" 
-                      placeholder="noreply@amerilend.com" 
+                      placeholder="noreply@amerilendloan.com" 
                       value={smtpUser}
                       onChange={(e) => setSmtpUser(e.target.value)}
                     />
@@ -590,7 +859,7 @@ export default function AdminSettings() {
                     <Input 
                       id="from-email" 
                       type="email"
-                      placeholder="noreply@amerilend.com" 
+                      placeholder="noreply@amerilendloan.com" 
                       value={fromEmail}
                       onChange={(e) => setFromEmail(e.target.value)}
                     />
@@ -683,25 +952,6 @@ export default function AdminSettings() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="authnet-key">Authorize.Net API Login ID</Label>
-                    <Input 
-                      id="authnet-key" 
-                      placeholder="Enter API Login ID" 
-                      value={authnetLoginId}
-                      onChange={(e) => setAuthnetLoginId(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="authnet-trans-key">Authorize.Net Transaction Key</Label>
-                    <Input 
-                      id="authnet-trans-key" 
-                      type="password" 
-                      placeholder="Enter Transaction Key" 
-                      value={authnetTransKey}
-                      onChange={(e) => setAuthnetTransKey(e.target.value)}
-                    />
-                  </div>
                   <div>
                     <Label htmlFor="sendgrid-key">SendGrid API Key</Label>
                     <Input 
@@ -890,8 +1140,8 @@ export default function AdminSettings() {
 12707 High Bluff Drive, Suite 200
 San Diego, CA 92130, USA
 
-Phone: (945) 212-1609
-Email: support@amerilendloan.com`}
+Phone: ${COMPANY_PHONE_DISPLAY_SHORT}
+Email: ${COMPANY_SUPPORT_EMAIL}`}
                   />
                 </div>
 

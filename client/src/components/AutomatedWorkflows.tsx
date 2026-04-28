@@ -5,15 +5,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { CheckCircle, XCircle, Zap, Plus, Trash2 } from "lucide-react";
+import { CheckCircle, XCircle, Zap, Plus, Trash2, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
 
 interface AutomationRule {
-  id: string;
+  id: number;
   name: string;
   enabled: boolean;
-  type: "auto-approve" | "auto-reject" | "status-transition" | "ticket-routing";
+  type: string;
   conditions: {
     field: string;
     operator: string;
@@ -26,54 +27,49 @@ interface AutomationRule {
 }
 
 export default function AutomatedWorkflows() {
-  const [rules, setRules] = useState<AutomationRule[]>([
-    {
-      id: "1",
-      name: "Auto-approve small loans",
-      enabled: true,
-      type: "auto-approve",
-      conditions: [
-        { field: "requestedAmount", operator: "<=", value: "5000" },
-        { field: "creditScore", operator: ">=", value: "650" }
-      ],
-      action: { type: "approve", value: "auto" }
-    },
-    {
-      id: "2",
-      name: "Auto-reject low credit",
-      enabled: true,
-      type: "auto-reject",
-      conditions: [
-        { field: "creditScore", operator: "<", value: "550" }
-      ],
-      action: { type: "reject", value: "Credit score below minimum threshold" }
-    },
-    {
-      id: "3",
-      name: "Auto-transition to review",
-      enabled: true,
-      type: "status-transition",
-      conditions: [
-        { field: "documentsUploaded", operator: "==", value: "true" },
-        { field: "feePaymentVerified", operator: "==", value: "true" }
-      ],
-      action: { type: "changeStatus", value: "under_review" }
-    }
-  ]);
-
   const [newRuleName, setNewRuleName] = useState("");
-  const [newRuleType, setNewRuleType] = useState<AutomationRule["type"]>("auto-approve");
+  const [newRuleType, setNewRuleType] = useState("auto-approve");
 
-  const toggleRule = (id: string) => {
-    setRules(rules.map(rule => 
-      rule.id === id ? { ...rule, enabled: !rule.enabled } : rule
-    ));
-    toast.success("Rule updated");
+  // Fetch rules from server
+  const { data: rulesData, isLoading, refetch: refetchRules } =
+    trpc.automationRules.getAll.useQuery();
+
+  const rules: AutomationRule[] = (rulesData as any)?.data || rulesData || [];
+
+  // Create rule mutation
+  const createRule = trpc.automationRules.create.useMutation({
+    onSuccess: () => {
+      refetchRules();
+      setNewRuleName("");
+      toast.success("Rule created");
+    },
+    onError: (err: any) => toast.error(err.message || "Failed to create rule"),
+  });
+
+  // Update rule mutation (for toggle)
+  const updateRule = trpc.automationRules.update.useMutation({
+    onSuccess: () => {
+      refetchRules();
+      toast.success("Rule updated");
+    },
+    onError: (err: any) => toast.error(err.message || "Failed to update rule"),
+  });
+
+  // Delete rule mutation
+  const deleteRuleMut = trpc.automationRules.delete.useMutation({
+    onSuccess: () => {
+      refetchRules();
+      toast.success("Rule deleted");
+    },
+    onError: (err: any) => toast.error(err.message || "Failed to delete rule"),
+  });
+
+  const toggleRule = (id: number, currentEnabled: boolean) => {
+    updateRule.mutate({ id, enabled: !currentEnabled });
   };
 
-  const deleteRule = (id: string) => {
-    setRules(rules.filter(rule => rule.id !== id));
-    toast.success("Rule deleted");
+  const deleteRule = (id: number) => {
+    deleteRuleMut.mutate({ id });
   };
 
   const addRule = () => {
@@ -82,21 +78,16 @@ export default function AutomatedWorkflows() {
       return;
     }
 
-    const newRule: AutomationRule = {
-      id: Date.now().toString(),
+    createRule.mutate({
       name: newRuleName,
       enabled: true,
       type: newRuleType,
       conditions: [{ field: "requestedAmount", operator: ">=", value: "0" }],
-      action: { type: "approve", value: "auto" }
-    };
-
-    setRules([...rules, newRule]);
-    setNewRuleName("");
-    toast.success("Rule created");
+      action: { type: "approve", value: "auto" },
+    });
   };
 
-  const getRuleIcon = (type: AutomationRule["type"]) => {
+  const getRuleIcon = (type: string) => {
     switch (type) {
       case "auto-approve":
         return <CheckCircle className="h-5 w-5 text-green-600" />;
@@ -109,7 +100,7 @@ export default function AutomatedWorkflows() {
     }
   };
 
-  const getRuleBadgeColor = (type: AutomationRule["type"]) => {
+  const getRuleBadgeColor = (type: string) => {
     switch (type) {
       case "auto-approve":
         return "bg-green-100 text-green-800";
@@ -188,7 +179,7 @@ export default function AutomatedWorkflows() {
               />
             </div>
             <div className="w-48">
-              <Select value={newRuleType} onValueChange={(val: any) => setNewRuleType(val)}>
+              <Select value={newRuleType} onValueChange={setNewRuleType}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -200,8 +191,12 @@ export default function AutomatedWorkflows() {
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={addRule}>
-              <Plus className="h-4 w-4 mr-2" />
+            <Button onClick={addRule} disabled={createRule.isPending}>
+              {createRule.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4 mr-2" />
+              )}
               Add Rule
             </Button>
           </div>
@@ -215,6 +210,11 @@ export default function AutomatedWorkflows() {
           <CardDescription>Manage automated workflows and processing rules</CardDescription>
         </CardHeader>
         <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 text-blue-400 animate-spin" />
+            </div>
+          ) : (
           <div className="space-y-4">
             {rules.map((rule) => (
               <Card key={rule.id} className={`border-l-4 ${rule.enabled ? 'border-l-green-500' : 'border-l-gray-300'}`}>
@@ -236,7 +236,7 @@ export default function AutomatedWorkflows() {
                         <div className="space-y-1 text-sm">
                           <p className="text-gray-600 font-medium">Conditions:</p>
                           <ul className="list-disc list-inside text-gray-700 pl-2">
-                            {rule.conditions.map((cond, idx) => (
+                            {(rule.conditions || []).map((cond: any, idx: number) => (
                               <li key={idx}>
                                 {cond.field} {cond.operator} {cond.value}
                               </li>
@@ -247,7 +247,7 @@ export default function AutomatedWorkflows() {
                         <div className="mt-2 text-sm">
                           <p className="text-gray-600 font-medium">Action:</p>
                           <p className="text-gray-700 pl-2">
-                            {rule.action.type}: {rule.action.value}
+                            {rule.action?.type}: {rule.action?.value}
                           </p>
                         </div>
                       </div>
@@ -261,7 +261,8 @@ export default function AutomatedWorkflows() {
                         <Switch
                           id={`rule-${rule.id}`}
                           checked={rule.enabled}
-                          onCheckedChange={() => toggleRule(rule.id)}
+                          onCheckedChange={() => toggleRule(rule.id, rule.enabled)}
+                          disabled={updateRule.isPending}
                         />
                       </div>
                       <Button
@@ -269,6 +270,7 @@ export default function AutomatedWorkflows() {
                         size="icon"
                         onClick={() => deleteRule(rule.id)}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        disabled={deleteRuleMut.isPending}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -286,6 +288,7 @@ export default function AutomatedWorkflows() {
               </div>
             )}
           </div>
+          )}
         </CardContent>
       </Card>
 

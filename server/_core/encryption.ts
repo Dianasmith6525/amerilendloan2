@@ -2,16 +2,17 @@ import crypto from 'crypto';
 import { ENV } from './env';
 
 /**
- * Simple AES-256-CBC encryption/decryption for sensitive data like bank passwords
- * Uses cookieSecret (JWT_SECRET) as the encryption key
+ * AES-256-CBC encryption/decryption for sensitive data (bank passwords, SSNs, card numbers).
+ * Uses a dedicated ENCRYPTION_KEY env var; falls back to JWT_SECRET for backward compatibility.
  */
 
 const ALGORITHM = 'aes-256-cbc';
 const IV_LENGTH = 16;
 
-// Derive a 32-byte key from cookieSecret
+// Derive a 32-byte key from ENCRYPTION_KEY (preferred) or cookieSecret (fallback)
 function getEncryptionKey(): Buffer {
-  return crypto.createHash('sha256').update(ENV.cookieSecret).digest();
+  const secret = ENV.encryptionKey || ENV.cookieSecret;
+  return crypto.createHash('sha256').update(secret).digest();
 }
 
 /**

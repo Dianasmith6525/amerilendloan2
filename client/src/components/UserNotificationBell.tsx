@@ -33,27 +33,46 @@ export default function UserNotificationBell() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  const handleNotificationClick = (notification: any) => {
+  const handleNotificationClick = (notification: Notification) => {
     markAsRead(notification.id);
-    
-    // Navigate based on notification type
+
+    // Prefer specific deep links from notification.data
+    const data = (notification.data || {}) as Record<string, unknown>;
+    const loanId = typeof data.loanId === "number" ? data.loanId : undefined;
+    const ticketId = typeof data.ticketId === "number" ? data.ticketId : undefined;
+    const paymentId = typeof data.paymentId === "number" ? data.paymentId : undefined;
+
     switch (notification.type) {
       case "loan_status":
-        setLocation("/dashboard#applications");
+        if (loanId) {
+          setLocation(`/loan-status?id=${loanId}`);
+        } else {
+          setLocation("/dashboard");
+        }
         break;
       case "payment":
-        setLocation("/dashboard#payments");
+        if (paymentId) {
+          setLocation(`/payment-history?id=${paymentId}`);
+        } else if (loanId) {
+          setLocation(`/loan-status?id=${loanId}`);
+        } else {
+          setLocation("/payment-history");
+        }
         break;
       case "message":
-        setLocation("/dashboard#messages");
+        if (ticketId) {
+          setLocation(`/support?ticket=${ticketId}`);
+        } else {
+          setLocation("/support");
+        }
         break;
       case "document":
-        setLocation("/dashboard#documents");
+        setLocation("/e-signatures");
         break;
       default:
         setLocation("/dashboard");
     }
-    
+
     setIsOpen(false);
   };
 

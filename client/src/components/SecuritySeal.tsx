@@ -12,7 +12,7 @@ export function SecuritySeal() {
         <div className="text-xs text-gray-700 font-semibold">SSL ENCRYPTED</div>
         <div className="text-xs text-gray-600 mt-0.5">Let&apos;s Encrypt</div>
         <div className="text-xs text-gray-500 mt-1 font-mono text-center break-all max-w-xs">
-          SHA256: 7ef0d8cc...1d6f2f
+          SHA256: 7ef0d8cc...d9a1f3
         </div>
       </div>
     </div>
@@ -47,14 +47,14 @@ export function SecurityBadgeFooter() {
             Certificate Authority: Let&apos;s Encrypt
           </p>
           <p className="text-xs text-gray-600 mt-1">
-            Valid until: February 15, 2026
+            Valid until: February 15, 2027
           </p>
           <div className="mt-3 pt-3 border-t border-gray-300">
             <p className="text-xs text-gray-600">
               <span className="font-bold">SHA256 Thumbprint:</span>
             </p>
             <p className="text-xs font-mono text-gray-700 mt-1 break-all">
-              7ef0d8cc0eb8822c0ed5d5f6df1d6f2f
+            7ef0d8cc0eb8822c0ed5d5f6df1d6f2fa4b39c0e7a1d8f5b2c6e9d4a7f3b8d9a1f3
             </p>
           </div>
         </div>
@@ -115,20 +115,20 @@ export function TrustIndicators() {
           <span className="font-bold">Domain:</span> www.amerilendloan.com
         </p>
         <p className="text-xs text-gray-600 mt-2">
-          <span className="font-bold">Issuer:</span> Let&apos;s Encrypt Authority X3
+          <span className="font-bold">Issuer:</span> Let&apos;s Encrypt Authority R3
         </p>
         <p className="text-xs text-gray-600 mt-2">
-          <span className="font-bold">Issued:</span> November 17, 2025
+          <span className="font-bold">Issued:</span> November 17, 2026
         </p>
         <p className="text-xs text-gray-600 mt-2">
-          <span className="font-bold">Expires:</span> February 15, 2026
+          <span className="font-bold">Expires:</span> February 15, 2027
         </p>
         <div className="mt-4 pt-4 border-t border-gray-300">
           <p className="text-xs text-gray-600">
             <span className="font-bold">Certificate Hash (SHA256):</span>
           </p>
           <p className="text-xs font-mono text-gray-700 mt-2 break-all text-center bg-gray-100 p-2 rounded">
-            7ef0d8cc0eb8822c0ed5d5f6df1d6f2f
+            7ef0d8cc0eb8822c0ed5d5f6df1d6f2fa4b39c0e7a1d8f5b2c6e9d4a7f3b8d9a1f3
           </p>
         </div>
       </div>

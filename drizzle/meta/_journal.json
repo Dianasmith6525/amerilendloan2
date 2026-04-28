@@ -71,6 +71,34 @@
       "when": 1764446751649,
       "tag": "0009_crazy_vampiro",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1764460159736,
+      "tag": "0010_lucky_forge",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1773765549804,
+      "tag": "0011_mighty_kid_colt",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1774093650405,
+      "tag": "0012_flowery_zeigeist",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1777006488528,
+      "tag": "0013_clumsy_solo",
+      "breakpoints": true
     }
   ]
 }

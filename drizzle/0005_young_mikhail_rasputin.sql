@@ -1,2 +1,0 @@
-ALTER TABLE `loanApplications` ADD `trackingNumber` varchar(20) NOT NULL;--> statement-breakpoint
-ALTER TABLE `loanApplications` ADD CONSTRAINT `loanApplications_trackingNumber_unique` UNIQUE(`trackingNumber`);

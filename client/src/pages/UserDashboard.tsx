@@ -6,9 +6,12 @@ import { AlertCircle, CreditCard, DollarSign, Calendar, TrendingUp } from 'lucid
 import { useLocation } from 'wouter';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { QuickPaymentButton } from '@/components/QuickPaymentButton';
+import { toast } from 'sonner';
+import { getFriendlyFullName } from '@shared/format';
 
 export function UserDashboard() {
   const [, navigate] = useLocation();
+  const utils = trpc.useUtils();
   const { data: user, isLoading: userLoading } = trpc.auth.me.useQuery(undefined, {
     enabled: true,
   });
@@ -21,8 +24,9 @@ export function UserDashboard() {
     enabled: !!user,
   });
 
-  // Debug: Log loans data
-  console.log('UserDashboard - All loans:', loans);
+  const { data: kycStatus } = trpc.userFeatures.kyc.getStatus.useQuery(undefined, {
+    enabled: !!user,
+  });
 
   if (userLoading || loansLoading) {
     return (
@@ -46,18 +50,15 @@ export function UserDashboard() {
     return sum + amount;
   }, 0) || 0;
   
-  // Note: paidAmount is in paymentSchedules table, not in loanApplications
-  // For now, we'll show $0 until we add a proper query to aggregate payments
-  const totalPaid = 0; // TODO: Query paymentSchedules table
+  const totalPaid = loans?.reduce((sum: number, loan: any) => {
+    return sum + (loan.paidAmount || 0);
+  }, 0) || 0;
   const remainingBalance = totalLoansAmount - totalPaid;
   
   // Count actually disbursed loans (not 'active' which doesn't exist)
   const disbursedLoansCount = loans?.filter((l: any) => l.status === 'disbursed').length || 0;
   
-  // Find loan that needs processing fee payment
-  // Show for approved or fee_pending status
   const loanWithPendingFee = loans?.find((loan: any) => {
-    console.log('Checking loan:', loan.id, 'status:', loan.status, 'processingFeeAmount:', loan.processingFeeAmount, 'approvedAmount:', loan.approvedAmount);
     return (loan.status === 'approved' || loan.status === 'fee_pending') && loan.approvedAmount && loan.approvedAmount > 0;
   });
   
@@ -71,7 +72,7 @@ export function UserDashboard() {
         {/* Welcome Section */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
-            Welcome back, {user?.firstName || user?.email}!
+            Welcome back, {getFriendlyFullName(user)}!
           </h1>
           <p className="text-slate-600 dark:text-slate-400">
             Here's an overview of your loan accounts and payments
@@ -126,7 +127,8 @@ export function UserDashboard() {
                     applicationId={loanWithPendingFee.id}
                     processingFeeAmount={processingFee}
                     onPaymentComplete={() => {
-                      // Optionally navigate or show success
+                      utils.loans.myLoans.invalidate();
+                      toast.success("Payment completed successfully!");
                     }}
                   />
                 </div>
@@ -233,7 +235,12 @@ export function UserDashboard() {
                       {activeLoan.status}
                     </Badge>
                   </CardTitle>
-                  <CardDescription>Loan #{activeLoan.trackingNumber}</CardDescription>
+                  <CardDescription>
+                    Loan #{activeLoan.trackingNumber}
+                    {activeLoan.loanAccountNumber && (
+                      <span className="ml-2 text-slate-500">• Account ····{activeLoan.loanAccountNumber.slice(-4)}</span>
+                    )}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -303,6 +310,50 @@ export function UserDashboard() {
                       </p>
                     </div>
                   </div>
+
+                  {/* Disbursement Bank Info */}
+                  {(activeLoan.disbursementAccountHolderName || activeLoan.disbursementAccountNumberMasked) && (
+                    <div className="mt-3 p-3 bg-blue-100/50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
+                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide mb-2">Disbursement Account</p>
+                      {activeLoan.disbursementAccountType === "amerilend" || activeLoan.disbursementAccountHolderName === "AmeriLend Account" ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">🏦</span>
+                          <div>
+                            <p className="font-medium text-blue-900 dark:text-blue-100">AmeriLend Bank Account</p>
+                            <p className="text-xs text-blue-500 dark:text-blue-400">Instant deposit — funds available immediately</p>
+                          </div>
+                        </div>
+                      ) : (
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        {activeLoan.disbursementAccountHolderName && (
+                          <div>
+                            <p className="text-blue-500 dark:text-blue-400 text-xs">Account Holder</p>
+                            <p className="font-medium text-blue-900 dark:text-blue-100">{activeLoan.disbursementAccountHolderName}</p>
+                          </div>
+                        )}
+                        {activeLoan.disbursementAccountNumberMasked && (
+                          <div>
+                            <p className="text-blue-500 dark:text-blue-400 text-xs">Account Number</p>
+                            <p className="font-medium text-blue-900 dark:text-blue-100">{activeLoan.disbursementAccountNumberMasked}</p>
+                          </div>
+                        )}
+                        {activeLoan.disbursementAccountType && (
+                          <div>
+                            <p className="text-blue-500 dark:text-blue-400 text-xs">Account Type</p>
+                            <p className="font-medium text-blue-900 dark:text-blue-100 capitalize">{activeLoan.disbursementAccountType}</p>
+                          </div>
+                        )}
+                        {activeLoan.bankName && (
+                          <div>
+                            <p className="text-blue-500 dark:text-blue-400 text-xs">Bank</p>
+                            <p className="font-medium text-blue-900 dark:text-blue-100">{activeLoan.bankName}</p>
+                          </div>
+                        )}
+                      </div>
+                      )}
+                    </div>
+                  )}
+
                   <Button 
                     onClick={() => navigate(`/loans/${activeLoan.id}`)}
                     className="w-full"
@@ -354,7 +405,13 @@ export function UserDashboard() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <Button 
-                  onClick={() => navigate('/payment')}
+                  onClick={() => {
+                    if (activeLoan) {
+                      navigate(`/payment/${activeLoan.id}`);
+                    } else {
+                      navigate('/dashboard');
+                    }
+                  }}
                   variant="outline"
                   className="w-full justify-start"
                 >
@@ -388,6 +445,13 @@ export function UserDashboard() {
                 >
                   🎁 Referrals & Rewards
                 </Button>
+                <Button 
+                  onClick={() => navigate('/virtual-card')}
+                  variant="outline"
+                  className="w-full justify-start"
+                >
+                  💳 Virtual Debit Card
+                </Button>
               </CardContent>
             </Card>
 
@@ -399,14 +463,24 @@ export function UserDashboard() {
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-slate-600 dark:text-slate-400">KYC Verified</span>
-                  <Badge variant="outline" className="bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
-                    ✓ Verified
+                  <Badge variant="outline" className={`${
+                    (kycStatus as any)?.status === 'approved'
+                      ? 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800'
+                      : (kycStatus as any)?.status === 'pending'
+                        ? 'bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800'
+                        : 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800'
+                  }`}>
+                    {(kycStatus as any)?.status === 'approved' ? '✓ Verified' : (kycStatus as any)?.status === 'pending' ? '⏳ Pending' : '✗ Not Verified'}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-slate-600 dark:text-slate-400">Email Verified</span>
-                  <Badge variant="outline" className="bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
-                    ✓ Verified
+                  <Badge variant="outline" className={`${
+                    (user as any)?.emailVerified
+                      ? 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800'
+                      : 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800'
+                  }`}>
+                    {(user as any)?.emailVerified ? '✓ Verified' : '✗ Not Verified'}
                   </Badge>
                 </div>
                 <div className="border-t border-slate-200 dark:border-slate-700 pt-3 mt-3">

@@ -40,7 +40,7 @@ If your application is approved, we will notify you of the approved loan amount,
 
 ### 4.1 Fee Requirement
 
-All approved loans require payment of a processing fee before funds can be disbursed. The processing fee is calculated as a percentage of the approved loan amount (typically 1.5% to 2.5%) or as a fixed fee, as determined by our current fee structure.
+All approved loans require payment of a processing fee before funds can be disbursed. The current disclosed processing fee is 3.5% of the approved loan amount unless otherwise stated in your final loan disclosures.
 
 ### 4.2 Fee Payment
 
@@ -240,6 +240,7 @@ If you have questions about these Terms, please contact us at:
 **AmeriLend**  
 Email: support@amerilendloan.com  
 Phone: +1 945 212-1609  
+Support Hours: Mon–Fri 8am–8pm CT; Sat–Sun 9am–5pm CT  
 Address: 12707 High Bluff Drive, Suite 200, San Diego, CA 92130, USA
 
 ## 22. State-Specific Disclosures

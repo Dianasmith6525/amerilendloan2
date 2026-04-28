@@ -4,6 +4,7 @@
  */
 
 import { ethers } from "ethers";
+import { logger } from "./logger";
 
 /**
  * Supported blockchain networks
@@ -18,11 +19,25 @@ export interface BlockchainNetwork {
 
 /**
  * Blockchain network configurations
+ * Falls back to free public RPC endpoints when no API key is configured
  */
+const FREE_PUBLIC_ETH_RPCS = [
+  "https://cloudflare-eth.com",
+  "https://ethereum.publicnode.com",
+  "https://rpc.ankr.com/eth",
+];
+
+function buildEthRpcUrl(): string {
+  if (process.env.ETHEREUM_RPC_URL) return process.env.ETHEREUM_RPC_URL;
+  if (process.env.ALCHEMY_API_KEY) return `https://eth-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`;
+  // Fall back to first free public RPC
+  return FREE_PUBLIC_ETH_RPCS[0];
+}
+
 const NETWORKS: Record<string, BlockchainNetwork> = {
   ETH: {
     name: "Ethereum",
-    rpcUrl: process.env.ETHEREUM_RPC_URL || "https://eth-mainnet.g.alchemy.com/v2/" + (process.env.ALCHEMY_API_KEY || ""),
+    rpcUrl: buildEthRpcUrl(),
     explorerUrl: "https://etherscan.io",
     currency: "ETH",
     confirmationsRequired: 12,
@@ -81,20 +96,42 @@ export async function verifyEthereumTransaction(
     }
 
     const network = NETWORKS.ETH;
-    if (!network.rpcUrl.includes("alchemy") && !network.rpcUrl.includes("infura")) {
+    
+    // Build ordered list of RPC URLs to try: configured first, then free public fallbacks
+    const rpcCandidates: string[] = [];
+    if (process.env.ETHEREUM_RPC_URL) rpcCandidates.push(process.env.ETHEREUM_RPC_URL);
+    if (process.env.ALCHEMY_API_KEY) rpcCandidates.push(`https://eth-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`);
+    for (const url of FREE_PUBLIC_ETH_RPCS) {
+      if (!rpcCandidates.includes(url)) rpcCandidates.push(url);
+    }
+
+    let provider: ethers.JsonRpcProvider | null = null;
+    let tx: ethers.TransactionResponse | null = null;
+    for (const rpcUrl of rpcCandidates) {
+      try {
+        const candidate = new ethers.JsonRpcProvider(rpcUrl);
+        const found = await candidate.getTransaction(txHash);
+        if (found !== null) {
+          provider = candidate;
+          tx = found;
+          break;
+        }
+        // Transaction not found but RPC responded — keep this provider
+        if (!provider) provider = candidate;
+      } catch {
+        // This RPC failed; try next
+      }
+    }
+
+    if (!provider) {
       return {
         valid: false,
         confirmed: false,
         confirmations: 0,
-        message: "Blockchain RPC not configured",
+        message: "Unable to connect to Ethereum network. Please try again later.",
       };
     }
 
-    // Create provider
-    const provider = new ethers.JsonRpcProvider(network.rpcUrl);
-
-    // Get transaction
-    const tx = await provider.getTransaction(txHash);
     if (!tx) {
       return {
         valid: false,
@@ -162,7 +199,7 @@ export async function verifyEthereumTransaction(
         : `Transaction has ${confirmations}/${network.confirmationsRequired} confirmations. Please wait.`,
     };
   } catch (error) {
-    console.error("Ethereum verification error:", error);
+    logger.error("Ethereum verification error:", error);
     return {
       valid: false,
       confirmed: false,
@@ -282,7 +319,7 @@ export async function verifyBitcoinTransaction(
           : `Bitcoin transaction has ${confirmations}/${NETWORKS.BTC.confirmationsRequired} confirmations. Please wait.`,
       };
     } catch (apiError) {
-      console.error("Bitcoin API error:", apiError);
+      logger.error("Bitcoin API error:", apiError);
       return {
         valid: false,
         confirmed: false,
@@ -291,7 +328,7 @@ export async function verifyBitcoinTransaction(
       };
     }
   } catch (error) {
-    console.error("Bitcoin verification error:", error);
+    logger.error("Bitcoin verification error:", error);
     return {
       valid: false,
       confirmed: false,
@@ -370,7 +407,7 @@ export async function verifyERC20Transfer(
       message: baseTx.message,
     };
   } catch (error) {
-    console.error("ERC-20 verification error:", error);
+    logger.error("ERC-20 verification error:", error);
     return {
       valid: false,
       confirmed: false,
@@ -455,7 +492,7 @@ export async function getNetworkStatus(currency: "BTC" | "ETH"): Promise<{
       message: "Unable to check network status",
     };
   } catch (error) {
-    console.error("Network status error:", error);
+    logger.error("Network status error:", error);
     return {
       online: false,
       currentBlock: 0,

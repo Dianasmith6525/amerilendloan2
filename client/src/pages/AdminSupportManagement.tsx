@@ -1,203 +1,108 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { MessageSquare, Search, Filter, Send, CheckCircle, Clock } from "lucide-react";
+import { MessageSquare, Send, Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
-
-interface SupportTicket {
-  id: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  subject: string;
-  category: "payment" | "loan" | "kyc" | "technical" | "other";
-  status: "open" | "in-progress" | "resolved" | "closed";
-  priority: "low" | "medium" | "high";
-  createdAt: string;
-  lastUpdated: string;
-  messages: TicketMessage[];
-}
-
-interface TicketMessage {
-  id: string;
-  senderId: string;
-  senderName: string;
-  senderRole: "user" | "support";
-  message: string;
-  sentAt: string;
-}
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 export function AdminSupportManagement() {
-  const [filterStatus, setFilterStatus] = useState<"all" | "open" | "in-progress" | "resolved">("open");
-  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
   const [replyMessage, setReplyMessage] = useState("");
 
-  // Mock data - replace with TRPC call
-  const mockTickets: SupportTicket[] = [
-    {
-      id: "TKT-001",
-      userId: "USR-001",
-      userName: "John Smith",
-      userEmail: "john.smith@example.com",
-      subject: "Payment not processed",
-      category: "payment",
-      status: "in-progress",
-      priority: "high",
-      createdAt: "2024-01-20",
-      lastUpdated: "2024-01-20",
-      messages: [
-        {
-          id: "MSG-001",
-          senderId: "USR-001",
-          senderName: "John Smith",
-          senderRole: "user",
-          message: "I made a payment but it hasn't reflected in my account yet",
-          sentAt: "2024-01-20 10:30",
-        },
-        {
-          id: "MSG-002",
-          senderId: "ADMIN-001",
-          senderName: "Support Team",
-          senderRole: "support",
-          message: "We're looking into this. Can you provide your transaction ID?",
-          sentAt: "2024-01-20 11:00",
-        },
-        {
-          id: "MSG-003",
-          senderId: "USR-001",
-          senderName: "John Smith",
-          senderRole: "user",
-          message: "Sure, it's TXN-2024-001",
-          sentAt: "2024-01-20 11:30",
-        },
-      ],
-    },
-    {
-      id: "TKT-002",
-      userId: "USR-002",
-      userName: "Sarah Johnson",
-      userEmail: "sarah.j@example.com",
-      subject: "KYC document verification pending",
-      category: "kyc",
-      status: "open",
-      priority: "medium",
-      createdAt: "2024-01-19",
-      lastUpdated: "2024-01-19",
-      messages: [
-        {
-          id: "MSG-004",
-          senderId: "USR-002",
-          senderName: "Sarah Johnson",
-          senderRole: "user",
-          message: "How long does KYC verification usually take?",
-          sentAt: "2024-01-19 14:00",
-        },
-      ],
-    },
-    {
-      id: "TKT-003",
-      userId: "USR-003",
-      userName: "Michael Davis",
-      userEmail: "m.davis@example.com",
-      subject: "Loan application rejected",
-      category: "loan",
-      status: "resolved",
-      priority: "high",
-      createdAt: "2024-01-18",
-      lastUpdated: "2024-01-19",
-      messages: [
-        {
-          id: "MSG-005",
-          senderId: "USR-003",
-          senderName: "Michael Davis",
-          senderRole: "user",
-          message: "Why was my loan application rejected?",
-          sentAt: "2024-01-18 09:00",
-        },
-        {
-          id: "MSG-006",
-          senderId: "ADMIN-001",
-          senderName: "Support Team",
-          senderRole: "support",
-          message: "Your application was rejected due to KYC verification issues. Please resubmit with updated documents.",
-          sentAt: "2024-01-18 10:00",
-        },
-        {
-          id: "MSG-007",
-          senderId: "USR-003",
-          senderName: "Michael Davis",
-          senderRole: "user",
-          message: "Thank you, I'll resubmit my documents",
-          sentAt: "2024-01-19 15:00",
-        },
-      ],
-    },
-  ];
+  // Fetch all tickets with optional status filter
+  const { data: ticketsData, isLoading: ticketsLoading, refetch: refetchTickets } =
+    trpc.supportTickets.adminGetAll.useQuery(
+      { status: filterStatus === "all" ? undefined : filterStatus },
+      { refetchInterval: 15000 }
+    );
 
-  const filteredTickets = mockTickets.filter((ticket) => {
-    if (filterStatus === "all") return true;
-    return ticket.status === filterStatus;
+  // Fetch messages for selected ticket
+  const { data: messagesData, isLoading: messagesLoading, refetch: refetchMessages } =
+    trpc.supportTickets.getMessages.useQuery(
+      { ticketId: selectedTicketId! },
+      { enabled: !!selectedTicketId }
+    );
+
+  // Reply mutation
+  const addMessage = trpc.supportTickets.addMessage.useMutation({
+    onSuccess: () => {
+      setReplyMessage("");
+      refetchMessages();
+      refetchTickets();
+      toast.success("Reply sent");
+    },
+    onError: (err) => toast.error(err.message || "Failed to send reply"),
   });
+
+  // Status update mutation
+  const updateStatus = trpc.supportTickets.adminUpdateStatus.useMutation({
+    onSuccess: () => {
+      refetchTickets();
+      refetchMessages();
+      toast.success("Ticket status updated");
+    },
+    onError: (err) => toast.error(err.message || "Failed to update status"),
+  });
+
+  const tickets: any[] = (ticketsData as any)?.data || ticketsData || [];
+  const messages: any[] = (messagesData as any)?.data || messagesData || [];
+  const selectedTicket = tickets.find((t: any) => t.id === selectedTicketId);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "open":
         return <Badge className="bg-blue-600">Open</Badge>;
-      case "in-progress":
+      case "in_progress":
         return <Badge className="bg-yellow-600">In Progress</Badge>;
+      case "waiting_customer":
+        return <Badge className="bg-purple-600">Waiting</Badge>;
       case "resolved":
         return <Badge className="bg-green-600">Resolved</Badge>;
       case "closed":
         return <Badge variant="secondary">Closed</Badge>;
       default:
-        return null;
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case "high":
+      case "urgent":
         return <Badge variant="destructive">{priority.toUpperCase()}</Badge>;
       case "medium":
+      case "normal":
         return <Badge className="bg-yellow-600">{priority.toUpperCase()}</Badge>;
       case "low":
         return <Badge variant="outline">{priority.toUpperCase()}</Badge>;
       default:
-        return null;
+        return <Badge variant="outline">{priority}</Badge>;
     }
   };
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
-      case "payment":
-        return "💳";
-      case "loan":
-        return "🏦";
-      case "kyc":
-        return "📄";
-      case "technical":
-        return "⚙️";
-      default:
-        return "📋";
+      case "payment": return "💳";
+      case "loan": return "🏦";
+      case "kyc": return "📄";
+      case "technical": return "⚙️";
+      default: return "📋";
     }
   };
 
   const handleReply = () => {
-    if (replyMessage.trim() && selectedTicket) {
-      const newMessage: TicketMessage = {
-        id: `MSG-${Date.now()}`,
-        senderId: "ADMIN-001",
-        senderName: "Support Team",
-        senderRole: "support",
-        message: replyMessage,
-        sentAt: new Date().toLocaleString(),
-      };
-      selectedTicket.messages.push(newMessage);
-      setReplyMessage("");
-    }
+    if (!replyMessage.trim() || !selectedTicketId) return;
+    addMessage.mutate({
+      ticketId: selectedTicketId,
+      message: replyMessage.trim(),
+    });
+  };
+
+  const handleStatusChange = (ticketId: number, newStatus: string) => {
+    updateStatus.mutate({ id: ticketId, status: newStatus });
   };
 
   return (
@@ -217,7 +122,7 @@ export function AdminSupportManagement() {
           <Card className="bg-slate-800 border-slate-700">
             <CardContent className="pt-6">
               <div className="text-center">
-                <p className="text-3xl font-bold text-white">{mockTickets.length}</p>
+                <p className="text-3xl font-bold text-white">{tickets.length}</p>
                 <p className="text-slate-400 text-sm">Total Tickets</p>
               </div>
             </CardContent>
@@ -226,7 +131,7 @@ export function AdminSupportManagement() {
             <CardContent className="pt-6">
               <div className="text-center">
                 <p className="text-3xl font-bold text-yellow-400">
-                  {mockTickets.filter((t) => t.status === "open").length}
+                  {tickets.filter((t: any) => t.status === "open").length}
                 </p>
                 <p className="text-slate-400 text-sm">Open</p>
               </div>
@@ -236,7 +141,7 @@ export function AdminSupportManagement() {
             <CardContent className="pt-6">
               <div className="text-center">
                 <p className="text-3xl font-bold text-blue-400">
-                  {mockTickets.filter((t) => t.status === "in-progress").length}
+                  {tickets.filter((t: any) => t.status === "in_progress").length}
                 </p>
                 <p className="text-slate-400 text-sm">In Progress</p>
               </div>
@@ -246,7 +151,7 @@ export function AdminSupportManagement() {
             <CardContent className="pt-6">
               <div className="text-center">
                 <p className="text-3xl font-bold text-green-400">
-                  {mockTickets.filter((t) => t.status === "resolved").length}
+                  {tickets.filter((t: any) => t.status === "resolved").length}
                 </p>
                 <p className="text-slate-400 text-sm">Resolved</p>
               </div>
@@ -262,31 +167,48 @@ export function AdminSupportManagement() {
                 <CardTitle>Support Tickets</CardTitle>
                 <CardDescription>Manage customer inquiries and issues</CardDescription>
               </div>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as any)}
-                className="bg-slate-700 border border-slate-600 text-white rounded-md px-3 py-2"
-              >
-                <option value="all">All Status</option>
-                <option value="open">Open</option>
-                <option value="in-progress">In Progress</option>
-                <option value="resolved">Resolved</option>
-              </select>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => refetchTickets()}>
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Refresh
+                </Button>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="bg-slate-700 border border-slate-600 text-white rounded-md px-3 py-2"
+                  aria-label="Filter by status"
+                >
+                  <option value="all">All Status</option>
+                  <option value="open">Open</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="waiting_customer">Waiting Customer</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
-            {filteredTickets.length === 0 ? (
+            {ticketsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+              </div>
+            ) : tickets.length === 0 ? (
               <div className="text-center py-12">
                 <MessageSquare className="w-12 h-12 text-slate-500 mx-auto mb-4 opacity-50" />
                 <p className="text-slate-400">No tickets found</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredTickets.map((ticket) => (
+                {tickets.map((ticket: any) => (
                   <div
                     key={ticket.id}
-                    onClick={() => setSelectedTicket(ticket)}
-                    className="p-4 rounded-lg border border-slate-600 bg-slate-700/50 hover:bg-slate-700 cursor-pointer transition-all"
+                    onClick={() => setSelectedTicketId(ticket.id)}
+                    className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                      selectedTicketId === ticket.id
+                        ? "border-blue-500 bg-slate-700"
+                        : "border-slate-600 bg-slate-700/50 hover:bg-slate-700"
+                    }`}
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1">
@@ -294,11 +216,11 @@ export function AdminSupportManagement() {
                           <span className="text-lg">{getCategoryIcon(ticket.category)}</span>
                           <h3 className="text-white font-semibold">{ticket.subject}</h3>
                           <code className="text-xs bg-slate-600 text-slate-300 px-2 py-1 rounded">
-                            {ticket.id}
+                            #{ticket.id}
                           </code>
                         </div>
                         <p className="text-slate-400 text-sm">
-                          {ticket.userName} • {ticket.userEmail}
+                          User ID: {ticket.userId}
                         </p>
                       </div>
                       <div className="flex gap-2">
@@ -307,10 +229,7 @@ export function AdminSupportManagement() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-slate-400">
-                      <span>Created: {ticket.createdAt}</span>
-                      <span>•</span>
-                      <MessageSquare className="w-3 h-3" />
-                      <span>{ticket.messages.length} messages</span>
+                      <span>Created: {new Date(ticket.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>
                 ))}
@@ -330,10 +249,10 @@ export function AdminSupportManagement() {
                     {selectedTicket.subject}
                   </CardTitle>
                   <CardDescription>
-                    {selectedTicket.userName} • {selectedTicket.userEmail}
+                    Ticket #{selectedTicket.id} • User ID: {selectedTicket.userId}
                   </CardDescription>
                 </div>
-                <Button variant="outline" onClick={() => setSelectedTicket(null)}>
+                <Button variant="outline" onClick={() => setSelectedTicketId(null)}>
                   Close
                 </Button>
               </div>
@@ -343,46 +262,84 @@ export function AdminSupportManagement() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-700/50 rounded-lg">
                 <div>
                   <p className="text-slate-400 text-xs mb-1">Status</p>
-                  <p className="text-white">{getStatusBadge(selectedTicket.status)}</p>
+                  <div className="text-white">{getStatusBadge(selectedTicket.status)}</div>
                 </div>
                 <div>
                   <p className="text-slate-400 text-xs mb-1">Priority</p>
-                  <p className="text-white">{getPriorityBadge(selectedTicket.priority)}</p>
+                  <div className="text-white">{getPriorityBadge(selectedTicket.priority)}</div>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs mb-1">Category</p>
+                  <p className="text-white text-sm capitalize">{selectedTicket.category?.replace(/_/g, " ")}</p>
                 </div>
                 <div>
                   <p className="text-slate-400 text-xs mb-1">Created</p>
-                  <p className="text-white text-sm">{selectedTicket.createdAt}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-xs mb-1">Last Updated</p>
-                  <p className="text-white text-sm">{selectedTicket.lastUpdated}</p>
+                  <p className="text-white text-sm">{new Date(selectedTicket.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>
+
+              {/* Quick Status Actions */}
+              <div className="flex flex-wrap gap-2">
+                <p className="text-slate-400 text-sm mr-2 self-center">Change Status:</p>
+                {["open", "in_progress", "waiting_customer", "resolved", "closed"].map((s) => (
+                  <Button
+                    key={s}
+                    variant={selectedTicket.status === s ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleStatusChange(selectedTicket.id, s)}
+                    disabled={updateStatus.isPending || selectedTicket.status === s}
+                  >
+                    {s.replace(/_/g, " ")}
+                  </Button>
+                ))}
+              </div>
+
+              {/* Description */}
+              {selectedTicket.description && (
+                <div className="p-3 bg-slate-700/30 border border-slate-600 rounded-lg">
+                  <p className="text-slate-400 text-xs mb-1">Description</p>
+                  <p className="text-slate-300 text-sm whitespace-pre-wrap">{selectedTicket.description}</p>
+                </div>
+              )}
 
               {/* Messages */}
               <div>
                 <h3 className="text-white font-semibold mb-4">Conversation</h3>
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {selectedTicket.messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`p-3 rounded-lg ${
-                        msg.senderRole === "user"
-                          ? "bg-slate-700/30 border border-slate-600"
-                          : "bg-blue-600/20 border border-blue-600/30"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="text-white font-medium text-sm">{msg.senderName}</p>
-                        <Badge variant="outline" className="text-xs">
-                          {msg.senderRole === "user" ? "Customer" : "Support"}
-                        </Badge>
-                        <p className="text-xs text-slate-400">{msg.sentAt}</p>
+                {messagesLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
+                  </div>
+                ) : messages.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-slate-400 text-sm">No messages yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {messages.map((msg: any) => (
+                      <div
+                        key={msg.id}
+                        className={`p-3 rounded-lg ${
+                          msg.isFromAdmin
+                            ? "bg-blue-600/20 border border-blue-600/30"
+                            : "bg-slate-700/30 border border-slate-600"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-white font-medium text-sm">
+                            {msg.isFromAdmin ? "Support Team" : `User #${msg.userId}`}
+                          </p>
+                          <Badge variant="outline" className="text-xs">
+                            {msg.isFromAdmin ? "Support" : "Customer"}
+                          </Badge>
+                          <p className="text-xs text-slate-400">
+                            {new Date(msg.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                        <p className="text-slate-300 text-sm whitespace-pre-wrap">{msg.message}</p>
                       </div>
-                      <p className="text-slate-300 text-sm">{msg.message}</p>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Reply */}
@@ -398,17 +355,24 @@ export function AdminSupportManagement() {
                     <Button
                       onClick={handleReply}
                       className="bg-blue-600 hover:bg-blue-700"
-                      disabled={!replyMessage.trim()}
+                      disabled={!replyMessage.trim() || addMessage.isPending}
                     >
-                      <Send className="w-4 h-4 mr-2" />
+                      {addMessage.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4 mr-2" />
+                      )}
                       Send Reply
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => setSelectedTicket(null)}
+                      onClick={() => {
+                        handleStatusChange(selectedTicket.id, "resolved");
+                        setSelectedTicketId(null);
+                      }}
                       className="flex-1"
                     >
-                      Save & Close Ticket
+                      Resolve & Close Ticket
                     </Button>
                   </div>
                 </div>

@@ -1,1 +1,0 @@
-ALTER TABLE `otpCodes` MODIFY COLUMN `purpose` enum('signup','login','reset') NOT NULL;

@@ -18,20 +18,38 @@ const t = initTRPC.context<TrpcContext>().create({
         const message = firstError.message;
         
         // Custom messages for common validation errors
-        if (message.includes('email') || message.includes('Invalid email')) {
+        // Handle both Zod v3 ("Invalid email") and Zod v4 ("Invalid email address") formats
+        if (message.toLowerCase().includes('email') || message.toLowerCase().includes('invalid email')) {
           return {
             ...shape,
             message: "Please enter a valid email address",
           };
         }
         
-        if (message.includes('at least') && field === 'password') {
+        // Handle both Zod v3 ("at least 8") and Zod v4 (">=8 characters", "Too small") formats
+        if ((message.includes('at least') || message.includes('Too small') || message.includes('>=')) && field === 'password') {
           return {
             ...shape,
             message: "Password must be at least 8 characters long",
           };
         }
         
+        // Handle Zod v4 "Too small" for non-password fields
+        if (message.includes('Too small') || message.includes('too_small')) {
+          return {
+            ...shape,
+            message: `${field ? field.charAt(0).toUpperCase() + field.slice(1) : 'Field'} is too short`,
+          };
+        }
+
+        // Handle regex/pattern errors (Zod v4: "Invalid string: must match pattern ...")
+        if (message.includes('must match pattern') || message.includes('Invalid string')) {
+          return {
+            ...shape,
+            message: `${field ? field.charAt(0).toUpperCase() + field.slice(1) : 'Field'} has an invalid format`,
+          };
+        }
+
         if (message.includes('Required')) {
           return {
             ...shape,
@@ -39,10 +57,10 @@ const t = initTRPC.context<TrpcContext>().create({
           };
         }
         
-        // Return the original Zod message if no custom mapping
+        // Return user-friendly version of the Zod message
         return {
           ...shape,
-          message: `${field}: ${message}`,
+          message: field ? `${field.charAt(0).toUpperCase() + field.slice(1)}: ${message}` : message,
         };
       }
     }

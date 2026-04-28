@@ -8,27 +8,30 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertCircle, Download, DollarSign, Calendar, TrendingUp, Clock } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { openStatementOfAccount, downloadStatementOfAccountPdf } from '@/lib/statementOfAccount';
 
-export function LoanDetail() {
+export default function LoanDetail() {
   const [, navigate] = useLocation();
   const [, params] = useRoute('/loans/:id');
-  const loanId = parseInt(params?.id || '0');
+  const loanId = params?.id ? parseInt(params.id) : null;
 
   const { data: loans, isLoading: loansLoading } = trpc.loans.myLoans.useQuery(undefined, {
     enabled: true,
   });
 
-  const loan = loans?.find((l: any) => l.id === loanId);
+  const { data: currentUser } = trpc.auth.me.useQuery();
+
+  const loan = loanId ? loans?.find((l: any) => l.id === loanId) : null;
 
   const { data: paymentSchedule } = trpc.userFeatures.payments.get.useQuery(
-    { loanApplicationId: loanId },
+    { loanApplicationId: loanId! },
     {
       enabled: !!loanId && !!loan,
     }
   );
 
   const { data: autopaySettings } = trpc.userFeatures.payments.autopaySettings.get.useQuery(
-    { loanApplicationId: loanId },
+    { loanApplicationId: loanId! },
     {
       enabled: !!loanId && !!loan,
     }
@@ -45,7 +48,7 @@ export function LoanDetail() {
     );
   }
 
-  if (!loan) {
+  if (!loanId || !loan) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Card className="max-w-md">
@@ -77,8 +80,10 @@ export function LoanDetail() {
   
   const remainingBalance = (loan.approvedAmount || 0) - totalPaid;
   const paidPercentage = (totalPaid / (loan.approvedAmount || 1)) * 100;
-  const nextPaymentDate = new Date();
-  nextPaymentDate.setDate(nextPaymentDate.getDate() + 30);
+  
+  // Get the next upcoming pending payment from the schedule
+  const nextPendingPayment = paymentSchedule?.find((p: any) => p.status === 'pending');
+  const nextPaymentDate = nextPendingPayment ? new Date(nextPendingPayment.dueDate) : (() => { const d = new Date(); d.setDate(d.getDate() + 30); return d; })();
 
 
   return (
@@ -117,7 +122,7 @@ export function LoanDetail() {
                 </div>
                 <Button 
                   className="ml-auto"
-                  onClick={() => navigate('/payment')}
+                  onClick={() => navigate(`/payment/${loanId}`)}
                 >
                   Make Payment
                 </Button>
@@ -131,28 +136,28 @@ export function LoanDetail() {
           <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                Loan Amount
+                Requested Amount
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-slate-900 dark:text-white">
                 {formatCurrency(loan.requestedAmount)}
               </div>
-              <p className="text-xs text-slate-500 mt-1">Approved: {formatCurrency(loan.approvedAmount || 0)}</p>
+              <p className="text-xs text-slate-500 mt-1">Original request</p>
             </CardContent>
           </Card>
 
           <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                Loan Amount
+                Approved Amount
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-slate-900 dark:text-white">
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                 {formatCurrency(loan.approvedAmount || loan.requestedAmount || 0)}
               </div>
-              <p className="text-xs text-slate-500 mt-1">Approved</p>
+              <p className="text-xs text-slate-500 mt-1">Disbursed to your card</p>
             </CardContent>
           </Card>
 
@@ -322,24 +327,56 @@ export function LoanDetail() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <Button 
-                  onClick={() => navigate('/payment')}
+                  onClick={() => navigate(`/payment/${loanId}`)}
                   className="w-full"
                 >
                   💳 Make a Payment
                 </Button>
                 <Button 
-                  onClick={() => navigate(`/loans/${loanId}`)}
+                  onClick={() => navigate('/payment-preferences')}
                   variant="outline"
                   className="w-full"
                 >
                   ⚙️ Autopay Settings
                 </Button>
                 <Button 
+                  className="w-full"
+                  onClick={() => downloadStatementOfAccountPdf({
+                    loan,
+                    paymentSchedule: paymentSchedule || [],
+                    user: currentUser,
+                    totalPaid,
+                    remainingBalance,
+                    paidPayments,
+                    totalPayments,
+                  })}
+                >
+                  Download Statement (PDF)
+                </Button>
+                <Button 
                   variant="outline"
                   className="w-full"
+                  onClick={() => openStatementOfAccount({
+                    loan,
+                    paymentSchedule: paymentSchedule || [],
+                    user: currentUser,
+                    totalPaid,
+                    remainingBalance,
+                    paidPayments,
+                    totalPayments,
+                  })}
                 >
-                  📄 Download Statement
+                  View Statement
                 </Button>
+                {(loan.status === 'disbursed' || loan.status === 'fee_paid') && (
+                  <Button 
+                    onClick={() => navigate('/virtual-card')}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    💳 View Virtual Card
+                  </Button>
+                )}
               </CardContent>
             </Card>
 
@@ -381,7 +418,7 @@ export function LoanDetail() {
                   variant="secondary"
                   size="sm"
                   className="w-full mt-2"
-                  onClick={() => navigate(`/loans/${loanId}`)}
+                  onClick={() => navigate('/payment-preferences')}
                 >
                   {autopaySettings?.isEnabled ? 'Manage' : 'Enable'} Autopay
                 </Button>
@@ -403,12 +440,12 @@ export function LoanDetail() {
                 <div>
                   <p className="text-xs text-slate-600 dark:text-slate-400">Amount</p>
                   <p className="text-lg font-medium text-slate-900 dark:text-white">
-                    {formatCurrency((paymentSchedule?.[0]?.dueAmount || 0))}
+                    {formatCurrency(nextPendingPayment?.dueAmount || paymentSchedule?.[0]?.dueAmount || 0)}
                   </p>
                 </div>
                 <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
                   <Button 
-                    onClick={() => navigate('/payment')}
+                    onClick={() => navigate(`/payment/${loanId}`)}
                     className="w-full"
                   >
                     Pay Now
@@ -439,5 +476,3 @@ export function LoanDetail() {
     </div>
   );
 }
-
-export default LoanDetail;

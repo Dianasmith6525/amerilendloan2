@@ -5,12 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import SEOHead from "@/components/SEOHead";
 
 // Import markdown files as raw text
 import loanAgreementRaw from "@/legal/loan-agreement.md?raw";
 import privacyPolicyRaw from "@/legal/privacy-policy.md?raw";
 import termsOfServiceRaw from "@/legal/terms-of-service.md?raw";
 import esignConsentRaw from "@/legal/esign-consent.md?raw";
+import truthInLendingRaw from "@/legal/truth-in-lending.md?raw";
+import accessibilityRaw from "@/legal/accessibility.md?raw";
 
 interface MarkdownFile {
   content: string;
@@ -38,6 +41,16 @@ const legalDocuments: Record<string, MarkdownFile> = {
     title: "E-Signature Consent",
     description: "Your consent to use electronic signatures for legal documents",
     content: esignConsentRaw,
+  },
+  "truth-in-lending": {
+    title: "Truth in Lending Disclosure",
+    description: "Federal Truth in Lending Act disclosure with loan terms, APR, and fee information",
+    content: truthInLendingRaw,
+  },
+  "accessibility": {
+    title: "Accessibility Statement",
+    description: "Our commitment to digital accessibility and WCAG 2.1 Level AA compliance",
+    content: accessibilityRaw,
   },
 };
 
@@ -78,6 +91,11 @@ export default function LegalDocuments() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8f9fa] to-[#e9ecef]">
+      <SEOHead
+        title={`${documentData.title} | Legal`}
+        description={documentData.description}
+        path={`/legal/${documentKey}`}
+      />
       {/* Header */}
       <div className="bg-gradient-to-r from-[#0033A0] to-[#002070] text-white sticky top-0 z-40 shadow-lg">
         <div className="max-w-5xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
@@ -310,7 +328,7 @@ export default function LegalDocuments() {
         {/* Footer */}
         <div className="mt-12 text-center bg-gradient-to-r from-[#0033A0]/10 to-[#FFA500]/10 p-6 rounded-lg">
           <p className="text-sm text-gray-600 font-semibold">
-            © 2025 AmeriLend. All rights reserved. This document is confidential
+            © {new Date().getFullYear()} AmeriLend. All rights reserved. This document is confidential
             and for authorized use only.
           </p>
           <p className="text-xs mt-2 text-gray-500">

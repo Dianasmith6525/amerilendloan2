@@ -3,7 +3,11 @@ import { notifyOwner } from "./notification";
 import { adminProcedure, publicProcedure, router } from "./trpc";
 import { getDb, getDbStatus } from "../db";
 import { buildMessages, getSuggestedPrompts as getAiSuggestedPrompts } from "./aiSupport";
-import { invokeLLM } from "./llm";
+import { extractMessageText, invokeLLM } from "./llm";
+import { createBackup, restoreBackup, listBackups, getBackupHealth } from "./database-backup";
+import * as db from "../db";
+import * as path from "path";
+import { logger } from "./logger";
 
 // Helper function to get varied fallback responses based on user intent
 const getFallbackResponse = (userMessage: string): string => {
@@ -45,11 +49,11 @@ const getFallbackResponse = (userMessage: string): string => {
     return responses[Math.floor(Math.random() * responses.length)];
   }
 
-  if (msg.includes("status") || msg.includes("application")) {
+  if (msg.includes("status") || msg.includes("application") || msg.includes("track")) {
     const responses = [
-      "You can check your loan application status anytime by logging into your dashboard. We'll also send email updates at each stage of the process.",
-      "Track your application progress in real-time through your account dashboard. You'll receive notifications as your application moves through each stage.",
-      "Your application status is always available in your dashboard. We typically process applications within 24-48 hours and keep you updated via email.",
+      "You can check your loan application status anytime by logging into your dashboard. Your tracking number (e.g., APP-XXXXXX) is provided when you apply — use it in the chat or Application Tracker to check progress.",
+      "Track your application progress in real-time through your account dashboard or by providing your tracking number here. You'll receive notifications as your application moves through each stage.",
+      "Your application status is always available in your dashboard. Just share your tracking number (from your confirmation email) and I can look it up for you right away.",
     ];
     return responses[Math.floor(Math.random() * responses.length)];
   }
@@ -66,6 +70,21 @@ const getFallbackResponse = (userMessage: string): string => {
   ];
   return defaults[Math.floor(Math.random() * defaults.length)];
 };
+
+const SUPPORT_MAX_HISTORY_MESSAGES = 18;
+const SUPPORT_MAX_MESSAGE_CHARS = 2000;
+
+function normalizeSupportHistory(
+  history: Array<{ role: "user" | "assistant"; content: string }>
+): Array<{ role: "user" | "assistant"; content: string }> {
+  return history
+    .filter((msg) => typeof msg.content === "string" && msg.content.trim().length > 0)
+    .slice(-SUPPORT_MAX_HISTORY_MESSAGES)
+    .map((msg) => ({
+      role: msg.role,
+      content: msg.content.slice(0, SUPPORT_MAX_MESSAGE_CHARS),
+    }));
+}
 
 export const systemRouter = router({
   health: publicProcedure
@@ -105,7 +124,7 @@ export const systemRouter = router({
     .mutation(async ({ input, ctx }) => {
       try {
         const isAuthenticated = !!ctx.user;
-        const userContext = isAuthenticated ? {
+        let userContext: Record<string, any> = isAuthenticated ? {
           isAuthenticated: true,
           userRole: ctx.user?.role,
           userId: ctx.user?.id,
@@ -113,10 +132,46 @@ export const systemRouter = router({
           isAuthenticated: false,
         };
 
+        // For authenticated users, fetch their loan data + tracking numbers
+        if (isAuthenticated && ctx.user?.id) {
+          try {
+            const applications = await db.getLoanApplicationsByUserId(ctx.user.id);
+            if (applications && applications.length > 0) {
+              userContext.loanCount = applications.length;
+              userContext.allApplications = applications.map(app => ({
+                trackingNumber: app.trackingNumber || `LOAN-${app.id}`,
+                status: app.status,
+                requestedAmount: app.requestedAmount,
+                approvedAmount: app.approvedAmount,
+                loanType: app.loanType,
+                createdAt: app.createdAt,
+              }));
+
+              const latest = applications[0];
+              userContext.trackingNumber = latest.trackingNumber || undefined;
+              userContext.loanStatus = latest.status;
+              userContext.loanAmount = latest.requestedAmount;
+              userContext.approvalAmount = latest.approvedAmount ?? undefined;
+              userContext.applicationDate = latest.createdAt;
+              userContext.lastUpdated = latest.updatedAt;
+              userContext.email = ctx.user.email || undefined;
+
+              if (ctx.user.createdAt) {
+                const ageInDays = Math.floor(
+                  (Date.now() - new Date(ctx.user.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+                );
+                userContext.accountAge = ageInDays;
+              }
+            }
+          } catch (dbError) {
+            logger.warn('[AI Support] Failed to fetch user loans for context:', dbError);
+          }
+        }
+
         // Build conversation history with the new message
         const conversationMessages: Array<{ role: "user" | "assistant"; content: string }> = [
-          ...input.conversationHistory,
-          { role: "user", content: input.message }
+          ...normalizeSupportHistory(input.conversationHistory),
+          { role: "user", content: input.message.slice(0, SUPPORT_MAX_MESSAGE_CHARS) }
         ];
 
         // Build messages with context
@@ -124,13 +179,23 @@ export const systemRouter = router({
 
         // Try to get AI response
         try {
-          const aiResponse = await invokeLLM({ messages });
+          const aiResponse = await invokeLLM({
+            messages,
+            maxTokens: 1500,
+            temperature: 0.8,
+          });
           const responseContent = aiResponse.choices[0]?.message?.content;
-          const messageText = typeof responseContent === 'string' 
-            ? responseContent 
-            : Array.isArray(responseContent) 
-              ? responseContent.map(c => c.type === 'text' ? c.text : '').join('')
-              : '';
+          const messageText = extractMessageText(responseContent);
+
+          if (!messageText) {
+            const fallbackMsg = getFallbackResponse(input.message);
+            return {
+              success: true,
+              message: fallbackMsg,
+              isAuthenticated,
+              userContext,
+            };
+          }
               
           return {
             success: true,
@@ -139,7 +204,7 @@ export const systemRouter = router({
             userContext,
           };
         } catch (llmError) {
-          console.error('[AI Support] LLM error, using fallback:', llmError);
+          logger.error('[AI Support] LLM error, using fallback:', llmError);
           // Use fallback response if LLM fails
           const fallbackMsg = getFallbackResponse(input.message);
           return {
@@ -150,7 +215,7 @@ export const systemRouter = router({
           };
         }
       } catch (error) {
-        console.error('[AI Support] Error:', error);
+        logger.error('[AI Support] Error:', error);
         return {
           success: false,
           message: "I apologize, but I'm having trouble connecting right now. Please try again or contact support at support@amerilendloan.com or (945) 212-1609.",
@@ -165,4 +230,147 @@ export const systemRouter = router({
     const isAuthenticated = !!ctx.user;
     return getAiSuggestedPrompts(isAuthenticated);
   }),
+
+  // System Health & Monitoring (Admin Only)
+  getSystemHealth: adminProcedure
+    .query(async () => {
+      try {
+        const dbStatus = getDbStatus();
+        const backupHealth = getBackupHealth();
+        const memoryUsage = process.memoryUsage();
+        const uptimeSeconds = process.uptime();
+
+        // Check database connectivity
+        let dbConnected = false;
+        let dbResponseTime = 0;
+        try {
+          const start = Date.now();
+          const testDb = await getDb();
+          dbConnected = !!testDb;
+          dbResponseTime = Date.now() - start;
+        } catch {
+          dbConnected = false;
+        }
+
+        return {
+          database: {
+            connected: dbConnected,
+            responseTimeMs: dbResponseTime,
+            status: dbStatus,
+          },
+          backup: {
+            lastBackupTime: backupHealth.timestamp,
+            lastBackupSuccess: backupHealth.success,
+            lastBackupTables: backupHealth.tableCount,
+            lastBackupRecords: backupHealth.totalRecords,
+            lastBackupFile: backupHealth.filename,
+            lastBackupError: backupHealth.error,
+            backupFrequencyHours: 6,
+          },
+          server: {
+            uptimeSeconds: Math.floor(uptimeSeconds),
+            uptimeFormatted: `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m`,
+            memoryUsageMB: Math.round(memoryUsage.heapUsed / 1024 / 1024),
+            memoryTotalMB: Math.round(memoryUsage.heapTotal / 1024 / 1024),
+            nodeVersion: process.version,
+            environment: process.env.NODE_ENV || "development",
+          },
+        };
+      } catch (error) {
+        logger.error("[System Health] Error:", error);
+        return {
+          database: { connected: false, responseTimeMs: 0, status: "error" },
+          backup: { lastBackupTime: null, lastBackupSuccess: false, lastBackupTables: 0, lastBackupRecords: 0, lastBackupFile: null, lastBackupError: "Health check failed", backupFrequencyHours: 6 },
+          server: { uptimeSeconds: 0, uptimeFormatted: "0h 0m", memoryUsageMB: 0, memoryTotalMB: 0, nodeVersion: process.version, environment: process.env.NODE_ENV || "development" },
+        };
+      }
+    }),
+
+  // Database Backup Management (Admin Only)
+  createBackup: adminProcedure
+    .mutation(async () => {
+      try {
+        const backupPath = await createBackup();
+        if (backupPath) {
+          return {
+            success: true,
+            message: "Backup created successfully",
+            backupPath: path.basename(backupPath),
+          };
+        } else {
+          return {
+            success: false,
+            message: "Failed to create backup",
+            backupPath: null,
+          };
+        }
+      } catch (error) {
+        logger.error("[Backup] Error creating backup:", error);
+        return {
+          success: false,
+          message: `Backup failed: ${(error as Error).message}`,
+          backupPath: null,
+        };
+      }
+    }),
+
+  listBackups: adminProcedure
+    .query(async () => {
+      try {
+        const backups = listBackups();
+        return {
+          success: true,
+          backups: backups.map(b => ({
+            ...b,
+            sizeFormatted: formatBytes(b.size),
+          })),
+        };
+      } catch (error) {
+        logger.error("[Backup] Error listing backups:", error);
+        return {
+          success: false,
+          backups: [],
+        };
+      }
+    }),
+
+  restoreBackup: adminProcedure
+    .input(z.object({
+      filename: z.string().min(1, "Filename is required"),
+    }))
+    .mutation(async ({ input }) => {
+      try {
+        const backupDir = path.join(process.cwd(), "backups");
+        const backupPath = path.join(backupDir, input.filename);
+        
+        // Security check - ensure filename doesn't contain path traversal
+        if (input.filename.includes("..") || input.filename.includes("/") || input.filename.includes("\\")) {
+          return {
+            success: false,
+            message: "Invalid filename",
+          };
+        }
+        
+        const success = await restoreBackup(backupPath);
+        return {
+          success,
+          message: success ? "Backup restored successfully" : "Failed to restore backup",
+        };
+      } catch (error) {
+        logger.error("[Backup] Error restoring backup:", error);
+        return {
+          success: false,
+          message: `Restore failed: ${(error as Error).message}`,
+        };
+      }
+    }),
 });
+
+// Helper function to format bytes
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 Bytes";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}

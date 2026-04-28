@@ -10,6 +10,45 @@ import { sendOTPSMS } from "./sms";
 import { sendOTPEmail as sendEmailViaSendGrid } from "./email";
 
 /**
+ * In-memory rate limiter for OTP requests
+ * Limits each identifier (email/phone) to MAX_REQUESTS_PER_WINDOW requests per TIME_WINDOW_MS
+ */
+const otpRequestTracker = new Map<string, { count: number; windowStart: number }>();
+const MAX_REQUESTS_PER_WINDOW = 5; // max 5 OTP requests per window
+const TIME_WINDOW_MS = 15 * 60 * 1000; // 15-minute window
+
+function checkOTPRateLimit(identifier: string): { allowed: boolean; retryAfterSeconds?: number } {
+  const now = Date.now();
+  const key = identifier.toLowerCase().trim();
+  const tracker = otpRequestTracker.get(key);
+
+  if (!tracker || (now - tracker.windowStart) > TIME_WINDOW_MS) {
+    // New window
+    otpRequestTracker.set(key, { count: 1, windowStart: now });
+    return { allowed: true };
+  }
+
+  if (tracker.count >= MAX_REQUESTS_PER_WINDOW) {
+    const retryAfter = Math.ceil((tracker.windowStart + TIME_WINDOW_MS - now) / 1000);
+    return { allowed: false, retryAfterSeconds: retryAfter };
+  }
+
+  tracker.count++;
+  return { allowed: true };
+}
+
+// Clean up stale entries every 30 minutes
+setInterval(() => {
+  const now = Date.now();
+  const entries = Array.from(otpRequestTracker.entries());
+  for (const [key, tracker] of entries) {
+    if (now - tracker.windowStart > TIME_WINDOW_MS * 2) {
+      otpRequestTracker.delete(key);
+    }
+  }
+}, 30 * 60 * 1000);
+
+/**
  * Generate a 6-digit OTP code
  */
 export function generateOTP(): string {
@@ -24,6 +63,12 @@ export async function createOTP(
   purpose: "signup" | "login" | "reset",
   type: "email" | "phone" = "email"
 ): Promise<string> {
+  // Rate limit check
+  const rateCheck = checkOTPRateLimit(identifier);
+  if (!rateCheck.allowed) {
+    throw new Error(`Too many code requests. Please wait ${rateCheck.retryAfterSeconds} seconds before requesting another code.`);
+  }
+
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
@@ -164,7 +209,7 @@ export async function verifyOTPForPasswordReset(
  * Send OTP via email using SendGrid
  */
 export async function sendOTPEmail(email: string, code: string, purpose: "signup" | "login" | "reset"): Promise<void> {
-  await sendEmailViaSendGrid(email, code, purpose as "signup" | "login");
+  await sendEmailViaSendGrid(email, code, purpose);
 }
 
 /**
@@ -172,6 +217,7 @@ export async function sendOTPEmail(email: string, code: string, purpose: "signup
  */
 export async function sendOTPPhone(phone: string, code: string, purpose: "signup" | "login" | "reset"): Promise<void> {
   await sendOTPSMS(phone, code, purpose);
+  // sendOTPSMS logs the code to console as a dev fallback even if Twilio isn't configured
 }
 
 /**

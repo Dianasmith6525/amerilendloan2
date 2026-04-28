@@ -1,20 +1,39 @@
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+﻿import { SESSION_COOKIE_MS } from "@shared/const";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
-import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
 import { sendLoginNotificationEmail } from "./email";
+import { getClientIP } from "./ipUtils";
 import { getEnv } from "./env";
+import { logger } from "./logger";
+import { createSessionCode } from "./session-code";
+
+// Redirect via /api/auth/session so the Set-Cookie header is applied on a
+// direct browser navigation (Vercel's rewrite proxy may strip Set-Cookie from
+// proxied 302 responses when the cookie is set on the callback redirect).
+function redirectWithSessionHandoff(res: Response, sessionToken: string, target = "/dashboard") {
+  const handoffCode = createSessionCode(sessionToken);
+  const redirectParam = encodeURIComponent(target);
+  res.redirect(302, `/api/auth/session?code=${encodeURIComponent(handoffCode)}&redirect=${redirectParam}`);
+}
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
   return typeof value === "string" ? value : undefined;
 }
 
+// Get the base URL from request (handles both www and non-www)
+function getBaseUrl(req: Request): string {
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  const host = req.headers['x-forwarded-host'] || req.headers.host || 'amerilendloan.com';
+  return `${protocol}://${host}`;
+}
+
 // Helper to exchange OAuth code for user info
-async function exchangeGoogleCode(code: string): Promise<any> {
+async function exchangeGoogleCode(code: string, redirectUri: string): Promise<any> {
   const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = getEnv();
-  const redirectUri = `${process.env.PUBLIC_URL || "https://amerilendloan.com"}/auth/google/callback`;
+
+  logger.debug("[Google OAuth] Exchanging code");
 
   const tokenResponse = await (global.fetch as typeof fetch)("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -29,7 +48,10 @@ async function exchangeGoogleCode(code: string): Promise<any> {
   });
 
   const tokenData = (await tokenResponse.json()) as any;
-  if (!tokenData.access_token) throw new Error("Failed to get Google access token");
+  if (!tokenData.access_token) {
+    logger.error("[Google OAuth] Token exchange failed");
+    throw new Error(`Failed to get Google access token: ${tokenData.error_description || tokenData.error || 'Unknown error'}`);
+  }
 
   const userResponse = await (global.fetch as typeof fetch)("https://www.googleapis.com/oauth2/v2/userinfo", {
     headers: { Authorization: `Bearer ${tokenData.access_token}` },
@@ -45,9 +67,10 @@ async function exchangeGoogleCode(code: string): Promise<any> {
   };
 }
 
-async function exchangeGitHubCode(code: string): Promise<any> {
+async function exchangeGitHubCode(code: string, redirectUri: string): Promise<any> {
   const { GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET } = getEnv();
-  const redirectUri = `${process.env.PUBLIC_URL || "https://amerilendloan.com"}/auth/github/callback`;
+
+  logger.debug("[GitHub OAuth] Exchanging code");
 
   const tokenResponse = await (global.fetch as typeof fetch)("https://github.com/login/oauth/access_token", {
     method: "POST",
@@ -64,7 +87,10 @@ async function exchangeGitHubCode(code: string): Promise<any> {
   });
 
   const tokenData = (await tokenResponse.json()) as any;
-  if (!tokenData.access_token) throw new Error("Failed to get GitHub access token");
+  if (!tokenData.access_token) {
+    logger.error("[GitHub OAuth] Token exchange failed");
+    throw new Error(`Failed to get GitHub access token: ${tokenData.error_description || tokenData.error || 'Unknown error'}`);
+  }
 
   const userResponse = await (global.fetch as typeof fetch)("https://api.github.com/user", {
     headers: {
@@ -98,9 +124,10 @@ async function exchangeGitHubCode(code: string): Promise<any> {
   };
 }
 
-async function exchangeMicrosoftCode(code: string): Promise<any> {
+async function exchangeMicrosoftCode(code: string, redirectUri: string): Promise<any> {
   const { MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET } = getEnv();
-  const redirectUri = `${process.env.PUBLIC_URL || "https://amerilendloan.com"}/auth/microsoft/callback`;
+
+  logger.debug("[Microsoft OAuth] Exchanging code");
 
   const tokenResponse = await (global.fetch as typeof fetch)("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
     method: "POST",
@@ -115,7 +142,10 @@ async function exchangeMicrosoftCode(code: string): Promise<any> {
   });
 
   const tokenData = (await tokenResponse.json()) as any;
-  if (!tokenData.access_token) throw new Error("Failed to get Microsoft access token");
+  if (!tokenData.access_token) {
+    logger.error("[Microsoft OAuth] Token exchange failed");
+    throw new Error(`Failed to get Microsoft access token: ${tokenData.error_description || tokenData.error || 'Unknown error'}`);
+  }
 
   const userResponse = await (global.fetch as typeof fetch)("https://graph.microsoft.com/v1.0/me", {
     headers: { Authorization: `Bearer ${tokenData.access_token}` },
@@ -132,6 +162,39 @@ async function exchangeMicrosoftCode(code: string): Promise<any> {
 }
 
 export function registerOAuthRoutes(app: Express) {
+  // GitHub OAuth start route (server-side URL generation).
+  // This avoids relying on VITE_GITHUB_CLIENT_ID in the browser.
+  app.get("/auth/github/start", async (req: Request, res: Response) => {
+    try {
+      const { GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET } = getEnv();
+      if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
+        res.redirect(302, "/login?error=github_not_configured");
+        return;
+      }
+
+      const purpose = getQueryParam(req, "purpose") === "signup" ? "signup" : "login";
+      const redirectUri = `${getBaseUrl(req)}/auth/github/callback`;
+      const state = Buffer.from(JSON.stringify({
+        purpose,
+        timestamp: Date.now(),
+        nonce: Math.random().toString(36).slice(2),
+      })).toString("base64");
+
+      const params = new URLSearchParams({
+        client_id: GITHUB_CLIENT_ID,
+        redirect_uri: redirectUri,
+        scope: "read:user user:email",
+        state,
+        allow_signup: purpose === "signup" ? "true" : "false",
+      });
+
+      res.redirect(302, `https://github.com/login/oauth/authorize?${params.toString()}`);
+    } catch (error) {
+      logger.error("[GitHub OAuth] Start route failed", error);
+      res.redirect(302, "/login?error=github_start_failed");
+    }
+  });
+
   // Original Manus OAuth callback
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
@@ -151,16 +214,9 @@ export function registerOAuthRoutes(app: Express) {
         return;
       }
 
-      // Log admin login for debugging OWNER_OPEN_ID
-      console.log(`[OAuth] Login attempt - Email: ${userInfo.email}`);
-      
-      if (userInfo.email === "admin@amerilendloan.com") {
-        console.log(`🔐 ADMIN LOGIN: admin@amerilendloan.com with openId: ${userInfo.openId}`);
-        console.log(`✅ Set OWNER_OPEN_ID environment variable to: ${userInfo.openId}`);
-      }
-
-      // Explicitly set admin role if email is admin
-      const userRole = userInfo.email === "admin@amerilendloan.com" ? "admin" : undefined;
+      // Determine admin role from ADMIN_EMAIL env var
+      const adminEmail = process.env.ADMIN_EMAIL || "admin@amerilendloan.com";
+      const userRole = userInfo.email === adminEmail ? "admin" : undefined;
       
       await db.upsertUser({
         openId: userInfo.openId,
@@ -173,7 +229,7 @@ export function registerOAuthRoutes(app: Express) {
 
       // Send login notification email
       if (userInfo.email && userInfo.name) {
-        const ipAddress = req.ip || (req.headers['x-forwarded-for'] as string) || 'Unknown';
+        const ipAddress = getClientIP(req);
         const userAgent = req.headers['user-agent'];
         sendLoginNotificationEmail(
           userInfo.email,
@@ -181,20 +237,17 @@ export function registerOAuthRoutes(app: Express) {
           new Date(),
           ipAddress,
           userAgent
-        ).catch(err => console.error('Failed to send login notification:', err));
+        ).catch(err => logger.warn('Failed to send login notification:', err));
       }
 
       const sessionToken = await sdk.createSessionToken(userInfo.openId, {
         name: userInfo.name || "",
-        expiresInMs: ONE_YEAR_MS,
+        expiresInMs: SESSION_COOKIE_MS,
       });
 
-      const cookieOptions = getSessionCookieOptions(req);
-      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
-
-      res.redirect(302, "/dashboard");
+      redirectWithSessionHandoff(res, sessionToken);
     } catch (error) {
-      console.error("[OAuth] Callback failed", error);
+      logger.error("[OAuth] Callback failed", error);
       res.status(500).json({ error: "OAuth callback failed" });
     }
   });
@@ -204,8 +257,10 @@ export function registerOAuthRoutes(app: Express) {
     const code = getQueryParam(req, "code");
     const error = getQueryParam(req, "error");
 
+    logger.debug("[Google OAuth] Callback received, code exists:", !!code);
+
     if (error) {
-      console.error("[Google OAuth] Error:", error);
+      logger.warn("[Google OAuth] Error:", error);
       res.redirect(302, `/login?error=${encodeURIComponent(error)}`);
       return;
     }
@@ -216,16 +271,16 @@ export function registerOAuthRoutes(app: Express) {
     }
 
     try {
-      const userInfo = await exchangeGoogleCode(code);
+      // Build redirect URI from request to match what client sent
+      const redirectUri = `${getBaseUrl(req)}/auth/google/callback`;
+      const userInfo = await exchangeGoogleCode(code, redirectUri);
 
       // Generate a unique openId if needed (Google id prefixed with 'google_')
       const uniqueOpenId = `google_${userInfo.openId}`;
       
-      // Explicitly set admin role if email is admin
-      const userRoleGoogle = userInfo.email === "admin@amerilendloan.com" ? "admin" : undefined;
-      if (userRoleGoogle === "admin") {
-        console.log(`🔐 ADMIN LOGIN via Google: ${userInfo.email}`);
-      }
+      // Determine admin role from ADMIN_EMAIL env var
+      const adminEmail = process.env.ADMIN_EMAIL || "admin@amerilendloan.com";
+      const userRoleGoogle = userInfo.email === adminEmail ? "admin" : undefined;
 
       await db.upsertUser({
         openId: uniqueOpenId,
@@ -238,7 +293,7 @@ export function registerOAuthRoutes(app: Express) {
 
       // Send login notification email
       if (userInfo.email && userInfo.name) {
-        const ipAddress = req.ip || (req.headers['x-forwarded-for'] as string) || 'Unknown';
+        const ipAddress = getClientIP(req);
         const userAgent = req.headers['user-agent'];
         sendLoginNotificationEmail(
           userInfo.email,
@@ -246,20 +301,17 @@ export function registerOAuthRoutes(app: Express) {
           new Date(),
           ipAddress,
           userAgent
-        ).catch(err => console.error('Failed to send login notification:', err));
+        ).catch(err => logger.warn('Failed to send login notification:', err));
       }
 
       const sessionToken = await sdk.createSessionToken(uniqueOpenId, {
         name: userInfo.name || "",
-        expiresInMs: ONE_YEAR_MS,
+        expiresInMs: SESSION_COOKIE_MS,
       });
 
-      const cookieOptions = getSessionCookieOptions(req);
-      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
-
-      res.redirect(302, "/login");
+      redirectWithSessionHandoff(res, sessionToken);
     } catch (error) {
-      console.error("[Google OAuth] Callback failed", error);
+      logger.error("[Google OAuth] Callback failed", error);
       res.redirect(302, "/login?error=google_auth_failed");
     }
   });
@@ -269,8 +321,10 @@ export function registerOAuthRoutes(app: Express) {
     const code = getQueryParam(req, "code");
     const error = getQueryParam(req, "error");
 
+    logger.debug("[GitHub OAuth] Callback received, code exists:", !!code);
+
     if (error) {
-      console.error("[GitHub OAuth] Error:", error);
+      logger.warn("[GitHub OAuth] Error:", error);
       res.redirect(302, `/login?error=${encodeURIComponent(error)}`);
       return;
     }
@@ -281,16 +335,16 @@ export function registerOAuthRoutes(app: Express) {
     }
 
     try {
-      const userInfo = await exchangeGitHubCode(code);
+      // Build redirect URI from request to match what client sent
+      const redirectUri = `${getBaseUrl(req)}/auth/github/callback`;
+      const userInfo = await exchangeGitHubCode(code, redirectUri);
 
       // Generate a unique openId (GitHub id prefixed with 'github_')
       const uniqueOpenId = `github_${userInfo.openId}`;
       
-      // Explicitly set admin role if email is admin
-      const userRoleGitHub = userInfo.email === "admin@amerilendloan.com" ? "admin" : undefined;
-      if (userRoleGitHub === "admin") {
-        console.log(`🔐 ADMIN LOGIN via GitHub: ${userInfo.email}`);
-      }
+      // Determine admin role from ADMIN_EMAIL env var
+      const adminEmail = process.env.ADMIN_EMAIL || "admin@amerilendloan.com";
+      const userRoleGitHub = userInfo.email === adminEmail ? "admin" : undefined;
 
       await db.upsertUser({
         openId: uniqueOpenId,
@@ -303,7 +357,7 @@ export function registerOAuthRoutes(app: Express) {
 
       // Send login notification email
       if (userInfo.email && userInfo.name) {
-        const ipAddress = req.ip || (req.headers['x-forwarded-for'] as string) || 'Unknown';
+        const ipAddress = getClientIP(req);
         const userAgent = req.headers['user-agent'];
         sendLoginNotificationEmail(
           userInfo.email,
@@ -311,20 +365,17 @@ export function registerOAuthRoutes(app: Express) {
           new Date(),
           ipAddress,
           userAgent
-        ).catch(err => console.error('Failed to send login notification:', err));
+        ).catch(err => logger.warn('Failed to send login notification:', err));
       }
 
       const sessionToken = await sdk.createSessionToken(uniqueOpenId, {
         name: userInfo.name || "",
-        expiresInMs: ONE_YEAR_MS,
+        expiresInMs: SESSION_COOKIE_MS,
       });
 
-      const cookieOptions = getSessionCookieOptions(req);
-      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
-
-      res.redirect(302, "/login");
+      redirectWithSessionHandoff(res, sessionToken);
     } catch (error) {
-      console.error("[GitHub OAuth] Callback failed", error);
+      logger.error("[GitHub OAuth] Callback failed", error);
       res.redirect(302, "/login?error=github_auth_failed");
     }
   });
@@ -334,8 +385,10 @@ export function registerOAuthRoutes(app: Express) {
     const code = getQueryParam(req, "code");
     const error = getQueryParam(req, "error");
 
+    logger.debug("[Microsoft OAuth] Callback received, code exists:", !!code);
+
     if (error) {
-      console.error("[Microsoft OAuth] Error:", error);
+      logger.warn("[Microsoft OAuth] Error:", error);
       res.redirect(302, `/login?error=${encodeURIComponent(error)}`);
       return;
     }
@@ -346,16 +399,16 @@ export function registerOAuthRoutes(app: Express) {
     }
 
     try {
-      const userInfo = await exchangeMicrosoftCode(code);
+      // Build redirect URI from request to match what client sent
+      const redirectUri = `${getBaseUrl(req)}/auth/microsoft/callback`;
+      const userInfo = await exchangeMicrosoftCode(code, redirectUri);
 
       // Generate a unique openId (Microsoft id prefixed with 'microsoft_')
       const uniqueOpenId = `microsoft_${userInfo.openId}`;
       
-      // Explicitly set admin role if email is admin
-      const userRoleMicrosoft = userInfo.email === "admin@amerilendloan.com" ? "admin" : undefined;
-      if (userRoleMicrosoft === "admin") {
-        console.log(`🔐 ADMIN LOGIN via Microsoft: ${userInfo.email}`);
-      }
+      // Determine admin role from ADMIN_EMAIL env var
+      const adminEmail = process.env.ADMIN_EMAIL || "admin@amerilendloan.com";
+      const userRoleMicrosoft = userInfo.email === adminEmail ? "admin" : undefined;
 
       await db.upsertUser({
         openId: uniqueOpenId,
@@ -368,7 +421,7 @@ export function registerOAuthRoutes(app: Express) {
 
       // Send login notification email
       if (userInfo.email && userInfo.name) {
-        const ipAddress = req.ip || (req.headers['x-forwarded-for'] as string) || 'Unknown';
+        const ipAddress = getClientIP(req);
         const userAgent = req.headers['user-agent'];
         sendLoginNotificationEmail(
           userInfo.email,
@@ -376,20 +429,17 @@ export function registerOAuthRoutes(app: Express) {
           new Date(),
           ipAddress,
           userAgent
-        ).catch(err => console.error('Failed to send login notification:', err));
+        ).catch(err => logger.warn('Failed to send login notification:', err));
       }
 
       const sessionToken = await sdk.createSessionToken(uniqueOpenId, {
         name: userInfo.name || "",
-        expiresInMs: ONE_YEAR_MS,
+        expiresInMs: SESSION_COOKIE_MS,
       });
 
-      const cookieOptions = getSessionCookieOptions(req);
-      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
-
-      res.redirect(302, "/login");
+      redirectWithSessionHandoff(res, sessionToken);
     } catch (error) {
-      console.error("[Microsoft OAuth] Callback failed", error);
+      logger.error("[Microsoft OAuth] Callback failed", error);
       res.redirect(302, "/login?error=microsoft_auth_failed");
     }
   });

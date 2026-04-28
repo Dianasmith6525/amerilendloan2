@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { toTitleCase } from '@shared/format';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -23,8 +24,8 @@ import { toast } from 'sonner';
 
 // Form schemas
 const personalInfoSchema = z.object({
-  firstName: z.string().min(1, 'First name is required'),
-  lastName: z.string().min(1, 'Last name is required'),
+  firstName: z.string().min(1, 'First name is required').transform(toTitleCase),
+  lastName: z.string().min(1, 'Last name is required').transform(toTitleCase),
   email: z.string().email('Invalid email'),
   phone: z.string().min(10, 'Invalid phone number'),
   dateOfBirth: z.string(),
@@ -66,6 +67,9 @@ export function UserProfile() {
 
   const [isEditingPersonal, setIsEditingPersonal] = useState(false);
   const [showAddAddressForm, setShowAddAddressForm] = useState(false);
+  const [kycDocType, setKycDocType] = useState<'drivers_license_front' | 'drivers_license_back' | 'passport' | 'national_id_front' | 'national_id_back' | 'ssn_card' | 'bank_statement' | 'utility_bill' | 'pay_stub' | 'tax_return' | 'other'>('drivers_license_front');
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const kycFileInputRef = useRef<HTMLInputElement>(null);
 
   // Notification preferences state
   const [emailPaymentDue, setEmailPaymentDue] = useState(true);
@@ -76,7 +80,7 @@ export function UserProfile() {
   const [emailPromotions, setEmailPromotions] = useState(false);
 
   // Update notification preferences from server data
-  useState(() => {
+  useEffect(() => {
     if (notificationPrefs) {
       setEmailPaymentDue(notificationPrefs.emailUpdates ?? true);
       setEmailPaymentOverdue(notificationPrefs.emailUpdates ?? true);
@@ -85,7 +89,7 @@ export function UserProfile() {
       setSmsCriticalAlerts(notificationPrefs.sms ?? true);
       setEmailPromotions(notificationPrefs.promotions ?? false);
     }
-  });
+  }, [notificationPrefs]);
 
   // Personal info form
   const personalForm = useForm<PersonalInfoForm>({
@@ -98,6 +102,21 @@ export function UserProfile() {
       dateOfBirth: user?.dateOfBirth || '',
     },
   });
+
+  // Reset form values whenever fresh user data arrives so the inputs reflect
+  // the saved profile (defaultValues only run once on mount).
+  useEffect(() => {
+    if (user) {
+      personalForm.reset({
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        email: user.email || '',
+        phone: user.phoneNumber || '',
+        dateOfBirth: user.dateOfBirth || '',
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.firstName, user?.lastName, user?.email, user?.phoneNumber, user?.dateOfBirth]);
 
   // Address form
   const addressForm = useForm<AddressForm>({
@@ -115,6 +134,7 @@ export function UserProfile() {
   const updateProfileMutation = trpc.auth.updateUserProfile.useMutation({
     onSuccess: () => {
       toast.success('Profile updated successfully');
+      utils.auth.me.invalidate();
       refetchUser();
       setIsEditingPersonal(false);
     },
@@ -560,14 +580,100 @@ export function UserProfile() {
                   <h3 className="font-medium text-slate-900 dark:text-white mb-3">
                     Upload Additional Document
                   </h3>
-                  <div className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-6 text-center hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer">
-                    <Upload className="w-8 h-8 mx-auto text-slate-400 mb-2" />
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                      Drag and drop documents here or click to browse
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
-                      Supported: PDF, JPG, PNG (Max 10MB)
-                    </p>
+                  <div className="mb-3">
+                    <label className="text-sm text-slate-600 dark:text-slate-400 block mb-1">Document Type</label>
+                    <select
+                      value={kycDocType}
+                      onChange={(e) => setKycDocType(e.target.value as typeof kycDocType)}
+                      title="Select document type"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm"
+                    >
+                      <option value="drivers_license_front">Driver's License (Front)</option>
+                      <option value="drivers_license_back">Driver's License (Back)</option>
+                      <option value="passport">Passport</option>
+                      <option value="national_id_front">National ID (Front)</option>
+                      <option value="national_id_back">National ID (Back)</option>
+                      <option value="ssn_card">SSN Card</option>
+                      <option value="bank_statement">Bank Statement</option>
+                      <option value="utility_bill">Utility Bill</option>
+                      <option value="pay_stub">Pay Stub</option>
+                      <option value="tax_return">Tax Return</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <input
+                    ref={kycFileInputRef}
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    title="Upload KYC document"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 10 * 1024 * 1024) {
+                        toast.error('File must be under 10MB');
+                        return;
+                      }
+                      // Convert file to base64 data URL as the document URL
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        const dataUrl = reader.result as string;
+                        uploadDocumentMutation.mutate({
+                          documentType: kycDocType,
+                          documentUrl: dataUrl.substring(0, 500), // Store reference only
+                          expiryDate: undefined,
+                        });
+                      };
+                      reader.readAsDataURL(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <div
+                    className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
+                      isDraggingOver
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
+                        : 'border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                    }`}
+                    onClick={() => kycFileInputRef.current?.click()}
+                    onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }}
+                    onDragLeave={() => setIsDraggingOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingOver(false);
+                      const file = e.dataTransfer.files[0];
+                      if (!file) return;
+                      if (file.size > 10 * 1024 * 1024) {
+                        toast.error('File must be under 10MB');
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        const dataUrl = reader.result as string;
+                        uploadDocumentMutation.mutate({
+                          documentType: kycDocType,
+                          documentUrl: dataUrl.substring(0, 500),
+                          expiryDate: undefined,
+                        });
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                  >
+                    {uploadDocumentMutation.isPending ? (
+                      <>
+                        <div className="w-8 h-8 mx-auto mb-2 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+                        <p className="text-sm text-slate-600 dark:text-slate-400">Uploading...</p>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-8 h-8 mx-auto text-slate-400 mb-2" />
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                          Drag and drop documents here or click to browse
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
+                          Supported: PDF, JPG, PNG (Max 10MB)
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -753,38 +859,54 @@ export function UserProfile() {
                 <CardDescription>Recent notifications sent to your account</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between p-3 border border-slate-200 dark:border-slate-700 rounded-lg">
-                    <div className="flex items-center">
-                      <Badge className="bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-200 mr-3">
-                        Sent
-                      </Badge>
-                      <div>
-                        <p className="text-sm font-medium text-slate-900 dark:text-white">Payment Due Reminder</p>
-                        <p className="text-xs text-slate-600 dark:text-slate-400">Today at 9:00 AM</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between p-3 border border-slate-200 dark:border-slate-700 rounded-lg">
-                    <div className="flex items-center">
-                      <Badge className="bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-200 mr-3">
-                        Sent
-                      </Badge>
-                      <div>
-                        <p className="text-sm font-medium text-slate-900 dark:text-white">Loan Application Approved</p>
-                        <p className="text-xs text-slate-600 dark:text-slate-400">Yesterday at 2:30 PM</p>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 text-center py-4">
-                    More notifications will appear here as they are sent.
-                  </p>
-                </div>
+                <NotificationHistorySection />
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
+    </div>
+  );
+}
+
+// Sub-component for real notification history
+function NotificationHistorySection() {
+  const { data: notifications = [], isLoading } = trpc.userFeatures.notifications.list.useQuery({ limit: 10 });
+
+  if (isLoading) {
+    return <p className="text-sm text-slate-400 text-center py-4">Loading notifications...</p>;
+  }
+
+  if ((notifications as any[]).length === 0) {
+    return (
+      <p className="text-sm text-slate-600 dark:text-slate-400 text-center py-4">
+        No notifications yet. They will appear here as they are sent.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {(notifications as any[]).map((notif: any) => (
+        <div key={notif.id} className="flex items-center justify-between p-3 border border-slate-200 dark:border-slate-700 rounded-lg">
+          <div className="flex items-center">
+            <Badge className={`mr-3 ${notif.isRead
+              ? 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+              : 'bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-200'
+            }`}>
+              {notif.isRead ? 'Read' : 'New'}
+            </Badge>
+            <div>
+              <p className="text-sm font-medium text-slate-900 dark:text-white">
+                {notif.title || notif.message?.substring(0, 50) || 'Notification'}
+              </p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                {new Date(notif.createdAt).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

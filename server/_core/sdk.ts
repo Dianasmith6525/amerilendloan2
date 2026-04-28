@@ -1,4 +1,4 @@
-import { AXIOS_TIMEOUT_MS, COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { AXIOS_TIMEOUT_MS, COOKIE_NAME, SESSION_COOKIE_MS } from "@shared/const";
 import { ForbiddenError } from "@shared/_core/errors";
 import axios, { type AxiosInstance } from "axios";
 import { parse as parseCookieHeader } from "cookie";
@@ -14,6 +14,7 @@ import type {
   GetUserInfoWithJwtRequest,
   GetUserInfoWithJwtResponse,
 } from "./types/manusTypes";
+import { logger } from "./logger";
 // Utility function
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
@@ -30,9 +31,9 @@ const GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserI
 
 class OAuthService {
   constructor(private client: ReturnType<typeof axios.create>) {
-    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
+    logger.info("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
     if (!ENV.oAuthServerUrl) {
-      console.error(
+      logger.error(
         "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
       );
     }
@@ -183,7 +184,7 @@ class SDKServer {
     options: { expiresInMs?: number } = {}
   ): Promise<string> {
     const issuedAt = Date.now();
-    const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
+    const expiresInMs = options.expiresInMs ?? SESSION_COOKIE_MS;
     const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1000);
     const secretKey = this.getSessionSecret();
 
@@ -201,7 +202,9 @@ class SDKServer {
     cookieValue: string | undefined | null
   ): Promise<{ openId: string; appId: string; name: string } | null> {
     if (!cookieValue) {
-      console.warn("[Auth] Missing session cookie");
+      // Routine for unauthenticated requests (public pages, public tRPC procedures).
+      // Logged at debug to avoid filling production logs with normal traffic.
+      logger.debug("[Auth] Missing session cookie");
       return null;
     }
 
@@ -215,7 +218,7 @@ class SDKServer {
       // Only openId and appId are strictly required for a valid session.
       // Some identity providers may not supply a name; don't invalidate the session for that.
       if (!isNonEmptyString(openId) || !isNonEmptyString(appId)) {
-        console.warn("[Auth] Session payload missing required fields (openId/appId)");
+        logger.warn("[Auth] Session payload missing required fields (openId/appId)");
         return null;
       }
 
@@ -225,7 +228,18 @@ class SDKServer {
         name: typeof name === "string" ? name : "",
       };
     } catch (error) {
-      console.warn("[Auth] Session verification failed", String(error));
+      // Expired or tampered tokens are routine (e.g. cookie outlived its TTL).
+      // Only the unexpected cases (e.g. malformed JWT from a bug) deserve a warn.
+      const message = String(error);
+      const isExpected =
+        message.includes("JWTExpired") ||
+        message.includes("JWSSignatureVerificationFailed") ||
+        message.includes("JWSInvalid");
+      if (isExpected) {
+        logger.debug("[Auth] Session verification failed", message);
+      } else {
+        logger.warn("[Auth] Session verification failed", message);
+      }
       return null;
     }
   }
@@ -281,7 +295,7 @@ class SDKServer {
         });
         user = await db.getUserByOpenId(userInfo.openId);
       } catch (error) {
-        console.error("[Auth] Failed to sync user from OAuth:", error);
+        logger.error("[Auth] Failed to sync user from OAuth:", error);
         throw ForbiddenError("Failed to sync user info");
       }
     }

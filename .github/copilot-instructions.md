@@ -11,7 +11,7 @@
 - Server guards are expressed via `server/_core/trpc.ts` (`publicProcedure`, `protectedProcedure`, `adminProcedure`) and always return `UNAUTHED_ERR_MSG`/`NOT_ADMIN_ERR_MSG` from `shared/const.ts`. Matching these helpers on the client keeps auth handling predictable.
 - Authentication flows are handled by `server/_core/sdk.ts`, `cookies.ts`, and `registerOAuthRoutes`. Sessions are JWTs signed with `JWT_SECRET` and stored under `COOKIE_NAME = "app_session_id"`; refresh logic lives in `sdk.authenticateRequest`.
 - `client/src/const.ts` builds `getLoginUrl()` from `VITE_*` env vars so that the OAuth redirect URI matches the current origin. The client counts on `UNAUTHED_ERR_MSG` to redirect unauthorized queries via the `QueryClient` subscribers in `main.tsx`.
-- Payment integrations surface inside `server/_core/payments` helpers: `authorizenet.ts` (card) and `crypto-payment.ts` (mocked crypto charges with future Coinbase/Forge hooks). `router.payments` bridges these helpers to the frontend and writes payment/disbursement rows via `server/db.ts`.
+- Payment integrations surface inside `server/_core/payments` helpers: `stripe.ts` (card) and `crypto-payment.ts` (mocked crypto charges with future Coinbase/Forge hooks). `router.payments` bridges these helpers to the frontend and writes payment/disbursement rows via `server/db.ts`.
 
 ## Workflow commands
 - Development server (Express + Vite + tsx watch). Run from the repo root:
@@ -49,7 +49,7 @@ pnpm db:push
 ## Environment & integration essentials
 - Shared env keys (see `server/_core/env.ts`): `VITE_APP_ID`, `JWT_SECRET`, `DATABASE_URL`, `OAUTH_SERVER_URL`, `OWNER_OPEN_ID`, `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY`. The server logs missing values during startup.
 - Client-only `VITE_*` variables (used in `client/src/const.ts` and `tailwind` theming): `VITE_APP_TITLE`, `VITE_APP_LOGO`, `VITE_OAUTH_PORTAL_URL`. The Vite build injects them directly, so local dev should supply `.env` files or PowerShell env vars.
-- Payment environment variables surface inside `server/_core/authorizenet.ts` and `server/_core/crypto-payment.ts`: `AUTHORIZENET_API_LOGIN_ID`, `AUTHORIZENET_TRANSACTION_KEY`, `AUTHORIZENET_ENVIRONMENT`, `AUTHORIZENET_CLIENT_KEY`, `COINBASE_COMMERCE_API_KEY`, `COINBASE_COMMERCE_WEBHOOK_SECRET`, `CRYPTO_PAYMENT_ENVIRONMENT`. Missing keys mostly return friendly failures (e.g., `createAuthorizeNetTransaction` returns `success: false`).
+- Payment environment variables surface inside `server/_core/stripe.ts` and `server/_core/crypto-payment.ts`: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `COINBASE_COMMERCE_API_KEY`, `COINBASE_COMMERCE_WEBHOOK_SECRET`, `CRYPTO_PAYMENT_ENVIRONMENT`. Missing keys mostly return friendly failures (e.g., Stripe functions return `success: false`).
 - Static legal/marketing copy is served from `client/public/legal/*` and should be updated in that folder when requirements change.
 
 ## Conventions to follow

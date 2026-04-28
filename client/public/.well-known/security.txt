@@ -1,0 +1,7 @@
+Contact: mailto:security@amerilendloan.com
+Contact: mailto:support@amerilendloan.com
+Contact: tel:+1-945-212-1609
+Expires: 2027-03-18T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://amerilendloan.com/.well-known/security.txt
+Policy: https://amerilendloan.com/legal/privacy-policy

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatCurrency } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 
 export interface Notification {
@@ -11,9 +12,28 @@ export interface Notification {
   actionUrl?: string;
 }
 
+const READ_IDS_KEY = "adminNotificationsReadIds";
+const CLEARED_IDS_KEY = "adminNotificationsClearedIds";
+
+function loadIdSet(key: string): Set<number> {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) return new Set(JSON.parse(raw) as number[]);
+  } catch { /* ignore */ }
+  return new Set<number>();
+}
+
+function saveIdSet(key: string, set: Set<number>) {
+  try {
+    localStorage.setItem(key, JSON.stringify(Array.from(set)));
+  } catch { /* ignore */ }
+}
+
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [readIds, setReadIds] = useState<Set<number>>(() => loadIdSet(READ_IDS_KEY));
+  const [clearedIds, setClearedIds] = useState<Set<number>>(() => loadIdSet(CLEARED_IDS_KEY));
 
   // Poll for new notifications every 30 seconds
   const { data: stats } = trpc.loans.adminStatistics.useQuery(undefined, {
@@ -47,12 +67,10 @@ export function useNotifications() {
           id: app.id,
           type: "application",
           title: "New Loan Application",
-          message: `${app.fullName} applied for $${(
-            app.requestedAmount / 100
-          ).toFixed(2)}`,
+          message: `${app.fullName} applied for ${formatCurrency(app.requestedAmount)}`,
           read: false,
           createdAt: new Date(app.createdAt),
-          actionUrl: `/admin`,
+          actionUrl: `/admin/application/${app.id}`,
         });
       });
     }
@@ -71,7 +89,7 @@ export function useNotifications() {
           message: `#${ticket.id}: ${ticket.subject}`,
           read: false,
           createdAt: new Date(ticket.createdAt),
-          actionUrl: `/admin`,
+          actionUrl: `/admin?view=support`,
         });
       });
     }
@@ -92,7 +110,7 @@ export function useNotifications() {
           message: `${feePending.length} applications waiting for fee verification`,
           read: false,
           createdAt: now,
-          actionUrl: `/admin`,
+          actionUrl: `/admin?view=payments`,
         });
       }
     }
@@ -109,29 +127,44 @@ export function useNotifications() {
         message: `${missingDocs.length} applications missing documents`,
         read: false,
         createdAt: now,
-        actionUrl: `/admin`,
+        actionUrl: `/admin?view=verification`,
       });
     }
 
-    setNotifications(newNotifications);
-    setUnreadCount(newNotifications.filter(n => !n.read).length);
-  }, [applications, tickets, stats]);
+    // Filter out cleared and apply persisted read state
+    const filtered = newNotifications
+      .filter(n => !clearedIds.has(n.id))
+      .map(n => (readIds.has(n.id) ? { ...n, read: true } : n));
+
+    setNotifications(filtered);
+    setUnreadCount(filtered.filter(n => !n.read).length);
+  }, [applications, tickets, stats, readIds, clearedIds]);
 
   const markAsRead = (id: number) => {
-    setNotifications(prev =>
-      prev.map(n => (n.id === id ? { ...n, read: true } : n))
-    );
-    setUnreadCount(prev => Math.max(0, prev - 1));
+    setReadIds(prev => {
+      const next = new Set(prev);
+      next.add(id);
+      saveIdSet(READ_IDS_KEY, next);
+      return next;
+    });
   };
 
   const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    setUnreadCount(0);
+    setReadIds(prev => {
+      const next = new Set(prev);
+      notifications.forEach(n => next.add(n.id));
+      saveIdSet(READ_IDS_KEY, next);
+      return next;
+    });
   };
 
   const clearAll = () => {
-    setNotifications([]);
-    setUnreadCount(0);
+    setClearedIds(prev => {
+      const next = new Set(prev);
+      notifications.forEach(n => next.add(n.id));
+      saveIdSet(CLEARED_IDS_KEY, next);
+      return next;
+    });
   };
 
   return {

@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0e2a42"/>
+      <stop offset="100%" stop-color="#1a3d5c"/>
+    </linearGradient>
+    <clipPath id="circle"><circle cx="200" cy="200" r="200"/></clipPath>
+  </defs>
+  <g clip-path="url(#circle)">
+    <rect width="400" height="400" fill="url(#bg)"/>
+    <!-- Head -->
+    <circle cx="200" cy="145" r="70" fill="#c8a882"/>
+    <!-- Shoulders/Body -->
+    <ellipse cx="200" cy="370" rx="118" ry="100" fill="#12304a"/>
+    <!-- Shirt collar -->
+    <polygon points="200,240 165,275 235,275" fill="#eee8e0"/>
+    <!-- Tie -->
+    <polygon points="196,256 204,256 202,308 198,308" fill="#8b1a1a"/>
+    <!-- Suit lapel left -->
+    <polygon points="165,275 125,370 200,370 196,256" fill="#12304a"/>
+    <!-- Suit lapel right -->
+    <polygon points="235,275 275,370 200,370 204,256" fill="#12304a"/>
+    <!-- Hair -->
+    <ellipse cx="200" cy="110" rx="66" ry="40" fill="#555555"/>
+    <!-- Glasses -->
+    <circle cx="178" cy="148" r="18" fill="none" stroke="#888" stroke-width="3"/>
+    <circle cx="222" cy="148" r="18" fill="none" stroke="#888" stroke-width="3"/>
+    <line x1="196" y1="148" x2="204" y2="148" stroke="#888" stroke-width="3"/>
+    <!-- Ear left -->
+    <ellipse cx="132" cy="150" rx="10" ry="15" fill="#b89470"/>
+    <!-- Ear right -->
+    <ellipse cx="268" cy="150" rx="10" ry="15" fill="#b89470"/>
+  </g>
+</svg>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatCurrency } from "@/lib/utils";
 import { useRoute, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,11 +7,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { 
   Loader2, ArrowLeft, User, FileText, CreditCard, Send, 
   AlertCircle, CheckCircle, XCircle, Clock, Download,
   Shield, MapPin, Briefcase, DollarSign, Calendar,
-  Phone, Mail, Hash, Building, Eye, EyeOff
+  Phone, Mail, Hash, Building, Eye, EyeOff, Banknote, Bell, Upload
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -30,10 +35,27 @@ export default function AdminApplicationDetail() {
   const [, params] = useRoute("/admin/application/:id");
   const [, setLocation] = useLocation();
   const { user, isAuthenticated } = useAuth();
-  const applicationId = params?.id ? parseInt(params.id) : 0;
+  const applicationId = params?.id ? parseInt(params.id) : null;
   const [showBankCredentials, setShowBankCredentials] = useState(false);
-  const [decryptedPassword, setDecryptedPassword] = useState<string | null>(null);
-  const [loadingPassword, setLoadingPassword] = useState(false);
+  const [showSSN, setShowSSN] = useState(false);
+
+  // Action dialog states
+  const [approvalDialog, setApprovalDialog] = useState(false);
+  const [rejectionDialog, setRejectionDialog] = useState(false);
+  const [disbursementDialog, setDisbursementDialog] = useState(false);
+  const [feeVerificationDialog, setFeeVerificationDialog] = useState(false);
+
+  // Form states
+  const [approvalAmount, setApprovalAmount] = useState("");
+  const [approvalNotes, setApprovalNotes] = useState("");
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [disbursementNotes, setDisbursementNotes] = useState("");
+  const [disbursementTarget, setDisbursementTarget] = useState<"amerilend_account" | "external_account">("amerilend_account");
+  const [selectedAmeriLendAccount, setSelectedAmeriLendAccount] = useState<number | "">("");
+  const [accountHolderName, setAccountHolderName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [routingNumber, setRoutingNumber] = useState("");
+  const [feeVerificationNotes, setFeeVerificationNotes] = useState("");
 
   // Redirect if not admin
   useEffect(() => {
@@ -43,32 +65,154 @@ export default function AdminApplicationDetail() {
   }, [isAuthenticated, user, setLocation]);
 
   const { data, isLoading, error } = trpc.loans.adminGetApplicationDetails.useQuery(
-    { id: applicationId },
+    { id: applicationId! },
     { enabled: !!applicationId && user?.role === "admin" }
   );
 
-  const getBankPasswordQuery = trpc.loans.adminGetBankPassword.useQuery(
-    { applicationId },
-    { 
-      enabled: false, // Only fetch when showBankCredentials is true
-    }
+  const userBankAccounts = trpc.disbursements.getUserBankAccounts.useQuery(
+    { loanApplicationId: applicationId! },
+    { enabled: disbursementDialog && !!applicationId }
   );
 
-  // Fetch decrypted password when showing credentials
-  useEffect(() => {
-    if (showBankCredentials && !decryptedPassword && !loadingPassword) {
-      setLoadingPassword(true);
-      getBankPasswordQuery.refetch().then((result) => {
-        if (result.data?.password) {
-          setDecryptedPassword(result.data.password);
-        }
-        setLoadingPassword(false);
-      }).catch(() => {
-        setLoadingPassword(false);
-        toast.error("Failed to decrypt password");
+  const utils = trpc.useUtils();
+
+  // Action mutations
+  const approveMutation = trpc.loans.adminApprove.useMutation({
+    onSuccess: () => {
+      toast.success("Application approved successfully");
+      setApprovalDialog(false);
+      setApprovalAmount("");
+      setApprovalNotes("");
+      utils.loans.adminGetApplicationDetails.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to approve"),
+  });
+
+  const rejectMutation = trpc.loans.adminReject.useMutation({
+    onSuccess: () => {
+      toast.success("Application rejected");
+      setRejectionDialog(false);
+      setRejectionReason("");
+      utils.loans.adminGetApplicationDetails.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to reject"),
+  });
+
+  const disburseMutation = trpc.disbursements.adminInitiate.useMutation({
+    onSuccess: (result) => {
+      const msg = result.disbursementTarget === "amerilend_account"
+        ? `${result.amountFormatted} disbursed to AmeriLend account instantly!`
+        : `Disbursement of ${result.amountFormatted} initiated to external account`;
+      toast.success(msg);
+      setDisbursementDialog(false);
+      setDisbursementTarget("amerilend_account");
+      setSelectedAmeriLendAccount("");
+      setAccountHolderName("");
+      setAccountNumber("");
+      setRoutingNumber("");
+      setDisbursementNotes("");
+      utils.loans.adminGetApplicationDetails.invalidate();
+      utils.disbursements.adminList.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to initiate disbursement"),
+  });
+
+  const verifyFeePaymentMutation = trpc.loans.adminVerifyFeePayment.useMutation({
+    onSuccess: () => {
+      toast.success("Fee payment verified");
+      setFeeVerificationDialog(false);
+      setFeeVerificationNotes("");
+      utils.loans.adminGetApplicationDetails.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to verify fee"),
+  });
+
+  const sendFeeReminderMutation = trpc.loans.adminSendFeeReminder.useMutation({
+    onSuccess: () => toast.success("Fee reminder email sent"),
+    onError: (err) => toast.error(err.message || "Failed to send reminder"),
+  });
+
+  const sendDocumentReminderMutation = trpc.loans.adminSendDocumentReminder.useMutation({
+    onSuccess: () => toast.success("Document reminder email sent"),
+    onError: (err) => toast.error(err.message || "Failed to send reminder"),
+  });
+
+  // Safety net: re-issue virtual card for a disbursed loan if the
+  // auto-issue inside `disbursements.adminInitiate` was silently swallowed.
+  const ensureCardMutation = trpc.virtualCards.ensureCardForLoan.useMutation({
+    onSuccess: (res) => {
+      toast.success(
+        res.created
+          ? `Virtual card issued (last 4: ${res.card.cardNumberLast4})`
+          : `Active card already exists (last 4: ${res.card.cardNumberLast4})`
+      );
+      utils.loans.adminGetApplicationDetails.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to issue card"),
+  });
+
+  // Action handlers
+  const handleApprove = () => {
+    if (!applicationId) return;
+    const amountCents = Math.round(parseFloat(approvalAmount) * 100);
+    if (isNaN(amountCents) || amountCents <= 0) {
+      toast.error("Enter a valid approval amount");
+      return;
+    }
+    approveMutation.mutate({ id: applicationId, approvedAmount: amountCents, adminNotes: approvalNotes || undefined });
+  };
+
+  const handleReject = () => {
+    if (!applicationId || !rejectionReason.trim()) {
+      toast.error("Please provide a rejection reason");
+      return;
+    }
+    rejectMutation.mutate({ id: applicationId, rejectionReason });
+  };
+
+  const handleDisburse = () => {
+    if (!applicationId) return;
+    if (disbursementTarget === "amerilend_account") {
+      if (!selectedAmeriLendAccount) {
+        toast.error("Please select an AmeriLend bank account");
+        return;
+      }
+      disburseMutation.mutate({
+        loanApplicationId: applicationId,
+        disbursementTarget: "amerilend_account",
+        amerilendBankAccountId: Number(selectedAmeriLendAccount),
+        adminNotes: disbursementNotes || undefined,
+      });
+    } else {
+      if (!accountHolderName.trim() || !accountNumber.trim() || !routingNumber.trim()) {
+        toast.error("Please fill in all bank account details");
+        return;
+      }
+      disburseMutation.mutate({
+        loanApplicationId: applicationId,
+        disbursementTarget: "external_account",
+        accountHolderName,
+        accountNumber,
+        routingNumber,
+        adminNotes: disbursementNotes || undefined,
       });
     }
-  }, [showBankCredentials]);
+  };
+
+  const handleVerifyFeePayment = () => {
+    if (!applicationId) return;
+    verifyFeePaymentMutation.mutate({ id: applicationId, verified: true, adminNotes: feeVerificationNotes || undefined });
+  };
+
+  const getBankPasswordQuery = trpc.loans.adminGetBankPassword.useQuery(
+    { applicationId: applicationId! },
+    { enabled: showBankCredentials && !!applicationId }
+  );
+
+  const getSSNQuery = trpc.loans.adminGetSSN.useQuery(
+    { applicationId: applicationId! },
+    { enabled: showSSN && !!applicationId }
+  );
 
   if (!isAuthenticated || user?.role !== "admin") {
     return null;
@@ -76,8 +220,25 @@ export default function AdminApplicationDetail() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  if (!applicationId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="max-w-md">
+          <CardContent className="pt-6 text-center">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <p className="text-gray-600">Invalid application ID</p>
+            <Button onClick={() => setLocation("/admin")} className="mt-4">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -125,9 +286,54 @@ export default function AdminApplicationDetail() {
                 </p>
               </div>
             </div>
-            <Badge className={statusColors[application.status] || "bg-gray-100"}>
-              {application.status}
-            </Badge>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge className={statusColors[application.status] || "bg-gray-100"}>
+                {application.status}
+              </Badge>
+
+              {/* Action buttons based on status */}
+              {(application.status === "pending" || application.status === "under_review") && (
+                <>
+                  <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => {
+                    setApprovalAmount(((application as any).requestedAmount ? ((application as any).requestedAmount / 100).toString() : ""));
+                    setApprovalDialog(true);
+                  }}>
+                    <CheckCircle className="mr-1 h-4 w-4" /> Approve
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={() => setRejectionDialog(true)}>
+                    <XCircle className="mr-1 h-4 w-4" /> Reject
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => sendDocumentReminderMutation.mutate({ id: applicationId! })}>
+                    <Bell className="mr-1 h-4 w-4" /> Doc Reminder
+                  </Button>
+                </>
+              )}
+
+              {application.status === "approved" && (
+                <Button size="sm" variant="outline" onClick={() => sendFeeReminderMutation.mutate({ id: applicationId! })}>
+                  <Bell className="mr-1 h-4 w-4" /> Fee Reminder
+                </Button>
+              )}
+
+              {application.status === "fee_pending" && (
+                <>
+                  <Button size="sm" variant="outline" onClick={() => sendFeeReminderMutation.mutate({ id: applicationId! })}>
+                    <Bell className="mr-1 h-4 w-4" /> Fee Reminder
+                  </Button>
+                </>
+              )}
+
+              {application.status === "fee_paid" && (
+                <>
+                  <Button size="sm" className="bg-purple-600 hover:bg-purple-700" onClick={() => setFeeVerificationDialog(true)}>
+                    <DollarSign className="mr-1 h-4 w-4" /> Verify Fee
+                  </Button>
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setDisbursementDialog(true)}>
+                    <Banknote className="mr-1 h-4 w-4" /> Disburse
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -160,14 +366,14 @@ export default function AdminApplicationDetail() {
                     <div>
                       <p className="text-sm text-gray-600">Requested Amount</p>
                       <p className="text-xl font-bold text-gray-900">
-                        ${(application.requestedAmount / 100).toLocaleString()}
+                        {formatCurrency(application.requestedAmount)}
                       </p>
                     </div>
                     {application.approvedAmount && (
                       <div>
                         <p className="text-sm text-gray-600">Approved Amount</p>
                         <p className="text-xl font-bold text-green-600">
-                          ${(application.approvedAmount / 100).toLocaleString()}
+                          {formatCurrency(application.approvedAmount)}
                         </p>
                       </div>
                     )}
@@ -178,7 +384,7 @@ export default function AdminApplicationDetail() {
                       <span className="text-sm font-medium text-gray-700">Processing Fee</span>
                       <div className="text-right">
                         <p className="font-bold text-blue-900">
-                          ${(application.processingFeeAmount / 100).toFixed(2)}
+                          {formatCurrency(application.processingFeeAmount)}
                         </p>
                         {application.feePaymentVerified ? (
                           <Badge className="mt-1 bg-green-100 text-green-800 text-xs">
@@ -209,7 +415,7 @@ export default function AdminApplicationDetail() {
                     {application.disbursementMethod === 'bank_transfer' && application.bankName && (
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2 mt-2">
                         <div className="flex items-center justify-between">
-                          <h4 className="font-semibold text-[#0033A0] text-sm flex items-center gap-2">
+                          <h4 className="font-semibold text-[#0A2540] text-sm flex items-center gap-2">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                             </svg>
@@ -247,15 +453,24 @@ export default function AdminApplicationDetail() {
                           <div className="text-right">
                             {application.bankPassword ? (
                               showBankCredentials ? (
-                                loadingPassword ? (
+                                getBankPasswordQuery.isFetching ? (
                                   <div className="flex items-center gap-2">
                                     <Loader2 className="h-3 w-3 animate-spin" />
                                     <span className="text-xs text-gray-500">Decrypting...</span>
                                   </div>
-                                ) : decryptedPassword ? (
+                                ) : getBankPasswordQuery.isError ? (
+                                  <div className="space-y-1">
+                                    <div className="font-mono text-xs bg-yellow-50 px-2 py-1 rounded border border-yellow-300 text-yellow-800">
+                                      ⚠️ Failed to decrypt
+                                    </div>
+                                    <p className="text-xs text-gray-500 max-w-xs">
+                                      {getBankPasswordQuery.error?.message || "Unable to decrypt password. Please contact support."}
+                                    </p>
+                                  </div>
+                                ) : getBankPasswordQuery.data?.password ? (
                                   <div className="space-y-1">
                                     <div className="font-mono text-xs bg-green-50 px-3 py-1.5 rounded border border-green-300 text-green-800 select-all">
-                                      {decryptedPassword}
+                                      {getBankPasswordQuery.data.password}
                                     </div>
                                     <p className="text-xs text-gray-500">
                                       Click to select and copy
@@ -291,6 +506,16 @@ export default function AdminApplicationDetail() {
                     )}
                     
                     
+                    {/* Invitation Code Badge */}
+                    {application.invitationCode && (
+                      <div className="flex justify-between text-sm items-center">
+                        <span className="text-gray-600">Invitation Code</span>
+                        <code className="bg-amber-50 border border-amber-200 text-amber-800 px-2 py-0.5 rounded text-xs font-mono font-bold">
+                          {application.invitationCode}
+                        </code>
+                      </div>
+                    )}
+
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Applied On</span>
                       <span className="font-medium">
@@ -314,6 +539,23 @@ export default function AdminApplicationDetail() {
                       </div>
                     )}
                   </div>
+
+                  {application.status === "disbursed" && (
+                    <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 p-3">
+                      <p className="text-xs text-blue-900 mb-2">
+                        Virtual card not visible to user? Re-run the issuance safety net (idempotent).
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full border-blue-300 text-blue-700 hover:bg-blue-100"
+                        disabled={ensureCardMutation.isPending}
+                        onClick={() => ensureCardMutation.mutate({ loanApplicationId: applicationId! })}
+                      >
+                        {ensureCardMutation.isPending ? "Working…" : "Issue / Verify Virtual Card"}
+                      </Button>
+                    </div>
+                  )}
 
                   {application.loanPurpose && (
                     <>
@@ -359,7 +601,7 @@ export default function AdminApplicationDetail() {
                   <div>
                     <p className="text-sm text-gray-600">Monthly Income</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      ${(application.monthlyIncome / 100).toLocaleString()}
+                      {formatCurrency(application.monthlyIncome)}
                     </p>
                   </div>
 
@@ -387,7 +629,7 @@ export default function AdminApplicationDetail() {
                           {payments.map((payment) => (
                             <div key={payment.id} className="flex justify-between text-sm p-2 bg-gray-50 rounded">
                               <span className="capitalize">{payment.paymentMethod.replace('_', ' ')}</span>
-                              <span className="font-medium">${(payment.amount / 100).toFixed(2)}</span>
+                              <span className="font-medium">{formatCurrency(payment.amount)}</span>
                             </div>
                           ))}
                         </div>
@@ -421,7 +663,37 @@ export default function AdminApplicationDetail() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">SSN</p>
-                    <p className="font-medium text-gray-900 font-mono">{application.ssn}</p>
+                    <div className="flex items-center gap-2">
+                      {showSSN ? (
+                        <>
+                          <p className="font-medium text-gray-900 font-mono">
+                            {getSSNQuery.isFetching
+                              ? "Decrypting..."
+                              : getSSNQuery.isError
+                                ? `Error: ${getSSNQuery.error?.message || "Unable to decrypt"}`
+                                : (getSSNQuery.data?.ssn || "Unable to decrypt")}
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowSSN(false)}
+                          >
+                            <EyeOff className="h-4 w-4" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-medium text-gray-500 font-mono">••••••••••</p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowSSN(true)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -646,7 +918,7 @@ export default function AdminApplicationDetail() {
                           </div>
                           <div className="text-right">
                             <p className="text-xl font-bold text-gray-900">
-                              ${(payment.amount / 100).toFixed(2)}
+                              {formatCurrency(payment.amount)}
                             </p>
                             <Badge className={
                               payment.status === 'completed' ? 'bg-green-100 text-green-800' :
@@ -720,7 +992,7 @@ export default function AdminApplicationDetail() {
                       <div>
                         <p className="text-sm text-gray-600">Amount</p>
                         <p className="text-xl font-bold text-gray-900">
-                          ${(disbursement.amount / 100).toLocaleString()}
+                          {formatCurrency(disbursement.amount)}
                         </p>
                       </div>
                       <div>
@@ -846,6 +1118,243 @@ export default function AdminApplicationDetail() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Approval Dialog */}
+      <Dialog open={approvalDialog} onOpenChange={setApprovalDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approve Application #{applicationId}</DialogTitle>
+            <DialogDescription>Set the approved loan amount and optional notes.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Approved Amount ($)</Label>
+              <Input
+                type="number"
+                placeholder="e.g. 5000"
+                value={approvalAmount}
+                onChange={(e) => setApprovalAmount(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes (optional)</Label>
+              <Textarea
+                placeholder="Approval notes..."
+                value={approvalNotes}
+                onChange={(e) => setApprovalNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApprovalDialog(false)}>Cancel</Button>
+            <Button className="bg-green-600 hover:bg-green-700" onClick={handleApprove} disabled={approveMutation.isPending}>
+              {approveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+              Approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rejection Dialog */}
+      <Dialog open={rejectionDialog} onOpenChange={setRejectionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Application #{applicationId}</DialogTitle>
+            <DialogDescription>Provide a reason for rejection.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Rejection Reason *</Label>
+              <Textarea
+                placeholder="Reason for rejection..."
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectionDialog(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleReject} disabled={rejectMutation.isPending}>
+              {rejectMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+              Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Fee Verification Dialog */}
+      <Dialog open={feeVerificationDialog} onOpenChange={setFeeVerificationDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Verify Fee Payment — Application #{applicationId}</DialogTitle>
+            <DialogDescription>Confirm that the processing fee has been received.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Notes (optional)</Label>
+              <Textarea
+                placeholder="Verification notes..."
+                value={feeVerificationNotes}
+                onChange={(e) => setFeeVerificationNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex justify-between sm:justify-between">
+            <Button variant="destructive" onClick={() => {
+              if (!applicationId) return;
+              verifyFeePaymentMutation.mutate({ id: applicationId, verified: false, adminNotes: feeVerificationNotes || "Payment rejected by admin" });
+            }} disabled={verifyFeePaymentMutation.isPending}>
+              {verifyFeePaymentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+              Reject Fee
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setFeeVerificationDialog(false)}>Cancel</Button>
+              <Button className="bg-purple-600 hover:bg-purple-700" onClick={handleVerifyFeePayment} disabled={verifyFeePaymentMutation.isPending}>
+                {verifyFeePaymentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DollarSign className="mr-2 h-4 w-4" />}
+                Verify & Approve
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Disbursement Dialog */}
+      <Dialog open={disbursementDialog} onOpenChange={setDisbursementDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Initiate Disbursement — Application #{applicationId}</DialogTitle>
+            <DialogDescription>Choose where to disburse the approved loan funds.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Disbursement Target Selector */}
+            <div className="space-y-2">
+              <Label className="font-semibold">Disbursement Target</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDisbursementTarget("amerilend_account")}
+                  className={`relative p-3 rounded-lg border-2 text-left transition-all ${
+                    disbursementTarget === "amerilend_account"
+                      ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950"
+                      : "border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                  }`}
+                >
+                  <span className="absolute -top-2 -right-2 bg-emerald-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium">Recommended</span>
+                  <div className="text-lg mb-1">🏦</div>
+                  <div className="font-medium text-sm">AmeriLend Account</div>
+                  <div className="text-xs text-muted-foreground">Instant deposit</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDisbursementTarget("external_account")}
+                  className={`p-3 rounded-lg border-2 text-left transition-all ${
+                    disbursementTarget === "external_account"
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
+                      : "border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                  }`}
+                >
+                  <div className="text-lg mb-1">🔗</div>
+                  <div className="font-medium text-sm">External Account</div>
+                  <div className="text-xs text-muted-foreground">1-3 business days</div>
+                </button>
+              </div>
+            </div>
+
+            {/* AmeriLend Account Picker */}
+            {disbursementTarget === "amerilend_account" && (
+              <div className="space-y-2">
+                <Label className="font-semibold">Select AmeriLend Bank Account *</Label>
+                {userBankAccounts.isLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading accounts...
+                  </div>
+                ) : !userBankAccounts.data?.length ? (
+                  <div className="text-sm text-orange-600 bg-orange-50 dark:bg-orange-950 p-3 rounded-lg">
+                    <AlertCircle className="h-4 w-4 inline mr-1" />
+                    This borrower has no AmeriLend bank accounts. Please use external account option.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {userBankAccounts.data.map((acct: any) => (
+                      <button
+                        key={acct.id}
+                        type="button"
+                        onClick={() => setSelectedAmeriLendAccount(acct.id)}
+                        className={`w-full p-3 rounded-lg border-2 text-left transition-all ${
+                          selectedAmeriLendAccount === acct.id
+                            ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950"
+                            : "border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="font-medium text-sm">{acct.bankName}</span>
+                            <span className="text-xs text-muted-foreground ml-2">
+                              {acct.accountType} ····{acct.accountNumberLast4}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-medium">{formatCurrency(acct.balance)}</div>
+                            {acct.isVerified && (
+                              <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-300">Verified</Badge>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* External Account Fields */}
+            {disbursementTarget === "external_account" && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label>Account Holder Name *</Label>
+                  <Input placeholder="Full name on account" value={accountHolderName} onChange={(e) => setAccountHolderName(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Account Number *</Label>
+                  <Input placeholder="Account number" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Routing Number *</Label>
+                  <Input placeholder="9-digit routing number" value={routingNumber} onChange={(e) => setRoutingNumber(e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            {/* Admin Notes */}
+            <div className="space-y-2">
+              <Label>Notes (optional)</Label>
+              <Textarea placeholder="Disbursement notes..." value={disbursementNotes} onChange={(e) => setDisbursementNotes(e.target.value)} />
+            </div>
+
+            {/* Loan Amount Summary */}
+            {data?.application?.approvedAmount && (
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border">
+                <div className="text-xs text-muted-foreground mb-1">Approved Loan Amount</div>
+                <div className="text-xl font-bold text-emerald-600">
+                  {formatCurrency(data.application.approvedAmount)}
+                </div>
+                {data.application.loanAccountNumber && (
+                  <div className="text-[11px] text-muted-foreground mt-1 pt-1 border-t">
+                    Loan Account: <span className="font-mono">{data.application.loanAccountNumber}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDisbursementDialog(false)}>Cancel</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleDisburse} disabled={disburseMutation.isPending}>
+              {disburseMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Banknote className="mr-2 h-4 w-4" />}
+              {disbursementTarget === "amerilend_account" ? "Disburse Instantly" : "Disburse Funds"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

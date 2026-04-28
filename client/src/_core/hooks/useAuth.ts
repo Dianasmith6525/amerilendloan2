@@ -1,6 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { TRPCClientError } from "@trpc/client";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
@@ -11,70 +10,62 @@ export function useAuth(options?: UseAuthOptions) {
   const { redirectOnUnauthenticated = false, redirectPath = "/login" } =
     options ?? {};
   const utils = trpc.useUtils();
+  const loggingOut = useRef(false);
 
   const meQuery = trpc.auth.me.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: false,
   });
 
-  const logoutMutation = trpc.auth.logout.useMutation({
-    onSuccess: () => {
-      utils.auth.me.setData(undefined, null);
-    },
-  });
+  const logout = useCallback(() => {
+    if (loggingOut.current) return;
+    loggingOut.current = true;
 
-  const logout = useCallback(async () => {
-    try {
-      // First, clear the user data from cache
-      utils.auth.me.setData(undefined, null);
-      
-      // Clear any local storage items
-      localStorage.removeItem("manus-runtime-user-info");
-      
-      // Call the logout mutation
-      await logoutMutation.mutateAsync();
-      
-      // Invalidate all queries to clear cache
-      await utils.invalidate();
-      
-      // Clear session storage as well
-      sessionStorage.clear();
-      
-      // Force a full page reload to home page (clears all state)
-      window.location.href = "/";
-    } catch (error: unknown) {
-      // Even if logout fails, clear local data and redirect
-      console.error("Logout error:", error);
-      utils.auth.me.setData(undefined, null);
-      localStorage.removeItem("manus-runtime-user-info");
-      sessionStorage.clear();
-      await utils.invalidate();
-      window.location.href = "/";
-    }
-  }, [logoutMutation, utils]);
+    // Immediately clear cached user data so the UI reflects logged-out state
+    utils.auth.me.setData(undefined, null);
+
+    // Clear all client-side storage
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // Clear client-accessible cookies (consent, preferences, etc.)
+    document.cookie.split(";").forEach((c) => {
+      const name = c.split("=")[0].trim();
+      document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+      document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
+    });
+
+    // Navigate to the dedicated server-side logout endpoint.
+    // This guarantees the httpOnly session cookie is cleared via Set-Cookie
+    // header on a direct browser navigation (not a fetch/tRPC call that may
+    // have its Set-Cookie headers stripped by Vercel's rewrite proxy).
+    // The server redirects back to "/" after clearing the cookie.
+    window.location.href = "/api/logout";
+  }, [utils]);
 
   const state = useMemo(() => {
-    localStorage.setItem(
-      "manus-runtime-user-info",
-      JSON.stringify(meQuery.data)
-    );
+    // Treat as loading when no user yet AND a (re)fetch is in-flight.
+    // This prevents the brief "not authenticated" flash between login and cache refresh.
+    const isResolving =
+      meQuery.isLoading ||
+      loggingOut.current ||
+      (!meQuery.data && meQuery.isFetching);
     return {
       user: meQuery.data ?? null,
-      loading: meQuery.isLoading || logoutMutation.isPending,
-      error: meQuery.error ?? logoutMutation.error ?? null,
+      loading: isResolving,
+      error: meQuery.error ?? null,
       isAuthenticated: Boolean(meQuery.data),
     };
   }, [
     meQuery.data,
     meQuery.error,
     meQuery.isLoading,
-    logoutMutation.error,
-    logoutMutation.isPending,
+    meQuery.isFetching,
   ]);
 
   useEffect(() => {
     if (!redirectOnUnauthenticated) return;
-    if (meQuery.isLoading || logoutMutation.isPending) return;
+    if (meQuery.isLoading || loggingOut.current) return;
     if (state.user) return;
     if (typeof window === "undefined") return;
     if (window.location.pathname === redirectPath) return;
@@ -83,7 +74,6 @@ export function useAuth(options?: UseAuthOptions) {
   }, [
     redirectOnUnauthenticated,
     redirectPath,
-    logoutMutation.isPending,
     meQuery.isLoading,
     state.user,
   ]);

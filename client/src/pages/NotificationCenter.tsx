@@ -2,11 +2,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bell, CheckCircle, AlertCircle, Info, Trash2, Archive } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { Bell, CheckCircle, AlertCircle, Info, Trash2, Archive, Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { formatDate } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
 
 interface Notification {
   id: string;
@@ -21,9 +21,45 @@ interface Notification {
 export function NotificationCenter() {
   const [filter, setFilter] = useState<"all" | "unread">("all");
 
+  // Notification preferences state
+  const [prefEmail, setPrefEmail] = useState(true);
+  const [prefSms, setPrefSms] = useState(true);
+  const [prefInApp, setPrefInApp] = useState(true);
+
   // Fetch real notifications from backend
   const { data: notificationsData = [], isLoading } = trpc.userFeatures.notifications.list.useQuery({ 
     limit: 50 
+  });
+
+  // Fetch user notification preferences
+  const { data: notifPrefs } = trpc.auth.getNotificationPreferences.useQuery();
+
+  // Sync preferences state when data loads
+  useEffect(() => {
+    if (notifPrefs) {
+      setPrefEmail((notifPrefs as any).emailUpdates ?? true);
+      setPrefSms((notifPrefs as any).sms ?? true);
+      setPrefInApp((notifPrefs as any).loanUpdates ?? true);
+    }
+  }, [notifPrefs]);
+
+  const utils = trpc.useUtils();
+
+  // Mark as read mutation
+  const markAsReadMutation = trpc.userFeatures.notifications.markAsRead.useMutation({
+    onSuccess: () => {
+      utils.userFeatures.notifications.list.invalidate();
+    },
+    onError: () => toast.error("Failed to mark notification as read"),
+  });
+
+  // Save preferences mutation
+  const savePrefsMutation = trpc.auth.updateNotificationPreferences.useMutation({
+    onSuccess: () => {
+      toast.success("Notification preferences saved");
+      utils.auth.getNotificationPreferences.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to save preferences"),
   });
 
   // Map database fields to component interface
@@ -168,20 +204,18 @@ export function NotificationCenter() {
                           </div>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-slate-400 hover:text-slate-300"
-                          >
-                            <Archive className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-slate-400 hover:text-red-400"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {!notification.read && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-slate-400 hover:text-slate-300"
+                              title="Mark as read"
+                              onClick={() => markAsReadMutation.mutate({ notificationId: parseInt(notification.id) })}
+                              disabled={markAsReadMutation.isPending}
+                            >
+                              <Archive className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -190,12 +224,58 @@ export function NotificationCenter() {
               </TabsContent>
 
               <TabsContent value="unread" className="space-y-3">
-                {filter === "unread" && notifications.length === 0 ? (
+                {notifications.filter(n => !n.read).length === 0 ? (
                   <div className="text-center py-12">
                     <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
                     <p className="text-slate-400">No unread notifications</p>
                   </div>
-                ) : null}
+                ) : (
+                  notifications.filter(n => !n.read).map((notification) => (
+                    <div
+                      key={notification.id}
+                      className="p-4 rounded-lg border transition-all bg-slate-700 border-slate-600 shadow-lg hover:bg-slate-700 hover:border-slate-500"
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className="mt-1">{getIcon(notification.type)}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-white font-semibold">{notification.title}</h3>
+                            <Badge variant={getTypeBadgeVariant(notification.type) as any}>
+                              {notification.type}
+                            </Badge>
+                            <div className="w-2 h-2 rounded-full bg-blue-500 ml-auto"></div>
+                          </div>
+                          <p className="text-slate-300 text-sm mb-3">{notification.message}</p>
+                          <div className="flex items-center gap-2 text-xs text-slate-400">
+                            <span>{formatDate(notification.createdAt)}</span>
+                            {notification.actionUrl && (
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="p-0 h-auto text-blue-400 hover:text-blue-300"
+                                onClick={() => window.location.href = notification.actionUrl!}
+                              >
+                                View Details →
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-slate-400 hover:text-slate-300"
+                            title="Mark as read"
+                            onClick={() => markAsReadMutation.mutate({ notificationId: parseInt(notification.id) })}
+                            disabled={markAsReadMutation.isPending}
+                          >
+                            <Archive className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </TabsContent>
             </Tabs>
           </CardContent>
@@ -214,23 +294,35 @@ export function NotificationCenter() {
                   <p className="font-medium text-white">Email Notifications</p>
                   <p className="text-sm text-slate-400">Receive updates via email</p>
                 </div>
-                <input type="checkbox" defaultChecked className="w-5 h-5" />
+                <input type="checkbox" checked={prefEmail} onChange={(e) => setPrefEmail(e.target.checked)} className="w-5 h-5" />
               </div>
               <div className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg">
                 <div>
                   <p className="font-medium text-white">SMS Notifications</p>
                   <p className="text-sm text-slate-400">Receive critical alerts via SMS</p>
                 </div>
-                <input type="checkbox" defaultChecked className="w-5 h-5" />
+                <input type="checkbox" checked={prefSms} onChange={(e) => setPrefSms(e.target.checked)} className="w-5 h-5" />
               </div>
               <div className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg">
                 <div>
                   <p className="font-medium text-white">In-App Notifications</p>
                   <p className="text-sm text-slate-400">Show notifications in your dashboard</p>
                 </div>
-                <input type="checkbox" defaultChecked className="w-5 h-5" />
+                <input type="checkbox" checked={prefInApp} onChange={(e) => setPrefInApp(e.target.checked)} className="w-5 h-5" />
               </div>
-              <Button className="w-full mt-4">Save Preferences</Button>
+              <Button
+                className="w-full mt-4"
+                onClick={() => savePrefsMutation.mutate({
+                  emailUpdates: prefEmail,
+                  sms: prefSms,
+                  loanUpdates: prefInApp,
+                  promotions: true,
+                })}
+                disabled={savePrefsMutation.isPending}
+              >
+                {savePrefsMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save Preferences
+              </Button>
             </div>
           </CardContent>
         </Card>

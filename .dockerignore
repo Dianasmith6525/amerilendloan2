@@ -1,0 +1,15 @@
+node_modules
+.git
+.gitignore
+backups
+uploads
+*.md
+tsc_check.txt
+tsc_errors.txt
+TIER_1_STATUS.txt
+SQL_INJECTION_TEST_INDEX.ts
+SQL_INJECTION_TEST_REPORT.ts
+testsprite.config.json
+dist
+.env
+.env.*

@@ -15,13 +15,14 @@ import {
   sendPaymentDueReminderEmail,
   sendPaymentOverdueEmail 
 } from "./email";
+import { logger } from "./logger";
 
 /**
  * Check for upcoming payments and send reminders
  * Should be run daily via cron job
  */
 export async function checkAndSendPaymentReminders() {
-  console.log("[Payment Reminders] Starting daily reminder check...");
+  logger.info("[Payment Reminders] Starting daily reminder check...");
   
   try {
     const now = new Date();
@@ -30,7 +31,7 @@ export async function checkAndSendPaymentReminders() {
     const activeLoans = await getAllDisbursedLoans();
     
     if (!activeLoans || activeLoans.length === 0) {
-      console.log("[Payment Reminders] No active loans found");
+      logger.info("[Payment Reminders] No active loans found");
       return { success: true, reminders: 0 };
     }
 
@@ -53,7 +54,7 @@ export async function checkAndSendPaymentReminders() {
         
         // Check if user has disabled reminders
         const userPreferences = await getUserNotificationPreferences(loan.userId);
-        if (userPreferences?.disablePaymentReminders) {
+        if (userPreferences && !userPreferences.paymentReminders) {
           continue;
         }
         
@@ -71,7 +72,7 @@ export async function checkAndSendPaymentReminders() {
             nextPayment.amount,
             daysUntilDue
           );
-          console.log(`[Payment Reminders] Sent 7-day reminder for loan ${loan.trackingNumber}`);
+          logger.info(`[Payment Reminders] Sent 7-day reminder for loan ${loan.trackingNumber}`);
           remindersSent++;
         } else if (daysUntilDue === 3) {
           // 3-day reminder
@@ -82,7 +83,7 @@ export async function checkAndSendPaymentReminders() {
             nextPayment.amount,
             daysUntilDue
           );
-          console.log(`[Payment Reminders] Sent 3-day reminder for loan ${loan.trackingNumber}`);
+          logger.info(`[Payment Reminders] Sent 3-day reminder for loan ${loan.trackingNumber}`);
           remindersSent++;
         } else if (daysUntilDue === 1) {
           // 1-day reminder
@@ -93,7 +94,7 @@ export async function checkAndSendPaymentReminders() {
             nextPayment.amount,
             daysUntilDue
           );
-          console.log(`[Payment Reminders] Sent 1-day reminder for loan ${loan.trackingNumber}`);
+          logger.info(`[Payment Reminders] Sent 1-day reminder for loan ${loan.trackingNumber}`);
           remindersSent++;
         } else if (daysUntilDue < 0) {
           // Overdue reminder
@@ -105,7 +106,7 @@ export async function checkAndSendPaymentReminders() {
             nextPayment.amount,
             daysOverdue
           );
-          console.log(`[Payment Reminders] Sent overdue reminder for loan ${loan.trackingNumber}`);
+          logger.info(`[Payment Reminders] Sent overdue reminder for loan ${loan.trackingNumber}`);
           remindersSent++;
         }
         
@@ -113,16 +114,16 @@ export async function checkAndSendPaymentReminders() {
         await logPaymentReminder(loan.id, daysUntilDue);
         
       } catch (loanError) {
-        console.error(`[Payment Reminders] Error processing loan ${loan.id}:`, loanError);
+        logger.error(`[Payment Reminders] Error processing loan ${loan.id}:`, loanError);
         // Continue with next loan
       }
     }
     
-    console.log(`[Payment Reminders] Completed. Sent ${remindersSent} reminders.`);
+    logger.info(`[Payment Reminders] Completed. Sent ${remindersSent} reminders.`);
     return { success: true, reminders: remindersSent };
     
   } catch (error) {
-    console.error("[Payment Reminders] Fatal error:", error);
+    logger.error("[Payment Reminders] Fatal error:", error);
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }
@@ -166,7 +167,7 @@ function calculatePaymentSchedule(loan: any) {
  * Manual trigger for testing (can be called from admin)
  */
 export async function sendTestPaymentReminder(loanId: number) {
-  console.log(`[Payment Reminders] Sending test reminder for loan ${loanId}...`);
+  logger.info(`[Payment Reminders] Sending test reminder for loan ${loanId}...`);
   
   try {
     const loan = await getLoanApplicationById(loanId);
@@ -188,11 +189,11 @@ export async function sendTestPaymentReminder(loanId: number) {
       3
     );
     
-    console.log(`[Payment Reminders] Test reminder sent successfully`);
+    logger.info(`[Payment Reminders] Test reminder sent successfully`);
     return { success: true };
     
   } catch (error) {
-    console.error("[Payment Reminders] Test reminder failed:", error);
+    logger.error("[Payment Reminders] Test reminder failed:", error);
     throw error;
   }
 }

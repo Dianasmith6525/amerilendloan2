@@ -1,12 +1,13 @@
 import * as Sentry from "@sentry/node";
 import { Express, Request, Response, NextFunction } from "express";
+import { logger } from "./logger";
 
 let sentryInitialized = false;
 
 // Initialize Sentry
 export function initSentry(app: Express) {
   if (!process.env.SENTRY_DSN) {
-    console.warn('⚠️  SENTRY_DSN not configured - error monitoring disabled');
+    logger.warn('⚠️  SENTRY_DSN not configured - error monitoring disabled');
     return;
   }
 
@@ -41,9 +42,9 @@ export function initSentry(app: Express) {
     });
 
     sentryInitialized = true;
-    console.log('✓ Sentry error monitoring initialized');
+    logger.info('✓ Sentry error monitoring initialized');
   } catch (error) {
-    console.error('Failed to initialize Sentry:', error);
+    logger.error('Failed to initialize Sentry:', error);
   }
 }
 

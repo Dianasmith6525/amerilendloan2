@@ -1,0 +1,41 @@
+name: Verify backup integrity
+
+# Weekly automated check that the most recent database backup is parseable,
+# schema-aligned, and not stale. Failure means the cron is silently broken
+# OR the backup writer is dropping tables.
+#
+# This intentionally runs against the backup files committed to the repo's
+# `backups/` directory. If you move backups to S3/Forge-only storage, swap
+# the checkout step for a sync-from-storage step.
+
+on:
+  schedule:
+    # Every Monday at 13:00 UTC (08:00 ET, after the morning backup cron).
+    - cron: "0 13 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  verify-backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pnpm
+        run: npm install -g pnpm@9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify newest backup
+        run: pnpm verify:backup
+
+      - name: Audit env schema (catches typos in integration buckets)
+        run: pnpm audit:env:strict
+        # Don't fail the workflow if env vars aren't populated in CI;
+        # we just want orphan-key detection to surface.
+        continue-on-error: true

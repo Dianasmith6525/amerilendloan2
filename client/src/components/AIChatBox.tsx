@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, User, Sparkles, HelpCircle } from "lucide-react";
+import { Loader2, Send, User, Zap, HelpCircle, RotateCcw, Shield, ArrowRight, CreditCard, FileText } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Streamdown } from "streamdown";
 import { trpc } from "@/lib/trpc";
@@ -63,6 +63,16 @@ export type AIChatBoxProps = {
    * Whether user is authenticated
    */
   isAuthenticated?: boolean;
+
+  /**
+   * User's display name for personalized greeting
+   */
+  userName?: string;
+
+  /**
+   * Callback to clear/reset the conversation
+   */
+  onClearConversation?: () => void;
 };
 
 /**
@@ -81,12 +91,14 @@ export function AIChatBox({
   messages,
   onSendMessage,
   isLoading = false,
-  placeholder = "Ask me anything about AmeriLend...",
+  placeholder,
   className,
   height = "600px",
   emptyStateMessage,
   suggestedPrompts,
   isAuthenticated = false,
+  userName,
+  onClearConversation,
 }: AIChatBoxProps) {
   const [input, setInput] = useState("");
   const [localSuggestedPrompts, setLocalSuggestedPrompts] = useState<string[]>(suggestedPrompts || []);
@@ -142,6 +154,13 @@ export function AIChatBox({
     }
   };
 
+  // Auto-scroll when new messages arrive (assistant responses)
+  useEffect(() => {
+    if (displayMessages.length > 0) {
+      scrollToBottom();
+    }
+  }, [displayMessages.length, isLoading]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedInput = input.trim();
@@ -164,9 +183,28 @@ export function AIChatBox({
     }
   };
 
+  const defaultPlaceholder = isAuthenticated
+    ? "Ask Kai about your loan, payments, account..."
+    : "Ask Kai about loans, eligibility, rates...";
+
   const defaultEmptyStateMessage = isAuthenticated
-    ? "Welcome back! I'm here to help with your AmeriLend account and answer any questions."
-    : "Hi! I'm AmeriLend's AI assistant. I can help with loan applications, payments, eligibility, and more. What can I help you with?";
+    ? `Hey${userName ? ` ${userName}` : ""}! I'm Kai, your priority AI assistant with access to your account details.`
+    : "Hi! I'm Kai, AmeriLend's AI assistant. I can help with loan applications, payments, eligibility, and more.";
+
+  // Quick action buttons for authenticated users
+  const authQuickActions = [
+    { label: "Loan Status", icon: FileText, prompt: "What's my current loan status?" },
+    { label: "Make Payment", icon: CreditCard, prompt: "How do I make a payment?" },
+    { label: "Account Help", icon: HelpCircle, prompt: "I need help with my account" },
+  ];
+
+  const guestQuickActions = [
+    { label: "Apply for Loan", icon: ArrowRight, prompt: "How do I apply for a loan?" },
+    { label: "Check Eligibility", icon: Shield, prompt: "What are the eligibility requirements?" },
+    { label: "View Rates", icon: FileText, prompt: "What interest rates do you offer?" },
+  ];
+
+  const quickActions = isAuthenticated ? authQuickActions : guestQuickActions;
 
   return (
     <div
@@ -181,20 +219,49 @@ export function AIChatBox({
       <div ref={scrollAreaRef} className="flex-1 overflow-hidden">
         {displayMessages.length === 0 ? (
           <div className="flex h-full flex-col p-4">
-            <div className="flex flex-1 flex-col items-center justify-center gap-6 text-muted-foreground">
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 text-muted-foreground">
               <div className="flex flex-col items-center gap-3">
-                <div className="relative">
-                  <Sparkles className="size-12 opacity-20" />
+                <div className={`relative p-3 rounded-full ${
+                  isAuthenticated 
+                    ? "bg-gradient-to-br from-[#C9A227]/20 to-[#e6c84d]/20" 
+                    : "bg-[#C9A227]/10"
+                }`}>
+                  <span className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-[#C9A227] to-[#e6c84d] shadow-md">
+                    <Zap className="w-5 h-5 text-[#0A2540]" strokeWidth={2.5} />
+                  </span>
                   {isAuthenticated && (
-                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border border-white"></div>
+                    <div className="absolute bottom-1 right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-background animate-pulse"></div>
                   )}
                 </div>
-                <p className="text-sm text-center font-medium">
+                <p className="text-sm text-center font-medium max-w-sm">
                   {emptyStateMessage || defaultEmptyStateMessage}
                 </p>
                 {isAuthenticated && (
-                  <p className="text-xs text-green-600">Priority support enabled</p>
+                  <div className="inline-flex items-center gap-1.5 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-3 py-1 rounded-full text-xs font-medium">
+                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                    Priority Support Active
+                  </div>
                 )}
+                {!isAuthenticated && (
+                  <p className="text-xs text-muted-foreground/70 max-w-xs text-center">
+                    Log in for personalized support with access to your loan details and tracking numbers.
+                  </p>
+                )}
+              </div>
+
+              {/* Quick Action Buttons */}
+              <div className="flex max-w-sm w-full gap-2">
+                {quickActions.map((action, index) => (
+                  <button
+                    key={index}
+                    onClick={() => onSendMessage(action.prompt)}
+                    disabled={isLoading}
+                    className="flex-1 flex flex-col items-center gap-1.5 rounded-lg border border-border bg-card p-2.5 text-xs transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <action.icon className="size-4 text-primary" />
+                    <span className="font-medium text-[11px]">{action.label}</span>
+                  </button>
+                ))}
               </div>
 
               {localSuggestedPrompts && localSuggestedPrompts.length > 0 && (
@@ -239,8 +306,8 @@ export function AIChatBox({
                     }
                   >
                     {message.role === "assistant" && (
-                      <div className="size-8 shrink-0 mt-1 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Sparkles className="size-4 text-primary" />
+                      <div className="size-8 shrink-0 mt-1 rounded-full bg-gradient-to-br from-[#C9A227] to-[#e6c84d] flex items-center justify-center shadow-sm">
+                        <Zap className="size-4 text-[#0A2540]" strokeWidth={2.5} />
                       </div>
                     )}
 
@@ -281,8 +348,8 @@ export function AIChatBox({
                       : undefined
                   }
                 >
-                  <div className="size-8 shrink-0 mt-1 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Sparkles className="size-4 text-primary" />
+                  <div className="size-8 shrink-0 mt-1 rounded-full bg-gradient-to-br from-[#C9A227] to-[#e6c84d] flex items-center justify-center shadow-sm">
+                    <Zap className="size-4 text-[#0A2540]" strokeWidth={2.5} />
                   </div>
                   <div className="rounded-lg bg-muted px-4 py-2.5">
                     <Loader2 className="size-4 animate-spin text-muted-foreground" />
@@ -300,13 +367,26 @@ export function AIChatBox({
         onSubmit={handleSubmit}
         className="flex gap-2 p-4 border-t bg-background/50 items-end"
       >
+        {onClearConversation && displayMessages.length > 0 && (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            onClick={onClearConversation}
+            className="shrink-0 h-[38px] w-[38px] text-muted-foreground hover:text-foreground"
+            title="New conversation"
+          >
+            <RotateCcw className="size-4" />
+          </Button>
+        )}
         <Textarea
           ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder}
+          placeholder={placeholder || defaultPlaceholder}
           className="flex-1 max-h-32 resize-none min-h-9"
+          maxLength={2000}
           rows={1}
         />
         <Button

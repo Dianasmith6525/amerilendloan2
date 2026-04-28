@@ -109,7 +109,7 @@ We may share your information with:
 ### Service Providers
 
 We engage third-party companies to perform services on our behalf, including:
-- Payment processors (Authorize.net, Coinbase Commerce)
+- Payment processors (Stripe, Coinbase Commerce)
 - Cloud hosting providers
 - Email service providers
 - Customer support platforms
@@ -189,11 +189,11 @@ California residents have additional rights under the California Consumer Privac
 - Right to deletion of personal information
 - Right to non-discrimination for exercising privacy rights
 
-To exercise these rights, contact us at privacy@amerilendloan.com.
+To exercise these rights, contact us at support@amerilendloan.com.
 
 ### Nevada Residents
 
-Nevada residents may opt out of the sale of personal information by contacting us at privacy@amerilendloan.com.
+Nevada residents may opt out of the sale of personal information by contacting us at support@amerilendloan.com.
 
 ### Other States
 
@@ -284,9 +284,10 @@ Your continued use of the Services after changes become effective constitutes ac
 If you have questions about this Privacy Policy or wish to exercise your privacy rights, please contact us:
 
 **AmeriLend Privacy Team**  
-Email: privacy@amerilendloan.com  
-Phone: 1-800-AMERILEND  
-Address: [Your Business Address]
+Email: support@amerilendloan.com  
+Phone: +1 945 212-1609  
+Support Hours: Mon–Fri 8am–8pm CT; Sat–Sun 9am–5pm CT  
+Address: 12707 High Bluff Drive, Suite 200, San Diego, CA 92130, USA
 
 For California residents: You may designate an authorized agent to make requests on your behalf. We may require verification of the agent's authority.
 

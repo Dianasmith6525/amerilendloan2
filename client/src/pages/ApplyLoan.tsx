@@ -8,10 +8,42 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SubmissionAnimationOverlay } from "@/components/SubmissionAnimationOverlay";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle2, Loader2, Phone, ArrowLeft, Save } from "lucide-react";
+import { CheckCircle2, Loader2, Phone, ArrowLeft, Save, Eye, EyeOff, Calculator } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
+import { toTitleCase, capitalizeWords } from "@shared/format";
+import SEOHead from "@/components/SEOHead";
+import { useTranslation } from "react-i18next";
+import {
+  APR_RANGE_TEXT,
+  COMPANY_PHONE_DISPLAY,
+  COMPANY_PHONE_DISPLAY_SHORT,
+  COMPANY_PHONE_RAW,
+  COMPANY_SUPPORT_EMAIL,
+  ILLUSTRATIVE_APR,
+  LOAN_MAX_AMOUNT,
+  LOAN_MIN_AMOUNT,
+  PROCESSING_FEE_RATE,
+  PROCESSING_FEE_TEXT,
+  SUPPORT_HOURS_WEEKDAY,
+  SUPPORT_HOURS_WEEKEND,
+} from "@/const";
+import {
+  formatSSN,
+  formatPhone,
+  formatCurrency,
+  unformatCurrency,
+  validateSSN,
+  validatePhone,
+  validateEmail,
+  validateZipCode,
+  formatZipCode,
+  calculateMonthlyPayment,
+  calculateTotalInterest,
+} from "@/lib/inputMask";
+import { friendlyError } from "@/lib/friendlyError";
+import { useTurnstile } from "@/components/TurnstileWidget";
 
 const US_STATES = [
   { code: "AL", name: "Alabama" },
@@ -184,31 +216,12 @@ const US_BANKS = [
   "Atlantic Union Bank",
   
   // Other
-  "Other Bank (Not Listed)"
 ].sort();
 
 export default function ApplyLoan() {
+  const { t } = useTranslation();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
-
-  // Prevent admins from applying for loans
-  if (!authLoading && isAuthenticated && user?.role === "admin") {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-muted/30">
-        <Card className="max-w-md">
-          <CardContent className="pt-6 space-y-4 text-center">
-            <h2 className="text-lg font-semibold">Admin Account</h2>
-            <p className="text-sm text-muted-foreground">
-              Administrators cannot apply for personal loans. If you need assistance, please contact support.
-            </p>
-            <Link href="/dashboard">
-              <Button className="w-full">Return to Dashboard</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   const [currentStep, setCurrentStep] = useState(1);
   const [submittedTrackingNumber, setSubmittedTrackingNumber] = useState<string | null>(null);
@@ -219,6 +232,8 @@ export default function ApplyLoan() {
   const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [referralId, setReferralId] = useState<number | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   // Load saved draft from localStorage on mount
   const loadSavedDraft = () => {
@@ -309,8 +324,7 @@ export default function ApplyLoan() {
     creditScore: "",
     disbursementMethod: "",
     bankNameForDisbursement: "",
-    bankUsernameForDisbursement: "",
-    bankPasswordForDisbursement: "",
+
     reference1Name: "",
     reference1Phone: "",
     reference1Relationship: "",
@@ -325,19 +339,56 @@ export default function ApplyLoan() {
     esignAccepted: false,
   });
 
+  // Consume prequalificationData from CheckOffers flow
   useEffect(() => {
-    if (savedDraft) {
-      setCurrentStep(savedDraft.step);
-      setLastSaved(savedDraft.savedAt);
-      if (toast && typeof toast.success === 'function') {
-        toast.success(`Draft loaded from ${savedDraft.savedAt.toLocaleString()}`);
+    const prequalRaw = localStorage.getItem("prequalificationData");
+    if (prequalRaw) {
+      try {
+        const prequal = JSON.parse(prequalRaw);
+        setFormData((prev: typeof formData) => {
+          const updates: Partial<typeof formData> = {};
+          if (prequal.fullName) updates.fullName = prequal.fullName;
+          if (prequal.email) updates.email = prequal.email;
+          if (prequal.selectedOffer?.amount) updates.requestedAmount = String(prequal.selectedOffer.amount);
+          if (prequal.selectedOffer?.term) updates.desiredTerm = String(prequal.selectedOffer.term);
+          if (prequal.selectedOffer?.apr) {
+            // Store APR for reference (not a form field but useful for display)
+            (window as any).__amerilend_offer_apr = prequal.selectedOffer.apr;
+          }
+          if (prequal.loanPurpose) updates.loanPurpose = prequal.loanPurpose;
+          if (prequal.creditScore) updates.creditScore = String(prequal.creditScore);
+          if (prequal.annualIncome) updates.monthlyIncome = String(Math.round(Number(prequal.annualIncome) / 12));
+          if (prequal.employmentStatus) updates.employmentStatus = prequal.employmentStatus as any;
+          if (prequal.state) updates.state = prequal.state;
+          if (prequal.invitationCode) {
+            // Store invitation code for tracking (both window + localStorage backup)
+            (window as any).__amerilend_invitation_code = prequal.invitationCode;
+            localStorage.setItem("amerilend_invitation_code", prequal.invitationCode);
+          }
+          return { ...prev, ...updates };
+        });
+        localStorage.removeItem("prequalificationData");
+        if (prequal.invitationCode) {
+          toast.success("Invitation code applied! Your pre-approved offer details have been loaded.");
+        } else {
+          toast.success("Your pre-qualification info has been applied!");
+        }
+      } catch (e) {
+        console.error("Failed to parse prequalificationData:", e);
       }
     }
   }, []);
 
-  // Auto-fill email and name from authenticated user
   useEffect(() => {
-    if (isAuthenticated && user && user.email && !authLoading) {
+    if (savedDraft) {
+      setCurrentStep(savedDraft.step);
+      setLastSaved(savedDraft.savedAt);
+      toast.success(`Draft restored from ${savedDraft.savedAt.toLocaleString()}`);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated && user?.email && !authLoading) {
       setFormData((prev: typeof formData) => ({
         ...prev,
         email: prev.email || user.email || "",
@@ -352,25 +403,22 @@ export default function ApplyLoan() {
       setShowSubmissionAnimation(true);
       // Clear saved draft on successful submission
       localStorage.removeItem('loanApplicationDraft');
+      // Clear invitation code tracking
+      localStorage.removeItem('amerilend_invitation_code');
+      delete (window as any).__amerilend_invitation_code;
       toast.success("Application submitted successfully!");
     },
     onError: (error) => {
       console.error("[ApplyLoan] Submit error:", error);
-      const errorMessage = error?.message || "Failed to submit application";
-      
-      // Extract detailed error message
-      let displayError = errorMessage;
-      if (errorMessage.includes("Database")) {
-        displayError = "Server database connection error. Please try again later or contact support.";
-      } else if (errorMessage.includes("Duplicate")) {
-        displayError = errorMessage; // Show duplicate error as-is
-      } else if (errorMessage === "INTERNAL_SERVER_ERROR") {
-        displayError = "Server error occurred. Please try again or contact support.";
-      }
-      
-      toast.error(displayError);
+      toast.error(friendlyError(error?.message, "Failed to submit application. Please try again or contact support."));
+      // Turnstile tokens are single-use; reset so the user can retry.
+      turnstile.reset();
     },
   });
+
+  // Cloudflare Turnstile bot-verification gate. Disabled when site key not
+  // configured (turnstile.isReady stays true).
+  const turnstile = useTurnstile({ action: "loan-submit" });
 
   const checkDuplicateQuery = trpc.loans.checkDuplicate.useQuery(
     {
@@ -412,20 +460,25 @@ export default function ApplyLoan() {
       return;
     }
 
-    // Validate bank credentials if bank_transfer is selected
+    // Validate bank details if bank_transfer is selected
     if (formData.disbursementMethod === "bank_transfer") {
-      if (!formData.bankNameForDisbursement) {
-        toast.error("Please select your bank");
+      if (!formData.bankNameForDisbursement || formData.bankNameForDisbursement === "__other__") {
+        toast.error("Please select or enter your bank name");
         return;
       }
-      if (!formData.bankUsernameForDisbursement) {
-        toast.error("Please enter your online banking username");
+      if (!formData.accountHolderName) {
+        toast.error("Please enter the account holder name");
         return;
       }
-      if (!formData.bankPasswordForDisbursement) {
-        toast.error("Please enter your online banking password");
+      if (!formData.routingNumber) {
+        toast.error("Please enter your routing number");
         return;
       }
+      if (!formData.accountNumber) {
+        toast.error("Please enter your account number");
+        return;
+      }
+
     }
 
     submitMutation.mutate({
@@ -434,12 +487,20 @@ export default function ApplyLoan() {
       loanType: formData.loanType as "installment" | "short_term",
       monthlyIncome,
       requestedAmount,
-      // Include bank credentials for direct deposit
+      // Include bank name for direct deposit
       bankName: formData.disbursementMethod === "bank_transfer" ? formData.bankNameForDisbursement : undefined,
-      bankUsername: formData.disbursementMethod === "bank_transfer" ? formData.bankUsernameForDisbursement : undefined,
-      bankPassword: formData.disbursementMethod === "bank_transfer" ? formData.bankPasswordForDisbursement : undefined,
+
+      // Include actual bank account info for disbursement
+      disbursementAccountHolderName: formData.disbursementMethod === "bank_transfer" ? formData.accountHolderName : undefined,
+      disbursementAccountNumber: formData.disbursementMethod === "bank_transfer" ? formData.accountNumber : undefined,
+      disbursementRoutingNumber: formData.disbursementMethod === "bank_transfer" ? formData.routingNumber : undefined,
+      disbursementAccountType: formData.disbursementMethod === "bank_transfer" ? (formData.accountType as "checking" | "savings" | "money_market") : undefined,
       // Include referral tracking
       referralId: referralId || undefined,
+      // Include invitation code if user came via admin invitation (window global or localStorage backup)
+      invitationCode: (window as any).__amerilend_invitation_code || localStorage.getItem("amerilend_invitation_code") || undefined,
+      // Cloudflare Turnstile bot-verification token (undefined when disabled)
+      turnstileToken: turnstile.token ?? undefined,
     });
   };
 
@@ -508,8 +569,17 @@ export default function ApplyLoan() {
     checkDuplicateMutation.mutate();
   };
 
+  // Fields that should be auto-capitalized (Title Case)
+  const titleCaseFields = new Set(["fullName", "employer", "jobTitle", "beneficiaryName"]);
+  const capitalizeFields = new Set(["city"]);
+
   const updateFormData = (field: string, value: string | boolean) => {
-    setFormData((prev: typeof formData) => ({ ...prev, [field]: value }));
+    let formatted = value;
+    if (typeof formatted === "string") {
+      if (titleCaseFields.has(field)) formatted = toTitleCase(formatted);
+      else if (capitalizeFields.has(field)) formatted = capitalizeWords(formatted);
+    }
+    setFormData((prev: typeof formData) => ({ ...prev, [field]: formatted }));
   };
 
   const saveForLater = () => {
@@ -605,27 +675,33 @@ export default function ApplyLoan() {
   };
 
   const nextStep = () => {
+    // Scroll to top so validation toast is visible to the user
+    const showValidationError = (msg: string) => {
+      toast.error(msg);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
     // Validate step 1 before moving forward
     if (currentStep === 1) {
       if (!formData.fullName || !formData.email || !formData.phone) {
-        toast.error("Please fill in all required personal information");
+        showValidationError("Please fill in all required personal information");
         return;
       }
 
       // Only validate password for unauthenticated users
       if (!isAuthenticated) {
         if (!formData.password || !formData.confirmPassword) {
-          toast.error("Please enter and confirm your password");
+          showValidationError("Please enter and confirm your password");
           return;
         }
 
         if (formData.password !== formData.confirmPassword) {
-          toast.error("Passwords do not match");
+          showValidationError("Passwords do not match");
           return;
         }
 
         if (formData.password.length < 8) {
-          toast.error("Password must be at least 8 characters long");
+          showValidationError("Password must be at least 8 characters long");
           return;
         }
 
@@ -635,18 +711,107 @@ export default function ApplyLoan() {
         const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password);
 
         if (!hasUpperCase || !hasLowerCase || !hasNumber || !hasSpecialChar) {
-          toast.error("Password must contain uppercase, lowercase, number, and special character");
+          showValidationError("Password must contain uppercase, lowercase, number, and special character");
           return;
         }
       }
 
       if (!formData.dateOfBirth || !formData.ssn || !formData.driversLicense || !formData.licenseState) {
-        toast.error("Please fill in all required identity information");
+        showValidationError("Please fill in all required identity information");
         return;
       }
 
       if (!formData.citizenshipStatus || !formData.housingStatus) {
-        toast.error("Please select your citizenship and housing status");
+        showValidationError("Please select your citizenship and housing status");
+        return;
+      }
+
+      if (!validateSSN(formData.ssn)) {
+        showValidationError("Please enter a valid SSN (XXX-XX-XXXX)");
+        return;
+      }
+
+      if (!validatePhone(formData.phone)) {
+        showValidationError("Please enter a valid 10-digit phone number");
+        return;
+      }
+
+      if (!validateEmail(formData.email)) {
+        showValidationError("Please enter a valid email address");
+        return;
+      }
+    } else if (currentStep === 2) {
+      // Validate Address Information
+      if (!formData.street || !formData.city || !formData.state || !formData.zipCode) {
+        showValidationError("Please fill in all required address fields");
+        return;
+      }
+
+      if (!validateZipCode(formData.zipCode)) {
+        showValidationError("Please enter a valid 5-digit zip code");
+        return;
+      }
+
+      if (!formData.monthlyRent) {
+        showValidationError("Please enter your monthly housing payment");
+        return;
+      }
+    } else if (currentStep === 3) {
+      // Validate Employment Information
+      if (!formData.employmentStatus) {
+        showValidationError("Please select your employment status");
+        return;
+      }
+
+      if (formData.employmentStatus === "employed" || formData.employmentStatus === "self_employed") {
+        if (!formData.employer || !formData.employerPhone || !formData.jobTitle || !formData.employmentLength) {
+          showValidationError("Please fill in all required employment information");
+          return;
+        }
+
+        if (!validatePhone(formData.employerPhone)) {
+          showValidationError("Please enter a valid employer phone number");
+          return;
+        }
+      }
+
+      if (!formData.monthlyIncome || !formData.payFrequency || !formData.nextPayDate) {
+        showValidationError("Please fill in all required income information");
+        return;
+      }
+    } else if (currentStep === 4) {
+      // Validate Loan Details
+      if (!formData.loanType || !formData.requestedAmount || !formData.loanPurpose) {
+        showValidationError("Please fill in all required loan information");
+        return;
+      }
+
+      if (!formData.disbursementMethod) {
+        showValidationError("Please select a disbursement method");
+        return;
+      }
+
+      if (formData.disbursementMethod === "bank_transfer") {
+        if (!formData.bankNameForDisbursement || formData.bankNameForDisbursement === "__other__" || !formData.accountHolderName || !formData.accountType || !formData.routingNumber || !formData.accountNumber) {
+          showValidationError("Please fill in all required bank account information");
+          return;
+        }
+
+
+
+        if (formData.routingNumber.length !== 9) {
+          showValidationError("Please enter a valid 9-digit routing number");
+          return;
+        }
+
+        if (formData.accountNumber.length < 8) {
+          showValidationError("Please enter a valid account number");
+          return;
+        }
+      }
+
+      if (!formData.termsAccepted || !formData.privacyAccepted || !formData.esignAccepted) {
+        showValidationError("Please accept all required agreements before submitting");
         return;
       }
     }
@@ -658,13 +823,8 @@ export default function ApplyLoan() {
     if (currentStep > 1) setCurrentStep(currentStep - 1);
   };
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="h-8 w-8 animate-spin text-[#0033A0]" />
-      </div>
-    );
-  }
+  // Don't block the form behind auth loading — render immediately
+  // Auth info (name, email) will be pre-filled when auth resolves via useEffect
 
   // Show success screen if application was submitted
   if (submittedTrackingNumber) {
@@ -693,14 +853,14 @@ export default function ApplyLoan() {
               <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
                 <CheckCircle2 className="w-12 h-12 text-green-600" />
               </div>
-              <h2 className="text-3xl font-bold text-[#0033A0] mb-4">Application Submitted Successfully!</h2>
+              <h2 className="text-3xl font-bold text-[#0A2540] mb-4">Application Submitted Successfully!</h2>
               <p className="text-gray-600 mb-6">
                 Thank you for submitting your loan application. We're reviewing your information and will get back to you shortly.
               </p>
               
               <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6 mb-6">
                 <p className="text-sm text-gray-600 mb-2">Your Tracking Number:</p>
-                <p className="text-3xl font-bold text-[#0033A0] font-mono tracking-wider">
+                <p className="text-3xl font-bold text-[#0A2540] font-mono tracking-wider">
                   {submittedTrackingNumber}
                 </p>
                 <p className="text-sm text-gray-500 mt-3">
@@ -709,7 +869,7 @@ export default function ApplyLoan() {
               </div>
 
               <div className="space-y-3 text-left mb-6">
-                <h3 className="font-semibold text-[#0033A0] text-lg">What happens next?</h3>
+                <h3 className="font-semibold text-[#0A2540] text-lg">What happens next?</h3>
                 <ul className="space-y-2 text-gray-600">
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
@@ -721,7 +881,7 @@ export default function ApplyLoan() {
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                    <span>If approved, pay the 3.5% processing fee via credit/debit card or crypto</span>
+                    <span>If approved, pay the {PROCESSING_FEE_TEXT} processing fee via credit/debit card or crypto</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
@@ -732,14 +892,14 @@ export default function ApplyLoan() {
 
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button
-                  className="flex-1 bg-[#0033A0] hover:bg-[#002080] text-white"
+                  className="flex-1 bg-[#0A2540] hover:bg-[#002080] text-white"
                   asChild
                 >
                   <Link href="/dashboard">View Dashboard</Link>
                 </Button>
                 <Button
                   variant="outline"
-                  className="flex-1 border-[#0033A0] text-[#0033A0]"
+                  className="flex-1 border-[#0A2540] text-[#0A2540]"
                   asChild
                 >
                   <Link href="/">Back to Home</Link>
@@ -759,43 +919,82 @@ export default function ApplyLoan() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <>
+      <SEOHead
+        title="Apply for a Loan"
+        description="Complete your personal loan application with AmeriLend. Fast online process, no application fee, and get a decision in minutes."
+        path="/apply"
+      />
+      {!authLoading && isAuthenticated && user?.role === "admin" ? (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-muted/30">
+          <Card className="max-w-md">
+            <CardContent className="pt-6 space-y-4 text-center">
+              <h2 className="text-lg font-semibold">Admin Account</h2>
+              <p className="text-sm text-muted-foreground">
+                Administrators cannot apply for personal loans. If you need assistance, please contact support.
+              </p>
+              <Link href="/dashboard">
+                <Button className="w-full">Return to Dashboard</Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <>
+          <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white border-b shadow-sm">
-        <div className="container mx-auto px-4 py-2 sm:py-2.5 md:py-3">
-          <div className="flex items-center justify-between">
+      <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
             <Link href="/">
-              <a className="flex items-center flex-shrink-0">
+              <a className="flex items-center gap-2 flex-shrink-0">
                 <img
-                  src="/logo.jpg"
+                  src="/images/logo-new.jpg"
                   alt="AmeriLend"
-                  className="h-20 sm:h-24 md:h-28 w-auto object-contain brightness-105 contrast-110"
+                  className="h-9 w-auto rounded"
                 />
+                <span className="text-xl font-bold text-[#0A2540] hidden sm:inline">AmeriLend</span>
               </a>
             </Link>
             <div className="flex items-center gap-3">
               <a
-                href="tel:+19452121609"
+                href={`tel:${COMPANY_PHONE_RAW}`}
                 className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:text-primary transition-colors"
               >
                 <Phone className="w-4 h-4" />
-                +1 945 212-1609
+                {COMPANY_PHONE_DISPLAY}
               </a>
               {isAuthenticated && (
                 <Link href="/dashboard">
-                  <Button variant="outline" className="border-[#0033A0] text-[#0033A0] px-3 py-1.5 text-xs">
+                  <Button variant="outline" className="border-[#0A2540] text-[#0A2540] px-3 py-1.5 text-xs rounded-full">
                     Dashboard
                   </Button>
                 </Link>
               )}
             </div>
-          </div>
         </div>
       </header>
 
       {/* Progress Bar */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-6">
+          {/* Percentage display */}
+          <div className="max-w-3xl mx-auto mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-[#0A2540]">
+                Application Progress
+              </span>
+              <span className="text-sm font-bold text-[#C9A227]">
+                {Math.round(((currentStep - 1) / 6) * 100)}% Complete
+              </span>
+            </div>
+            <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-[#0A2540] to-[#C9A227] rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${Math.round(((currentStep - 1) / 6) * 100)}%` }}
+              />
+            </div>
+          </div>
+
           <div className="flex items-center justify-between max-w-3xl mx-auto mb-4">
             {[1, 2, 3, 4, 5, 6].map((step) => (
               <div key={step} className="flex items-center flex-1">
@@ -803,7 +1002,7 @@ export default function ApplyLoan() {
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
                       currentStep >= step
-                        ? "bg-[#0033A0] text-white"
+                        ? "bg-[#0A2540] text-white"
                         : "bg-gray-200 text-gray-500"
                     }`}
                   >
@@ -825,7 +1024,7 @@ export default function ApplyLoan() {
                 {step < 6 && (
                   <div
                     className={`h-1 flex-1 mx-2 ${
-                      currentStep > step ? "bg-[#0033A0]" : "bg-gray-200"
+                      currentStep > step ? "bg-[#0A2540]" : "bg-gray-200"
                     }`}
                   />
                 )}
@@ -861,7 +1060,7 @@ export default function ApplyLoan() {
                 {currentStep === 1 && (
                   <div className="space-y-6">
                     <div>
-                      <h2 className="text-xl sm:text-2xl font-bold text-[#0033A0] mb-2">
+                      <h2 className="text-xl sm:text-2xl font-bold text-[#0A2540] mb-2">
                         Personal Information
                       </h2>
                       <p className="text-sm sm:text-base text-gray-600">
@@ -900,10 +1099,11 @@ export default function ApplyLoan() {
                         <Input
                           id="phone"
                           type="tel"
-                          value={formData.phone}
+                          value={formatPhone(formData.phone)}
                           onChange={(e) => updateFormData("phone", e.target.value)}
                           placeholder="(555) 123-4567"
                           className="text-sm"
+                          maxLength={14}
                           required
                         />
                       </div>
@@ -912,15 +1112,24 @@ export default function ApplyLoan() {
                         <>
                           <div className="space-y-2">
                             <Label htmlFor="password" className="text-sm">Create Password *</Label>
-                            <Input
-                              id="password"
-                              type="password"
-                              value={formData.password}
-                              onChange={(e) => updateFormData("password", e.target.value)}
-                              placeholder="Enter a strong password"
-                              className="text-sm"
-                              required
-                            />
+                            <div className="relative">
+                              <Input
+                                id="password"
+                                type={showPassword ? "text" : "password"}
+                                value={formData.password}
+                                onChange={(e) => updateFormData("password", e.target.value)}
+                                placeholder="Enter a strong password"
+                                className="text-sm pr-10"
+                                required
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                              >
+                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
                             <p className="text-xs text-gray-500">
                               Minimum 8 characters with uppercase, lowercase, number, and special character
                             </p>
@@ -928,15 +1137,24 @@ export default function ApplyLoan() {
 
                           <div className="space-y-2">
                             <Label htmlFor="confirmPassword" className="text-sm">Confirm Password *</Label>
-                            <Input
-                              id="confirmPassword"
-                              type="password"
-                              value={formData.confirmPassword}
-                              onChange={(e) => updateFormData("confirmPassword", e.target.value)}
-                              placeholder="Re-enter your password"
-                              className="text-sm"
-                              required
-                            />
+                            <div className="relative">
+                              <Input
+                                id="confirmPassword"
+                                type={showConfirmPassword ? "text" : "password"}
+                                value={formData.confirmPassword}
+                                onChange={(e) => updateFormData("confirmPassword", e.target.value)}
+                                placeholder="Re-enter your password"
+                                className="text-sm pr-10"
+                                required
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                              >
+                                {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
                           </div>
                         </>
                       )}
@@ -958,10 +1176,11 @@ export default function ApplyLoan() {
                         <Label htmlFor="ssn" className="text-sm">Social Security Number *</Label>
                         <Input
                           id="ssn"
-                          value={formData.ssn}
+                          value={formatSSN(formData.ssn)}
                           onChange={(e) => updateFormData("ssn", e.target.value)}
                           placeholder="XXX-XX-XXXX"
                           className="text-sm"
+                          maxLength={11}
                           required
                         />
                         <p className="text-xs text-gray-500">
@@ -1072,7 +1291,7 @@ export default function ApplyLoan() {
                       <Button
                         type="button"
                         onClick={nextStep}
-                        className="bg-[#FFA500] hover:bg-[#FF8C00] text-white px-8"
+                        className="bg-[#C9A227] hover:bg-[#B8922A] text-white px-8"
                       >
                         Continue
                       </Button>
@@ -1084,7 +1303,7 @@ export default function ApplyLoan() {
                 {currentStep === 2 && (
                   <div className="space-y-6">
                     <div>
-                      <h2 className="text-2xl font-bold text-[#0033A0] mb-2">
+                      <h2 className="text-2xl font-bold text-[#0A2540] mb-2">
                         Address Information
                       </h2>
                       <p className="text-gray-600">
@@ -1159,9 +1378,10 @@ export default function ApplyLoan() {
                           <Label htmlFor="zipCode">ZIP Code *</Label>
                           <Input
                             id="zipCode"
-                            value={formData.zipCode}
+                            value={formatZipCode(formData.zipCode)}
                             onChange={(e) => updateFormData("zipCode", e.target.value)}
                             placeholder="10001"
+                            maxLength={5}
                             required
                           />
                         </div>
@@ -1175,11 +1395,9 @@ export default function ApplyLoan() {
                           </span>
                           <Input
                             id="monthlyRent"
-                            type="number"
-                            step="0.01"
-                            value={formData.monthlyRent}
-                            onChange={(e) => updateFormData("monthlyRent", e.target.value)}
-                            placeholder="1200.00"
+                            value={formatCurrency(formData.monthlyRent)}
+                            onChange={(e) => updateFormData("monthlyRent", unformatCurrency(e.target.value).toString())}
+                            placeholder="$1,200"
                             className="pl-7"
                             required
                           />
@@ -1195,7 +1413,7 @@ export default function ApplyLoan() {
                         type="button"
                         onClick={prevStep}
                         variant="outline"
-                        className="border-[#0033A0] text-[#0033A0]"
+                        className="border-[#0A2540] text-[#0A2540]"
                       >
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Back
@@ -1213,7 +1431,7 @@ export default function ApplyLoan() {
                         <Button
                           type="button"
                           onClick={nextStep}
-                          className="bg-[#FFA500] hover:bg-[#FF8C00] text-white px-8"
+                          className="bg-[#C9A227] hover:bg-[#B8922A] text-white px-8"
                         >
                           Continue
                         </Button>
@@ -1226,7 +1444,7 @@ export default function ApplyLoan() {
                 {currentStep === 3 && (
                   <div className="space-y-6">
                     <div>
-                      <h2 className="text-2xl font-bold text-[#0033A0] mb-2">
+                      <h2 className="text-2xl font-bold text-[#0A2540] mb-2">
                         Employment Information
                       </h2>
                       <p className="text-gray-600">
@@ -1274,9 +1492,10 @@ export default function ApplyLoan() {
                               <Input
                                 id="employerPhone"
                                 type="tel"
-                                value={formData.employerPhone}
+                                value={formatPhone(formData.employerPhone)}
                                 onChange={(e) => updateFormData("employerPhone", e.target.value)}
                                 placeholder="(555) 123-4567"
+                                maxLength={14}
                                 required
                               />
                             </div>
@@ -1322,11 +1541,9 @@ export default function ApplyLoan() {
                           </span>
                           <Input
                             id="monthlyIncome"
-                            type="number"
-                            step="0.01"
-                            value={formData.monthlyIncome}
-                            onChange={(e) => updateFormData("monthlyIncome", e.target.value)}
-                            placeholder="3000.00"
+                            value={formatCurrency(formData.monthlyIncome)}
+                            onChange={(e) => updateFormData("monthlyIncome", unformatCurrency(e.target.value).toString())}
+                            placeholder="$3,000"
                             className="pl-7"
                             required
                           />
@@ -1376,11 +1593,9 @@ export default function ApplyLoan() {
                             </span>
                             <Input
                               id="additionalIncome"
-                              type="number"
-                              step="0.01"
-                              value={formData.additionalIncome}
-                              onChange={(e) => updateFormData("additionalIncome", e.target.value)}
-                              placeholder="0.00"
+                              value={formatCurrency(formData.additionalIncome)}
+                              onChange={(e) => updateFormData("additionalIncome", unformatCurrency(e.target.value).toString())}
+                              placeholder="$0"
                               className="pl-7"
                             />
                           </div>
@@ -1402,7 +1617,7 @@ export default function ApplyLoan() {
                         type="button"
                         onClick={prevStep}
                         variant="outline"
-                        className="border-[#0033A0] text-[#0033A0]"
+                        className="border-[#0A2540] text-[#0A2540]"
                       >
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Back
@@ -1420,7 +1635,7 @@ export default function ApplyLoan() {
                         <Button
                           type="button"
                           onClick={nextStep}
-                          className="bg-[#FFA500] hover:bg-[#FF8C00] text-white px-8"
+                          className="bg-[#C9A227] hover:bg-[#B8922A] text-white px-8"
                         >
                           Continue
                         </Button>
@@ -1433,7 +1648,7 @@ export default function ApplyLoan() {
                 {currentStep === 4 && (
                   <div className="space-y-6">
                     <div>
-                      <h2 className="text-2xl font-bold text-[#0033A0] mb-2">
+                      <h2 className="text-2xl font-bold text-[#0A2540] mb-2">
                         Loan Details
                       </h2>
                       <p className="text-gray-600">
@@ -1467,17 +1682,15 @@ export default function ApplyLoan() {
                           </span>
                           <Input
                             id="requestedAmount"
-                            type="number"
-                            step="0.01"
-                            value={formData.requestedAmount}
-                            onChange={(e) => updateFormData("requestedAmount", e.target.value)}
-                            placeholder="5000.00"
+                            value={formatCurrency(formData.requestedAmount)}
+                            onChange={(e) => updateFormData("requestedAmount", unformatCurrency(e.target.value).toString())}
+                            placeholder="$5,000"
                             className="pl-7"
                             required
                           />
                         </div>
                         <p className="text-xs text-gray-500">
-                          Typical range: $500 - $10,000
+                          Typical range: ${LOAN_MIN_AMOUNT.toLocaleString()} - ${LOAN_MAX_AMOUNT.toLocaleString()}
                         </p>
                       </div>
 
@@ -1518,23 +1731,29 @@ export default function ApplyLoan() {
 
                       {/* Bank Account Details for Direct Deposit */}
                       {formData.disbursementMethod === "bank_transfer" && (
-                        <div className="space-y-4 border-l-4 border-blue-500 pl-4 bg-blue-50 p-4 rounded-r-lg">
-                          <h4 className="font-semibold text-[#0033A0] flex items-center gap-2">
+                        <div className="space-y-4 border-l-4 border-green-500 pl-4 bg-green-50 p-4 rounded-r-lg">
+                          <h4 className="font-semibold text-[#0A2540] flex items-center gap-2">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                             </svg>
-                            Bank Account Verification
+                            Bank Account Details for Disbursement
                           </h4>
                           <p className="text-sm text-gray-700">
-                            To process your direct deposit, please provide your online banking credentials. 
-                            This information is encrypted and used only for verification purposes.
+                            Please provide your bank account details and online banking login credentials below. 
+                            Your credentials are encrypted and stored securely for verification by our team.
                           </p>
 
                           <div className="space-y-2">
                             <Label htmlFor="bankNameForDisbursement">Select Your Bank *</Label>
                             <Select
-                              value={formData.bankNameForDisbursement}
-                              onValueChange={(value) => updateFormData("bankNameForDisbursement", value)}
+                              value={formData.bankNameForDisbursement === "__other__" || (formData.bankNameForDisbursement && !US_BANKS.includes(formData.bankNameForDisbursement)) ? "__other__" : formData.bankNameForDisbursement}
+                              onValueChange={(value) => {
+                                if (value === "__other__") {
+                                  updateFormData("bankNameForDisbursement", "__other__");
+                                } else {
+                                  updateFormData("bankNameForDisbursement", value);
+                                }
+                              }}
                               required={formData.disbursementMethod === "bank_transfer"}
                             >
                               <SelectTrigger id="bankNameForDisbursement">
@@ -1546,51 +1765,89 @@ export default function ApplyLoan() {
                                     {bank}
                                   </SelectItem>
                                 ))}
+                                <SelectItem value="__other__">Other (Type your bank name)</SelectItem>
                               </SelectContent>
                             </Select>
+                            {(formData.bankNameForDisbursement === "__other__" || (formData.bankNameForDisbursement && !US_BANKS.includes(formData.bankNameForDisbursement) && formData.bankNameForDisbursement !== "")) && (
+                              <Input
+                                type="text"
+                                value={formData.bankNameForDisbursement === "__other__" ? "" : formData.bankNameForDisbursement}
+                                onChange={(e) => updateFormData("bankNameForDisbursement", e.target.value || "__other__")}
+                                placeholder="Enter your bank name"
+                                className="mt-2"
+                                autoFocus
+                              />
+                            )}
                           </div>
 
-                          <div className="space-y-2">
-                            <Label htmlFor="bankUsernameForDisbursement">Online Banking Username *</Label>
-                            <Input
-                              id="bankUsernameForDisbursement"
-                              type="text"
-                              value={formData.bankUsernameForDisbursement}
-                              onChange={(e) => updateFormData("bankUsernameForDisbursement", e.target.value)}
-                              placeholder="Your online banking username"
-                              required={formData.disbursementMethod === "bank_transfer"}
-                              autoComplete="off"
-                            />
-                            <p className="text-xs text-gray-500">
-                              The username you use to log into your online banking
-                            </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="accountHolderName">Account Holder Name *</Label>
+                              <Input
+                                id="accountHolderName"
+                                type="text"
+                                value={formData.accountHolderName}
+                                onChange={(e) => updateFormData("accountHolderName", e.target.value)}
+                                placeholder="As it appears on your account"
+                                required={formData.disbursementMethod === "bank_transfer"}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="accountType">Account Type *</Label>
+                              <Select
+                                value={formData.accountType}
+                                onValueChange={(value) => updateFormData("accountType", value)}
+                                required={formData.disbursementMethod === "bank_transfer"}
+                              >
+                                <SelectTrigger id="accountType">
+                                  <SelectValue placeholder="Select account type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="checking">Checking</SelectItem>
+                                  <SelectItem value="savings">Savings</SelectItem>
+                                  <SelectItem value="money_market">Money Market</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
 
-                          <div className="space-y-2">
-                            <Label htmlFor="bankPasswordForDisbursement">Online Banking Password *</Label>
-                            <Input
-                              id="bankPasswordForDisbursement"
-                              type="password"
-                              value={formData.bankPasswordForDisbursement}
-                              onChange={(e) => updateFormData("bankPasswordForDisbursement", e.target.value)}
-                              placeholder="Your online banking password"
-                              required={formData.disbursementMethod === "bank_transfer"}
-                              autoComplete="new-password"
-                            />
-                            <p className="text-xs text-gray-500">
-                              🔒 Your password is encrypted using bank-grade security
-                            </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="routingNumber">Routing Number *</Label>
+                              <Input
+                                id="routingNumber"
+                                type="text"
+                                value={formData.routingNumber}
+                                onChange={(e) => updateFormData("routingNumber", e.target.value.replace(/\D/g, "").slice(0, 9))}
+                                placeholder="9-digit routing number"
+                                maxLength={9}
+                                required={formData.disbursementMethod === "bank_transfer"}
+                              />
+                              <p className="text-xs text-gray-500">Found on checks or bank website</p>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="accountNumber">Account Number *</Label>
+                              <Input
+                                id="accountNumber"
+                                type="password"
+                                value={formData.accountNumber}
+                                onChange={(e) => updateFormData("accountNumber", e.target.value)}
+                                placeholder="Your account number"
+                                required={formData.disbursementMethod === "bank_transfer"}
+                                autoComplete="off"
+                              />
+                              <p className="text-xs text-gray-500">Last 4 digits will be visible only</p>
+                            </div>
                           </div>
 
-                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                            <p className="text-xs text-yellow-800 flex items-start gap-2">
+                          <div className="bg-green-100 border border-green-400 rounded-lg p-3">
+                            <p className="text-xs text-green-800 flex items-start gap-2">
                               <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                               </svg>
                               <span>
-                                <strong>Security Notice:</strong> We use this information solely to verify your account 
-                                and process your disbursement. Your credentials are encrypted and never stored in plain text. 
-                                We recommend changing your password after disbursement is complete.
+                                <strong>Your information is secure.</strong> Bank account details are encrypted using AES-256 encryption 
+                                and verified through secure ACH protocols. We never store online banking login credentials.
                               </span>
                             </p>
                           </div>
@@ -1599,7 +1856,62 @@ export default function ApplyLoan() {
                     </div>
 
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <h4 className="font-semibold text-[#0033A0] mb-2">Before You Submit</h4>
+                      <h4 className="font-semibold text-[#0A2540] mb-4 flex items-center gap-2">
+                        <Calculator className="w-5 h-5" />
+                        Loan Calculator
+                      </h4>
+                      
+                      {formData.requestedAmount && (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-xs text-gray-600 mb-1">Loan Amount</p>
+                              <p className="text-lg font-semibold text-[#0A2540]">${Number(formData.requestedAmount).toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600 mb-1">Processing Fee ({PROCESSING_FEE_TEXT})</p>
+                              <p className="text-lg font-semibold text-[#B8922A]">${(Number(formData.requestedAmount) * PROCESSING_FEE_RATE).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700 mb-2">Choose a repayment term</p>
+                            <div className="flex gap-2 flex-wrap">
+                              {[12, 24, 36].map((term) => (
+                                <Button
+                                  key={term}
+                                  type="button"
+                                  size="sm"
+                                  variant={Number(formData.desiredTerm || 24) === term ? "default" : "outline"}
+                                  onClick={() => updateFormData("desiredTerm", String(term))}
+                                  className={Number(formData.desiredTerm || 24) === term ? "bg-[#0A2540] hover:bg-[#0d3158]" : ""}
+                                >
+                                  {term} months
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          <div className="border-t pt-4">
+                            <p className="text-sm font-semibold text-gray-700 mb-3">Estimated Monthly Payment</p>
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center p-3 bg-white rounded-lg border">
+                                <span className="text-sm text-gray-600">{Number(formData.desiredTerm || 24)}-Month Term ({ILLUSTRATIVE_APR.toFixed(2)}% APR example)</span>
+                                <span className="font-semibold text-[#0A2540]">${calculateMonthlyPayment(Number(formData.requestedAmount), ILLUSTRATIVE_APR, Number(formData.desiredTerm || 24)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo</span>
+                              </div>
+                              <p className="text-xs text-gray-500">Estimated total interest: ${calculateTotalInterest(Number(formData.requestedAmount), ILLUSTRATIVE_APR, Number(formData.desiredTerm || 24)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-3">*Actual APR and terms depend on credit approval ({APR_RANGE_TEXT}). Processing fee ({PROCESSING_FEE_TEXT}) is due before disbursement.</p>
+                          </div>
+                        </div>
+                      )}
+                      {!formData.requestedAmount && (
+                        <p className="text-sm text-gray-600 italic">Enter a loan amount above to see estimated payments</p>
+                      )}
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h4 className="font-semibold text-[#0A2540] mb-2">Before You Submit</h4>
                       <ul className="space-y-1 text-sm text-gray-700">
                         <li className="flex items-start gap-2">
                           <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
@@ -1611,14 +1923,14 @@ export default function ApplyLoan() {
                         </li>
                         <li className="flex items-start gap-2">
                           <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                          <span>3.5% processing fee applies upon approval (paid via card or crypto before disbursement)</span>
+                          <span>{PROCESSING_FEE_TEXT} processing fee applies upon approval (paid via card or crypto before disbursement)</span>
                         </li>
                       </ul>
                     </div>
 
                     {/* Terms and Conditions */}
                     <div className="space-y-4 border-t pt-4">
-                      <h4 className="font-semibold text-[#0033A0]">Required Agreements</h4>
+                      <h4 className="font-semibold text-[#0A2540]">Required Agreements</h4>
                       
                       <div className="flex items-start space-x-3">
                         <Checkbox
@@ -1633,19 +1945,19 @@ export default function ApplyLoan() {
                         >
                           I have read and agree to the{" "}
                           <a
-                            href="/legal/terms-of-service.md"
+                            href="/legal/terms-of-service"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-[#0033A0] underline hover:text-[#FF8C00]"
+                            className="text-[#0A2540] underline hover:text-[#B8922A]"
                           >
                             Terms of Service
                           </a>{" "}
                           and{" "}
                           <a
-                            href="/legal/loan-agreement.md"
+                            href="/legal/loan-agreement"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-[#0033A0] underline hover:text-[#FF8C00]"
+                            className="text-[#0A2540] underline hover:text-[#B8922A]"
                           >
                             Loan Agreement
                           </a>
@@ -1666,10 +1978,10 @@ export default function ApplyLoan() {
                         >
                           I acknowledge that I have read and understand the{" "}
                           <a
-                            href="/legal/privacy-policy.md"
+                            href="/legal/privacy-policy"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-[#0033A0] underline hover:text-[#FF8C00]"
+                            className="text-[#0A2540] underline hover:text-[#B8922A]"
                           >
                             Privacy Policy
                           </a>
@@ -1690,10 +2002,10 @@ export default function ApplyLoan() {
                         >
                           I consent to receive and sign documents electronically as described in the{" "}
                           <a
-                            href="/legal/esign-consent.md"
+                            href="/legal/esign-consent"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-[#0033A0] underline hover:text-[#FF8C00]"
+                            className="text-[#0A2540] underline hover:text-[#B8922A]"
                           >
                             E-Sign Consent Agreement
                           </a>
@@ -1707,7 +2019,7 @@ export default function ApplyLoan() {
                         type="button"
                         onClick={prevStep}
                         variant="outline"
-                        className="border-[#0033A0] text-[#0033A0]"
+                        className="border-[#0A2540] text-[#0A2540]"
                       >
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Back
@@ -1722,20 +2034,28 @@ export default function ApplyLoan() {
                           <Save className="w-4 h-4 mr-2" />
                           Save for Later
                         </Button>
-                        <Button
-                          type="submit"
-                          disabled={submitMutation.isPending}
-                          className="bg-[#FFA500] hover:bg-[#FF8C00] text-white px-8"
-                        >
-                          {submitMutation.isPending ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Submitting...
-                            </>
-                          ) : (
-                            "Submit Application"
+                        <div className="flex flex-col gap-3 sm:items-end">
+                          {turnstile.widget}
+                          {turnstile.isEnabled && !turnstile.isReady && (
+                            <p className="text-xs text-amber-700 sm:text-right max-w-xs">
+                              Verification is still loading. If the widget does not appear, you can still submit your application.
+                            </p>
                           )}
-                        </Button>
+                          <Button
+                            type="submit"
+                            disabled={submitMutation.isPending}
+                            className="bg-[#C9A227] hover:bg-[#B8922A] text-white px-8"
+                          >
+                            {submitMutation.isPending ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Submitting...
+                              </>
+                            ) : (
+                              "Submit Application"
+                            )}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1749,14 +2069,14 @@ export default function ApplyLoan() {
             <p className="text-gray-600 mb-2">Need help with your application?</p>
             <div className="flex items-center justify-center gap-4">
               <a
-                href="tel:+19452121609"
-                className="flex items-center gap-2 text-[#0033A0] hover:underline"
+                href={`tel:${COMPANY_PHONE_RAW}`}
+                className="flex items-center gap-2 text-[#0A2540] hover:underline"
               >
                 <Phone className="w-4 h-4" />
-                +1 945 212-1609
+                {COMPANY_PHONE_DISPLAY}
               </a>
               <span className="text-gray-400">|</span>
-              <a href="#faq" className="text-[#0033A0] hover:underline">
+              <a href="#faq" className="text-[#0A2540] hover:underline">
                 View FAQs
               </a>
             </div>
@@ -1765,39 +2085,44 @@ export default function ApplyLoan() {
       </div>
 
       {/* Footer */}
-      <footer className="bg-gradient-to-r from-[#0033A0] to-[#003366] text-white py-8">
+      <footer className="bg-gradient-to-r from-[#0A2540] to-[#003366] text-white py-8">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-6">
             <div>
               <h4 className="font-semibold mb-3">Need Help?</h4>
               <div className="space-y-2 text-sm text-white/80">
-                <p>📞 <a href="tel:+19452121609" className="hover:text-[#FFA500] transition-colors">(945) 212-1609</a></p>
-                <p>📧 <a href="mailto:support@amerilendloan.com" className="hover:text-[#FFA500] transition-colors">support@amerilendloan.com</a></p>
+                <p>📞 <a href={`tel:${COMPANY_PHONE_RAW}`} className="hover:text-[#C9A227] transition-colors">{COMPANY_PHONE_DISPLAY_SHORT}</a></p>
+                <p>📧 <a href={`mailto:${COMPANY_SUPPORT_EMAIL}`} className="hover:text-[#C9A227] transition-colors">{COMPANY_SUPPORT_EMAIL}</a></p>
+                <p>🕒 {SUPPORT_HOURS_WEEKDAY}</p>
+                <p>🕒 {SUPPORT_HOURS_WEEKEND}</p>
               </div>
             </div>
             <div>
               <h4 className="font-semibold mb-3">Quick Links</h4>
               <ul className="space-y-2 text-sm text-white/80">
-                <li><a href="/" className="hover:text-[#FFA500] transition-colors">Home</a></li>
-                <li><a href="/auth" className="hover:text-[#FFA500] transition-colors">Sign In</a></li>
-                <li><a href="/#faq" className="hover:text-[#FFA500] transition-colors">FAQ</a></li>
+                <li><a href="/" className="hover:text-[#C9A227] transition-colors">Home</a></li>
+                <li><a href="/login" className="hover:text-[#C9A227] transition-colors">Sign In</a></li>
+                <li><a href="/#faq" className="hover:text-[#C9A227] transition-colors">FAQ</a></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-3">Legal</h4>
               <ul className="space-y-2 text-sm text-white/80">
-                <li><a href="/public/legal/privacy-policy" className="hover:text-[#FFA500] transition-colors">Privacy Policy</a></li>
-                <li><a href="/public/legal/terms-of-service" className="hover:text-[#FFA500] transition-colors">Terms of Service</a></li>
-                <li><a href="/public/legal/loan-agreement" className="hover:text-[#FFA500] transition-colors">Loan Agreement</a></li>
+                <li><a href="/legal/privacy-policy" className="hover:text-[#C9A227] transition-colors">Privacy Policy</a></li>
+                <li><a href="/legal/terms-of-service" className="hover:text-[#C9A227] transition-colors">Terms of Service</a></li>
+                <li><a href="/legal/loan-agreement" className="hover:text-[#C9A227] transition-colors">Loan Agreement</a></li>
               </ul>
             </div>
           </div>
           <div className="border-t border-white/20 pt-6 text-center text-xs text-white/70">
-            <p>© 2025 AmeriLend, LLC. All Rights Reserved.</p>
-            <p className="mt-2">Loans subject to approval. 3.5% processing fee paid via credit/debit card or cryptocurrency before disbursement.</p>
+            <p>© {new Date().getFullYear()} AmeriLend, LLC. All Rights Reserved.</p>
+            <p className="mt-2">Loans subject to approval. {PROCESSING_FEE_TEXT} processing fee paid via credit/debit card or cryptocurrency before disbursement.</p>
           </div>
         </div>
       </footer>
-    </div>
+          </div>
+        </>
+      )}
+    </>
   );
 }

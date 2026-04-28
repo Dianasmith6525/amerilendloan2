@@ -98,6 +98,24 @@ export type InvokeResult = {
   };
 };
 
+export function extractMessageText(
+  content: string | Array<TextContent | ImageContent | FileContent> | null | undefined
+): string {
+  if (typeof content === "string") {
+    return content.trim();
+  }
+
+  if (!Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .filter((part): part is TextContent => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
+}
+
 export type JsonSchema = {
   name: string;
   schema: Record<string, unknown>;
@@ -210,24 +228,50 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
+// Provider priority: Groq (free, fast) > Gemini (free) > OpenAI (paid) > Forge.
+// All three OpenAI-compatible providers use the same /chat/completions shape;
+// Gemini needs a different endpoint + payload, handled separately below.
+type LlmProvider = "groq" | "gemini" | "openai" | "forge" | "none";
+
+const getActiveProvider = (): LlmProvider => {
+  if (ENV.groqApiKey && ENV.groqApiKey.trim().length > 0) return "groq";
+  if (ENV.geminiApiKey && ENV.geminiApiKey.trim().length > 0) return "gemini";
+  if (ENV.openAiApiKey && ENV.openAiApiKey.trim().length > 0) return "openai";
+  if (ENV.forgeApiKey && ENV.forgeApiKey.trim().length > 0) return "forge";
+  return "none";
+};
+
 const resolveApiUrl = () => {
-  if (ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0) {
-    return `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`;
+  const provider = getActiveProvider();
+  switch (provider) {
+    case "groq":
+      return "https://api.groq.com/openai/v1/chat/completions";
+    case "openai":
+      return "https://api.openai.com/v1/chat/completions";
+    case "forge":
+      return ENV.forgeApiUrl
+        ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
+        : "https://forge.manus.im/v1/chat/completions";
+    default:
+      // gemini handled in a separate code path below
+      return "https://api.openai.com/v1/chat/completions";
   }
-  if (ENV.openAiApiKey && ENV.openAiApiKey.trim().length > 0) {
-    return "https://api.openai.com/v1/chat/completions";
-  }
-  return "https://forge.manus.im/v1/chat/completions";
 };
 
 const assertApiKey = () => {
-  if (!ENV.forgeApiKey && !ENV.openAiApiKey) {
-    throw new Error("OPENAI_API_KEY or BUILT_IN_FORGE_API_KEY is not configured");
+  if (getActiveProvider() === "none") {
+    throw new Error("No LLM provider configured. Set GROQ_API_KEY (free), GEMINI_API_KEY (free), OPENAI_API_KEY, or BUILT_IN_FORGE_API_KEY.");
   }
 };
 
 const getApiKey = () => {
-  return ENV.openAiApiKey || ENV.forgeApiKey || "";
+  const provider = getActiveProvider();
+  switch (provider) {
+    case "groq": return ENV.groqApiKey;
+    case "openai": return ENV.openAiApiKey;
+    case "forge": return ENV.forgeApiKey;
+    default: return "";
+  }
 };
 
 const normalizeResponseFormat = ({
@@ -290,8 +334,22 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     temperature,
   } = params;
 
-  // Use GPT-4 if OpenAI key is set, otherwise use Gemini
-  const model = ENV.openAiApiKey ? "gpt-4o" : "gemini-2.5-flash";
+  const provider = getActiveProvider();
+
+  // Gemini uses a completely different REST shape — handle separately.
+  if (provider === "gemini") {
+    return invokeGemini(params);
+  }
+
+  // Pick a sensible default model per provider.
+  // Groq: llama-3.3-70b-versatile (free, very capable, fast).
+  // OpenAI: gpt-4o.
+  // Forge: gemini-2.5-flash (legacy default).
+  const model = provider === "groq"
+    ? "llama-3.3-70b-versatile"
+    : provider === "openai"
+      ? "gpt-4o"
+      : "gemini-2.5-flash";
 
   const payload: Record<string, unknown> = {
     model,
@@ -310,15 +368,17 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  payload.max_tokens = 32768;
-  
+  // Honor caller's maxTokens; default to 2048 (was 32768 which broke Groq's
+  // 12k TPM free-tier quota even on tiny prompts).
+  payload.max_tokens = params.maxTokens ?? 2048;
+
   // Add temperature if provided (for varied responses, default 0.7 for support chat)
   if (temperature !== undefined) {
     payload.temperature = temperature;
   }
-  
-  // Only add thinking parameter for Gemini models
-  if (!ENV.openAiApiKey) {
+
+  // Only add thinking parameter for legacy Forge/Gemini path
+  if (provider === "forge") {
     payload.thinking = {
       "budget_tokens": 128
     };
@@ -352,4 +412,70 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   }
 
   return (await response.json()) as InvokeResult;
+}
+
+// ── Google Gemini (free) ────────────────────────────────────────────────
+// Gemini's REST shape is different from OpenAI's, so we translate here.
+// We map system + user/assistant turns to Gemini's `contents` array and
+// pull the first text response back into the OpenAI-shaped InvokeResult so
+// the rest of the codebase doesn't need to know which provider was used.
+async function invokeGemini(params: InvokeParams): Promise<InvokeResult> {
+  const model = "gemini-2.0-flash"; // free, current generation, fast
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${ENV.geminiApiKey}`;
+
+  const systemMessages = params.messages.filter((m) => m.role === "system");
+  const turns = params.messages.filter((m) => m.role !== "system");
+
+  const contents = turns.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: typeof m.content === "string" ? m.content : JSON.stringify(m.content) }],
+  }));
+
+  const body: Record<string, unknown> = {
+    contents,
+    generationConfig: {
+      temperature: params.temperature ?? 0.7,
+      maxOutputTokens: params.maxTokens ?? 2048,
+    },
+  };
+
+  if (systemMessages.length > 0) {
+    body.systemInstruction = {
+      parts: [{ text: systemMessages.map((m) => (typeof m.content === "string" ? m.content : "")).join("\n\n") }],
+    };
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Gemini invoke failed: ${response.status} ${response.statusText} – ${errorText}`
+    );
+  }
+
+  const data = await response.json() as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") || "";
+
+  // Fake an OpenAI-shaped response so callers don't need to branch.
+  return {
+    id: `gemini-${Date.now()}`,
+    object: "chat.completion",
+    created: Math.floor(Date.now() / 1000),
+    model,
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content: text },
+        finish_reason: "stop",
+      },
+    ],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+  } as InvokeResult;
 }

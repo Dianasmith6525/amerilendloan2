@@ -22,6 +22,7 @@ const documentTypeLabels: Record<string, string> = {
   utility_bill: "Utility Bill",
   pay_stub: "Pay Stub",
   tax_return: "Tax Return",
+  selfie_with_id: "Selfie Holding ID (Identity Verification)",
   other: "Other Document",
 };
 
@@ -170,15 +171,11 @@ export default function VerificationUpload() {
       const formData = new FormData();
       formData.append("file", selectedFile);
 
-      console.log("[Upload] Starting upload for:", selectedFile.name, "Type:", selectedFile.type, "Size:", selectedFile.size);
-
       const uploadResponse = await fetch("/api/upload-document", {
         method: "POST",
         body: formData,
         credentials: "include", // Include cookies in request
       });
-
-      console.log("[Upload] Upload endpoint response status:", uploadResponse.status);
 
       if (!uploadResponse.ok) {
         let errorMessage = "Storage upload failed";
@@ -197,7 +194,6 @@ export default function VerificationUpload() {
       let uploadedFile;
       try {
         uploadedFile = await uploadResponse.json();
-        console.log("[Upload] Upload response received:", { fileName: uploadedFile.fileName, url: uploadedFile.url ? "✓" : "✗" });
       } catch (parseError) {
         console.error("[Upload] Failed to parse upload response:", parseError);
         throw new Error("Invalid response from upload endpoint");
@@ -209,7 +205,6 @@ export default function VerificationUpload() {
       }
 
       // Step 2: Register document in database with URL (not Base64)
-      console.log("[Upload] Registering document in database...");
       await uploadMutation.mutateAsync({
         documentType: selectedType as any,
         fileName: uploadedFile.fileName,
@@ -218,7 +213,6 @@ export default function VerificationUpload() {
         mimeType: uploadedFile.mimeType,
       });
 
-      console.log("[Upload] Document registration complete");
       setUploading(false);
     } catch (error) {
       console.error("[Upload] Error:", error);

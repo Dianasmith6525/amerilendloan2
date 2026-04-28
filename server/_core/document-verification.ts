@@ -1,5 +1,6 @@
 import Tesseract from 'tesseract.js';
 import * as db from '../db';
+import { logger } from "./logger";
 
 /**
  * Document Verification using OCR
@@ -40,23 +41,23 @@ export async function extractTextFromDocument(
   imagePath: string
 ): Promise<{ success: boolean; text?: string; error?: string }> {
   try {
-    console.log('[OCR] Starting text extraction from:', imagePath);
+    logger.info('[OCR] Starting text extraction from:', imagePath);
     
     const result = await Tesseract.recognize(imagePath, 'eng', {
       logger: (info) => {
         if (info.status === 'recognizing text') {
-          console.log(`[OCR] Progress: ${Math.round(info.progress * 100)}%`);
+          logger.info(`[OCR] Progress: ${Math.round(info.progress * 100)}%`);
         }
       },
     });
 
-    console.log('[OCR] Text extraction complete');
+    logger.info('[OCR] Text extraction complete');
     return {
       success: true,
       text: result.data.text,
     };
   } catch (error: any) {
-    console.error('[OCR] Text extraction failed:', error);
+    logger.error('[OCR] Text extraction failed:', error);
     return {
       success: false,
       error: error.message || 'OCR processing failed',
@@ -344,7 +345,7 @@ export async function processDocumentVerification(
   loanApplicationId: number,
   documentPath: string
 ): Promise<VerificationResult> {
-  console.log(`[Document Verification] Processing document for loan ${loanApplicationId}`);
+  logger.info(`[Document Verification] Processing document for loan ${loanApplicationId}`);
 
   // Step 1: Extract text using OCR
   const ocrResult = await extractTextFromDocument(documentPath);
@@ -378,11 +379,13 @@ export async function processDocumentVerification(
       {
         confidenceScore: verificationResult.confidenceScore,
         flags: JSON.stringify(verificationResult.flags),
-        extractedData: JSON.stringify(extractedData),
+        extractedData: JSON.stringify(verificationResult.extractedData),
       }
     );
+    logger.info(`[Document Verification] Updated verification status for loan ${loanApplicationId}`);
   } catch (error) {
-    console.error('[Document Verification] Failed to update status:', error);
+    logger.error('[Document Verification] Failed to update status:', error);
+    // Non-fatal: the verification result is still valid even if DB update fails
   }
 
   return verificationResult;

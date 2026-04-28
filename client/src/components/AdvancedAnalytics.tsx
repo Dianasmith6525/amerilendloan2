@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import {
@@ -82,8 +83,16 @@ export default function AdvancedAnalytics() {
   const disbursementData = Object.values(dailyDisbursements).slice(-14);
 
   // Calculate key metrics
-  const approvalRate = applications.length > 0
-    ? ((applications.filter((a: any) => a.status === 'approved').length / applications.length) * 100).toFixed(1)
+  // NOTE: Use server-side `loans.adminStatistics` for headline numbers so
+  // they always match the dashboard stat cards (avoids client/server drift
+  // and timezone-based date filtering inconsistencies).
+  const totalApplicationsAll = stats?.totalApplications ?? applications.length;
+  const approvedCountAll =
+    (stats?.approved ?? 0) +
+    (stats?.fee_paid ?? 0) +
+    (stats?.disbursed ?? 0);
+  const approvalRate = totalApplicationsAll > 0
+    ? ((approvedCountAll / totalApplicationsAll) * 100).toFixed(1)
     : '0';
 
   const avgProcessingTime = applications.length > 0
@@ -137,7 +146,7 @@ export default function AdvancedAnalytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Disbursed</p>
-                <p className="text-2xl font-bold text-green-600">${(totalDisbursed / 1000).toFixed(1)}K</p>
+                <p className="text-2xl font-bold text-green-600">{formatCurrency(totalDisbursed)}</p>
               </div>
               <Banknote className="h-10 w-10 text-green-500/20" />
             </div>
@@ -326,7 +335,7 @@ export default function AdvancedAnalytics() {
                   <DollarSign className="h-5 w-5 text-green-600 mt-0.5" />
                   <div>
                     <p className="font-semibold text-green-900">Total Disbursed</p>
-                    <p className="text-sm text-green-700">${totalDisbursed.toLocaleString()} in completed loans</p>
+                    <p className="text-sm text-green-700">{formatCurrency(totalDisbursed)} in completed loans</p>
                   </div>
                 </div>
               </div>

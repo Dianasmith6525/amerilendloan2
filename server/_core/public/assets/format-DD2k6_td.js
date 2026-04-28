@@ -1,0 +1,1 @@
+function p(r){return r&&r.replace(/(?:^|[\s\-'])([a-zA-Z])/g,(n,e,t)=>{const i=r.slice(t===0?0:t,t+n.length-1);return(t===0?"":i)+e.toUpperCase()})}function c(r){return r&&r.replace(/(^|\s)([a-z])/g,(n,e,t)=>e+t.toUpperCase())}export{c,p as t};

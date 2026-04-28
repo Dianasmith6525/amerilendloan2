@@ -1,9 +1,18 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Phone, Mail, MessageCircle, Clock } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import {
+  COMPANY_PHONE_DISPLAY,
+  COMPANY_SUPPORT_EMAIL,
+  SUPPORT_HOURS_WEEKDAY,
+  SUPPORT_HOURS_WEEKEND,
+} from "@/const";
 
 interface SupportModalProps {
   isOpen?: boolean;
@@ -11,6 +20,7 @@ interface SupportModalProps {
 }
 
 export function SupportModal({ isOpen, onOpenChange }: SupportModalProps) {
+  const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState<"contact" | "faq" | "ticket">("contact");
   const [ticketData, setTicketData] = useState({
     email: "",
@@ -18,11 +28,32 @@ export function SupportModal({ isOpen, onOpenChange }: SupportModalProps) {
     message: "",
   });
 
+  const createTicketMutation = trpc.supportTickets.create.useMutation({
+    onSuccess: () => {
+      toast.success("Support ticket submitted successfully! We'll get back to you soon.");
+      setTicketData({ email: "", subject: "", message: "" });
+      setActiveTab("contact");
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to submit support ticket. Please try again.");
+    },
+  });
+
   const handleSubmitTicket = (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle ticket submission here
-    console.log("Ticket submitted:", ticketData);
-    setTicketData({ email: "", subject: "", message: "" });
+    if (!ticketData.subject || ticketData.subject.length < 5) {
+      toast.error("Subject must be at least 5 characters.");
+      return;
+    }
+    if (!ticketData.message || ticketData.message.length < 10) {
+      toast.error("Message must be at least 10 characters.");
+      return;
+    }
+    createTicketMutation.mutate({
+      subject: ticketData.subject,
+      description: ticketData.message,
+      category: "general_inquiry",
+    });
   };
 
   return (
@@ -70,11 +101,11 @@ export function SupportModal({ isOpen, onOpenChange }: SupportModalProps) {
                 <div>
                   <h3 className="font-semibold text-gray-900">Phone Support</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    Call our team at <strong>1-800-AMERILEND</strong>
+                    Call our team at <strong>{COMPANY_PHONE_DISPLAY}</strong>
                   </p>
                   <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
                     <Clock className="h-3 w-3" />
-                    Available Mon-Fri, 8am-6pm EST
+                    Available {SUPPORT_HOURS_WEEKDAY}; {SUPPORT_HOURS_WEEKEND}
                   </p>
                 </div>
               </div>
@@ -87,7 +118,7 @@ export function SupportModal({ isOpen, onOpenChange }: SupportModalProps) {
                 <div>
                   <h3 className="font-semibold text-gray-900">Email Support</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    Email us at <strong>support@amerilendloan.com</strong>
+                    Email us at <strong>{COMPANY_SUPPORT_EMAIL}</strong>
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
                     Response within 24 hours
@@ -105,7 +136,7 @@ export function SupportModal({ isOpen, onOpenChange }: SupportModalProps) {
                   <p className="text-sm text-gray-600 mt-1">
                     Chat with our support team in real-time
                   </p>
-                  <Button size="sm" className="mt-2 bg-blue-600 hover:bg-blue-700">
+                  <Button size="sm" className="mt-2 bg-blue-600 hover:bg-blue-700" onClick={() => { onOpenChange?.(false); navigate('/chat'); }}>
                     Start Chat
                   </Button>
                 </div>
@@ -204,8 +235,8 @@ export function SupportModal({ isOpen, onOpenChange }: SupportModalProps) {
               />
             </div>
 
-            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
-              Submit Support Ticket
+            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={createTicketMutation.isPending}>
+              {createTicketMutation.isPending ? "Submitting..." : "Submit Support Ticket"}
             </Button>
           </form>
         )}

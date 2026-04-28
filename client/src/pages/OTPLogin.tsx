@@ -2,12 +2,15 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Eye, EyeOff, Phone } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { SocialAuthButtons } from "@/components/SocialAuthButtons";
+import SEOHead from "@/components/SEOHead";
+import { useTurnstile } from "@/components/TurnstileWidget";
+import { COMPANY_PHONE_DISPLAY_SHORT, COMPANY_PHONE_RAW, COMPANY_SUPPORT_EMAIL } from "@/const";
 
 export default function OTPLogin() {
   const [, setLocation] = useLocation();
@@ -15,12 +18,63 @@ export default function OTPLogin() {
   const [isLogin, setIsLogin] = useState(true);
   const [step, setStep] = useState<"form" | "code">("form");
 
-  // Redirect to dashboard if already authenticated
-  useEffect(() => {
-    if (isAuthenticated && !authLoading) {
-      setLocation("/dashboard");
+  // Resolve a safe post-login destination from the URL `next` param, falling
+  // back to /dashboard. Only allow internal paths to avoid open-redirects.
+  const postLoginTarget = (() => {
+    if (typeof window === "undefined") return "/dashboard";
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (!next) return "/dashboard";
+    // Must be a same-origin absolute path (starts with "/" but not "//" or "/\\")
+    if (!next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
+      return "/dashboard";
     }
-  }, [isAuthenticated, authLoading, setLocation]);
+    return next;
+  })();
+
+  const finishLogin = (sessionCode?: string | null) => {
+    const target = postLoginTarget;
+    if (sessionCode) {
+      window.location.href = `/api/auth/session?code=${encodeURIComponent(sessionCode)}&redirect=${encodeURIComponent(target)}`;
+    } else {
+      window.location.href = target;
+    }
+  };
+
+  // Reset-flow paths: never bounce these to /dashboard even if the user is
+  // already authenticated, so users can complete a password reset from an
+  // email link without being kicked away.
+  const isResetPath = (() => {
+    if (typeof window === "undefined") return false;
+    const path = window.location.pathname;
+    const search = new URLSearchParams(window.location.search);
+    return (
+      path === "/forgot-password" ||
+      path === "/reset-password" ||
+      path === "/auth/reset-password" ||
+      path === "/account/security" ||
+      search.get("reset") === "1"
+    );
+  })();
+
+  // Redirect to dashboard (or `next`) if already authenticated
+  useEffect(() => {
+    if (isAuthenticated && !authLoading && !isResetPath) {
+      setLocation(postLoginTarget);
+    }
+  }, [isAuthenticated, authLoading, setLocation, postLoginTarget, isResetPath]);
+
+  // Auto-enter password-reset mode when arriving via a reset/security URL
+  // (e.g. links inside login/security email notifications). Path is the
+  // source of truth so the URL alone is enough to land in the right flow.
+  useEffect(() => {
+    if (isResetPath) {
+      setIsResetMode(true);
+      setIsLogin(true);
+      setStep("form");
+    }
+    // Run only on initial mount; subsequent state changes are user-driven.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   
   // Login form state
   const [loginIdentifier, setLoginIdentifier] = useState(""); 
@@ -44,32 +98,53 @@ export default function OTPLogin() {
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
+  // Validation state
+  const [accountCheckEmail, setAccountCheckEmail] = useState("");
+  const [showForgotPasswordOption, setShowForgotPasswordOption] = useState(false);
+  const [existingAccountInfo, setExistingAccountInfo] = useState<any>(null);
 
   const requestEmailCodeMutation = trpc.otp.requestCode.useMutation({
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      // Server returns the resolved email (in case user entered a username)
+      if (data.resolvedEmail) {
+        setPendingIdentifier(data.resolvedEmail);
+      }
       toast.success(isResetMode ? "Reset code sent to your email" : "Verification code sent to your email");
       setStep("code");
+      // Token has been consumed by the server; reset for any subsequent request.
+      turnstile.reset();
     },
     onError: (error) => {
       toast.error(error.message || "Failed to send code");
+      turnstile.reset();
     },
   });
 
+  // Cloudflare Turnstile bot-verification. Only required for the initial
+  // code-request step; subsequent verifyCode/resetPassword calls are gated by
+  // possession of a valid OTP that was sent to the user's email.
+  const turnstile = useTurnstile({ action: "otp-request" });
+
   const verifyCodeMutation = trpc.otp.verifyCode.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       if (isResetMode) {
         // For password reset, move to password entry step instead of directly logging in
         setResetStep("newPassword");
         toast.success("Code verified! Now enter your new password.");
       } else if (isLogin) {
         toast.success("Login successful!");
-        setTimeout(() => setLocation("/dashboard"), 300);
+        // Navigate via server endpoint so Set-Cookie is preserved through Vercel proxy
+        const code = data && 'sessionCode' in data ? (data as any).sessionCode : undefined;
+        finishLogin(code);
       } else {
         toast.success("Account created successfully!");
         setSignupEmail("");
         setSignupUsername("");
         setSignupPassword("");
-        setTimeout(() => setLocation("/dashboard"), 300);
+        // Navigate via server endpoint so Set-Cookie is preserved through Vercel proxy
+        const code = data && 'sessionCode' in data ? (data as any).sessionCode : undefined;
+        finishLogin(code);
       }
     },
     onError: (error) => {
@@ -96,29 +171,21 @@ export default function OTPLogin() {
 
   // Password login mutation - tries custom password login first, then falls back to Supabase or OTP
   const passwordLoginMutation = trpc.auth.loginWithPassword.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success("Login successful!");
-      setTimeout(() => setLocation("/dashboard"), 300);
+      // Navigate via server endpoint so Set-Cookie is preserved through Vercel proxy
+      const code = data?.sessionCode;
+      finishLogin(code);
     },
     onError: (error) => {
       const errorMsg = error.message || "Failed to sign in";
       
-      // If password not set or invalid password, try to fall back
-      if (errorMsg.includes("not set up with a password") || errorMsg.includes("Invalid email or password")) {
-        // Check if Supabase is enabled - if so, try Supabase login
-        const supabaseEnabled = supabaseEnabledQuery.data?.enabled;
-        if (supabaseEnabled) {
-          supabaseLoginMutation.mutate({ email: loginIdentifier, password: loginPassword });
-          return;
-        }
-        
-        // Otherwise fall back to OTP email code
-        toast.info("Using email verification instead...");
-        setPendingIdentifier(loginIdentifier);
-        requestEmailCodeMutation.mutate({
-          email: loginIdentifier,
-          purpose: "login",
-        });
+      // Handle specific error cases
+      if (errorMsg.includes("does not have a password set")) {
+        // User exists but never set a password — guide them to set one
+        toast.error(errorMsg);
+      } else if (errorMsg.includes("Invalid email or password")) {
+        toast.error("Invalid email/username or password. Check your credentials and try again.");
       } else {
         // Network or other error - show error
         toast.error(errorMsg);
@@ -128,9 +195,11 @@ export default function OTPLogin() {
 
   // Fallback password login mutation (Supabase)
   const supabaseLoginMutation = trpc.auth.supabaseSignIn.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success("Login successful!");
-      setTimeout(() => setLocation("/dashboard"), 300);
+      // Navigate via server endpoint so Set-Cookie is preserved through Vercel proxy
+      const code = data?.sessionCode;
+      finishLogin(code);
     },
     onError: (error) => {
       // If password login fails (service unavailable, invalid API key, etc), 
@@ -144,6 +213,7 @@ export default function OTPLogin() {
           requestEmailCodeMutation.mutate({
             email: loginIdentifier,
             purpose: "login",
+            turnstileToken: turnstile.token ?? undefined,
           });
         }
       } else {
@@ -155,6 +225,49 @@ export default function OTPLogin() {
   // Check if Supabase is enabled
   const supabaseEnabledQuery = trpc.auth.isSupabaseAuthEnabled.useQuery(undefined, {
     refetchOnWindowFocus: false,
+  });
+
+  // Email existence checker
+  const checkEmailMutation = trpc.auth.checkEmailExists.useMutation({
+    onSuccess: (data: any) => {
+      if (data.exists) {
+        setExistingAccountInfo(data);
+        setShowForgotPasswordOption(true);
+        // No toast: each form (login vs signup) already renders its own inline
+        // hint based on existingAccountInfo. Toasting "An account exists with
+        // this email" on the Login tab read like an error to users who were
+        // simply logging in with a real account.
+      }
+    },
+    onError: (error: any) => {
+      console.error("Error checking email:", error);
+    },
+  });
+
+  // Phone existence checker
+  const checkPhoneMutation = trpc.auth.checkPhoneExists.useMutation({
+    onSuccess: (data: any) => {
+      if (data.exists) {
+        setExistingAccountInfo(data);
+        toast.warning(data.message);
+      }
+    },
+    onError: (error: any) => {
+      console.error("Error checking phone:", error);
+    },
+  });
+
+  // SSN existence checker
+  const checkSSNMutation = trpc.auth.checkSSNExists.useMutation({
+    onSuccess: (data: any) => {
+      if (data.exists) {
+        toast.error(data.message || "This SSN is already registered");
+        return;
+      }
+    },
+    onError: (error: any) => {
+      console.error("Error checking SSN:", error);
+    },
   });
 
   const toggleLogin = () => {
@@ -173,26 +286,23 @@ export default function OTPLogin() {
     e.preventDefault();
     
     if (!loginIdentifier) {
-      toast.error("Please enter your email or username");
+      toast.error("Enter your email or username");
       return;
     }
 
     if (loginMethod === "password") {
-      // Password login
       if (!loginPassword) {
-        toast.error("Please enter your password");
+        toast.error("Enter your password");
         return;
       }
-      // Always try custom password login first (for users who signed up with OTP and set password)
-      // This will succeed for most users in OTP-only environments
-      passwordLoginMutation.mutate({ email: loginIdentifier, password: loginPassword });
+      passwordLoginMutation.mutate({ email: loginIdentifier.trim(), password: loginPassword });
     } else {
-      // Email code login
-      setPendingIdentifier(loginIdentifier);
-      requestEmailCodeMutation.mutate({
-        email: loginIdentifier,
-        purpose: "login",
-      });
+      if (!turnstile.isReady) {
+        toast.error("Please complete the verification challenge.");
+        return;
+      }
+      setPendingIdentifier(loginIdentifier.trim());
+      requestEmailCodeMutation.mutate({ email: loginIdentifier.trim(), purpose: "login", turnstileToken: turnstile.token ?? undefined });
     }
   };
 
@@ -204,10 +314,32 @@ export default function OTPLogin() {
       return;
     }
 
+    // Block submission while email check is still in progress
+    if (checkEmailMutation.isPending) {
+      toast.info("Checking email availability, please wait...");
+      return;
+    }
+
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(signupEmail)) {
       toast.error("Please enter a valid email address");
+      return;
+    }
+
+    // Check if account already exists with this email
+    if (existingAccountInfo?.exists) {
+      toast.error("This email is already registered! Please log in instead.");
+      setIsLogin(true);
+      setLoginIdentifier(signupEmail);
+      setStep("form");
+      return;
+    }
+
+    // If the email hasn't been checked yet (user never blurred the field), trigger a check now
+    if (!existingAccountInfo && signupEmail !== accountCheckEmail) {
+      checkEmailMutation.mutate({ email: signupEmail });
+      toast.info("Checking email availability, please wait...");
       return;
     }
 
@@ -226,10 +358,16 @@ export default function OTPLogin() {
       return;
     }
 
+    if (!turnstile.isReady) {
+      toast.error("Please complete the verification challenge.");
+      return;
+    }
+
     setPendingIdentifier(signupEmail);
     requestEmailCodeMutation.mutate({
       email: signupEmail,
       purpose: "signup",
+      turnstileToken: turnstile.token ?? undefined,
     });
   };
 
@@ -247,10 +385,16 @@ export default function OTPLogin() {
       return;
     }
 
-    setPendingIdentifier(loginIdentifier);
+    if (!turnstile.isReady) {
+      toast.error("Please complete the verification challenge.");
+      return;
+    }
+
+    setPendingIdentifier(loginIdentifier.trim());
     requestEmailCodeMutation.mutate({
-      email: loginIdentifier,
+      email: loginIdentifier.trim(),
       purpose: "reset",
+      turnstileToken: turnstile.token ?? undefined,
     });
   };
 
@@ -268,13 +412,12 @@ export default function OTPLogin() {
     }
 
     if (newPassword.length < 8) {
-      toast.error("Password must be at least 8 characters long");
+      toast.error("Password must be at least 8 characters");
       return;
     }
 
-    // Call the password update mutation with email, code, and new password
     updatePasswordMutation.mutate({
-      email: loginIdentifier,
+      email: pendingIdentifier || loginIdentifier.trim(),
       code: code,
       newPassword: newPassword,
     });
@@ -284,7 +427,7 @@ export default function OTPLogin() {
     e.preventDefault();
     
     if (code.length !== 6) {
-      toast.error("Please enter the 6-digit code");
+      toast.error("Enter the 6-digit code");
       return;
     }
 
@@ -292,68 +435,93 @@ export default function OTPLogin() {
       identifier: pendingIdentifier,
       code,
       purpose: isResetMode ? "reset" : isLogin ? "login" : "signup",
-      // Include password for signup flow to store it in database
       password: !isLogin && !isResetMode ? signupPassword : undefined,
-      // Include username for signup flow
       username: !isLogin && !isResetMode ? signupUsername : undefined,
     });
   };
 
   const handleResendCode = () => {
+    if (!turnstile.isReady) {
+      toast.error("Please complete the verification challenge before resending.");
+      return;
+    }
     requestEmailCodeMutation.mutate({
       email: pendingIdentifier,
       purpose: isResetMode ? "reset" : isLogin ? "login" : "signup",
+      turnstileToken: turnstile.token ?? undefined,
     });
   };
 
   const isLoading = requestEmailCodeMutation.isPending || verifyCodeMutation.isPending;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-50 px-4">
-      <div className="w-full max-w-md">
-        <div className="flex flex-col items-center mb-8">
-          <img src="/logo.jpg" alt="AmeriLend" className="h-40 w-auto mb-4" style={{ mixBlendMode: 'multiply' }} />
-          <h1 className="text-3xl font-bold text-[#0033A0]">AmeriLend</h1>
-          <p className="text-gray-600 mt-2">Secure Authentication</p>
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#f0f7f6] to-white">
+      <SEOHead
+        title="Log In"
+        description="Sign in to your AmeriLend account to manage your loans, make payments, and track your application status."
+        path="/login"
+      />
+      {/* Header */}
+      <header className="bg-white border-b border-gray-100 shadow-sm py-0">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <Link href="/">
+            <a className="flex items-center gap-2">
+              <img src="/images/logo-new.jpg" alt="AmeriLend" className="h-9 w-auto rounded" />
+              <span className="text-xl font-bold text-[#0A2540] hidden sm:inline">AmeriLend</span>
+            </a>
+          </Link>
+          <a href={`tel:${COMPANY_PHONE_RAW}`} className="hidden sm:flex items-center gap-1 text-xs text-gray-600 hover:text-[#0A2540]">
+            <Phone className="w-4 h-4" />
+            {COMPANY_PHONE_DISPLAY_SHORT}
+          </a>
         </div>
+      </header>
+      
+      <div className="flex-1 flex items-center justify-center py-12 px-4">
+        <div className="w-full max-w-md">
+          {/* Logo and welcome text */}
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-[#0A2540]">Welcome Back</h1>
+            <p className="text-slate-500 mt-2">Sign in to manage your loans</p>
+          </div>
 
         {step === "form" ? (
-          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-            <div className="flex border-b border-gray-200">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200/60 overflow-hidden">
+            <div className="flex">
               <button
                 onClick={toggleLogin}
-                className={`flex-1 py-4 px-6 text-lg font-semibold transition-all ${
+                className={`flex-1 py-4 px-6 text-sm font-semibold transition-all border-b-2 ${
                   isLogin
-                    ? "bg-[#0033A0] text-white"
-                    : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                    ? "border-[#0A2540] text-[#0A2540] bg-white"
+                    : "border-transparent text-slate-400 bg-slate-50 hover:text-slate-600"
                 }`}
               >
-                Log In
+                Sign In
               </button>
               <button
                 onClick={toggleSignup}
-                className={`flex-1 py-4 px-6 text-lg font-semibold transition-all ${
+                className={`flex-1 py-4 px-6 text-sm font-semibold transition-all border-b-2 ${
                   !isLogin
-                    ? "bg-[#0033A0] text-white"
-                    : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                    ? "border-[#0A2540] text-[#0A2540] bg-white"
+                    : "border-transparent text-slate-400 bg-slate-50 hover:text-slate-600"
                 }`}
               >
-                Sign Up
+                Create Account
               </button>
             </div>
 
             <div className="p-8">
               {isLogin && !isResetMode && (
-                <form onSubmit={handleLogin} className="space-y-4">
+                <form onSubmit={handleLogin} className="space-y-5">
                   {/* Login Method Toggle */}
-                  <div className="flex gap-2 mb-6 bg-gray-100 p-1 rounded-lg">
+                  <div className="flex gap-1 p-1 bg-slate-100 rounded-lg">
                     <button
                       type="button"
                       onClick={() => setLoginMethod("password")}
-                      className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${
+                      className={`flex-1 py-2.5 px-4 rounded-md text-sm font-medium transition-all ${
                         loginMethod === "password"
-                          ? "bg-white text-[#0033A0] shadow-sm"
-                          : "text-gray-600 hover:text-gray-800"
+                          ? "bg-white text-[#0A2540] shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
                       }`}
                     >
                       Password
@@ -361,10 +529,10 @@ export default function OTPLogin() {
                     <button
                       type="button"
                       onClick={() => setLoginMethod("email-code")}
-                      className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${
+                      className={`flex-1 py-2.5 px-4 rounded-md text-sm font-medium transition-all ${
                         loginMethod === "email-code"
-                          ? "bg-white text-[#0033A0] shadow-sm"
-                          : "text-gray-600 hover:text-gray-800"
+                          ? "bg-white text-[#0A2540] shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
                       }`}
                     >
                       Email Code
@@ -372,38 +540,78 @@ export default function OTPLogin() {
                   </div>
 
                   <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Email or Username</label>
                     <Input
                       type="text"
-                      placeholder="Enter email or username"
+                      placeholder="Enter your email or username"
                       value={loginIdentifier}
-                      onChange={(e) => setLoginIdentifier(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0033A0] focus:border-transparent"
+                      onChange={(e) => {
+                        setLoginIdentifier(e.target.value);
+                        setShowForgotPasswordOption(false);
+                        setExistingAccountInfo(null);
+                      }}
+                      onBlur={() => {
+                        // Intentionally no email-existence probe on the Sign In
+                        // form. (1) The "An account exists with this email"
+                        // hint reads like an error to legitimate users who
+                        // are already logging in with their real account.
+                        // (2) An always-on existence check leaks which emails
+                        // are registered to anyone tabbing through the field.
+                        // Account-exists guidance still surfaces on the Sign
+                        // Up tab where it is actually useful.
+                      }}
+                      className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#0A2540]/20 focus:border-[#0A2540] transition-all"
                       required
                     />
+                    {checkEmailMutation.isPending && (
+                      <p className="text-sm text-slate-400 mt-2">Checking account...</p>
+                    )}
+                    {showForgotPasswordOption && existingAccountInfo && (
+                      <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                        <p className="text-sm text-blue-800">
+                          {existingAccountInfo.message}
+                        </p>
+                        {!existingAccountInfo.hasPassword && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLoginMethod("email-code");
+                              setShowForgotPasswordOption(false);
+                            }}
+                            className="text-sm text-blue-600 hover:text-blue-800 underline font-medium mt-1"
+                          >
+                            Use email verification code instead
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {loginMethod === "password" ? (
-                    <div className="relative">
-                      <Input
-                        type={showLoginPassword ? "text" : "password"}
-                        placeholder="Enter password"
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0033A0] focus:border-transparent"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowLoginPassword(!showLoginPassword)}
-                        className="absolute right-3 top-3 text-gray-500 hover:text-[#0033A0]"
-                      >
-                        {showLoginPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                      </button>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
+                      <div className="relative">
+                        <Input
+                          type={showLoginPassword ? "text" : "password"}
+                          placeholder="Enter your password"
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          className="w-full px-4 py-3 pr-12 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#0A2540]/20 focus:border-[#0A2540] transition-all"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowLoginPassword(!showLoginPassword)}
+                          className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                          {showLoginPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                      </div>
                     </div>
                   ) : (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <p className="text-sm text-blue-900">
-                        We'll send a 6-digit code to your email to verify your login.
+                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                      <p className="text-sm text-slate-600">
+                        We'll send a 6-digit verification code to your email.
                       </p>
                     </div>
                   )}
@@ -415,68 +623,73 @@ export default function OTPLogin() {
                           type="checkbox"
                           checked={rememberMe}
                           onChange={(e) => setRememberMe(e.target.checked)}
-                          className="w-4 h-4 text-[#0033A0] border-gray-300 rounded focus:ring-[#0033A0]"
+                          className="w-4 h-4 text-[#0A2540] border-slate-300 rounded focus:ring-[#0A2540]"
                         />
-                        <span className="ml-2 text-sm text-gray-600">Remember me</span>
+                        <span className="ml-2 text-sm text-slate-600">Remember me</span>
                       </label>
                       <button
                         type="button"
                         onClick={handleForgotPassword}
-                        className="text-[#0033A0] hover:underline text-sm font-medium"
+                        className="text-[#0A2540] hover:underline text-sm font-medium"
                       >
-                        Forgotten account?
+                        Forgot password?
                       </button>
                     </div>
                   )}
 
+                  {loginMethod === "email-code" && turnstile.widget}
+
                   <Button
                     type="submit"
-                    disabled={isLoading || supabaseLoginMutation.isPending || passwordLoginMutation.isPending}
-                    className="w-full bg-[#0033A0] hover:bg-[#002080] text-white py-3 rounded-lg font-semibold text-lg transition-all"
+                    disabled={isLoading || supabaseLoginMutation.isPending || passwordLoginMutation.isPending || (loginMethod === "email-code" && !turnstile.isReady)}
+                    className="w-full bg-[#0A2540] hover:bg-[#0A2540]/90 text-white py-3.5 rounded-lg font-semibold transition-all shadow-sm"
                   >
                     {isLoading || supabaseLoginMutation.isPending || passwordLoginMutation.isPending ? (
                       <>
                         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                        {loginMethod === "password" ? "Logging in..." : "Sending code..."}
+                        {loginMethod === "password" ? "Signing in..." : "Sending code..."}
                       </>
                     ) : (
-                      loginMethod === "password" ? "Log In with Password" : "Send Login Code"
+                      loginMethod === "password" ? "Sign In" : "Send Verification Code"
                     )}
                   </Button>
 
                   <SocialAuthButtons purpose="login" />
 
                   <div className="text-center">
-                    <a href="mailto:support@amerilendloan.com" className="text-xs text-gray-600 hover:text-[#0033A0] underline">
-                      Need help logging in? Contact Support
+                    <a href={`mailto:${COMPANY_SUPPORT_EMAIL}`} className="text-xs text-slate-500 hover:text-[#0A2540] transition-colors">
+                      Need help? Contact Support
                     </a>
                   </div>
                 </form>
               )}
 
               {isLogin && isResetMode && (
-                <form onSubmit={handleResetPassword} className="space-y-4">
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                    <p className="text-sm text-blue-900">
-                      <strong>Account Recovery:</strong> Enter your email or username and we'll send you a verification code to restore access.
+                <form onSubmit={handleResetPassword} className="space-y-5">
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                    <p className="text-sm text-blue-800">
+                      Enter your email or username and we'll send you a verification code to reset your password.
                     </p>
                   </div>
                   
                   <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Email or Username</label>
                     <Input
                       type="text"
-                      placeholder="Enter email or username"
+                      placeholder="Enter your email or username"
                       value={loginIdentifier}
                       onChange={(e) => setLoginIdentifier(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0033A0] focus:border-transparent"
+                      className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#0A2540]/20 focus:border-[#0A2540] transition-all"
                       required
                     />
                   </div>
                   
+                  {turnstile.widget}
+
                   <Button
                     type="submit"
-                    disabled={isLoading}
-                    className="w-full bg-[#0033A0] hover:bg-[#002080] text-white py-3 rounded-lg font-semibold text-lg transition-all"
+                    disabled={isLoading || !turnstile.isReady}
+                    className="w-full bg-[#0A2540] hover:bg-[#0A2540]/90 text-white py-3.5 rounded-lg font-semibold transition-all shadow-sm"
                   >
                     {isLoading ? (
                       <>
@@ -491,57 +704,98 @@ export default function OTPLogin() {
                   <button
                     type="button"
                     onClick={() => setIsResetMode(false)}
-                    className="w-full text-[#0033A0] hover:underline text-sm font-medium"
+                    className="w-full text-slate-500 hover:text-[#0A2540] text-sm font-medium transition-colors"
                   >
-                     Back to Login
+                    ← Back to Sign In
                   </button>
                 </form>
               )}
 
               {!isLogin && (
-                <form onSubmit={handleSignup} className="space-y-4">
+                <form onSubmit={handleSignup} className="space-y-5">
                   <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Email Address</label>
                     <Input
                       type="email"
                       placeholder="Enter your email"
                       value={signupEmail}
-                      onChange={(e) => setSignupEmail(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0033A0] focus:border-transparent"
+                      onChange={(e) => {
+                        const newEmail = e.target.value;
+                        setSignupEmail(newEmail);
+                        if (existingAccountInfo?.email !== newEmail) {
+                          setExistingAccountInfo(null);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const email = e.target.value.trim();
+                        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                        if (emailRegex.test(email)) {
+                          checkEmailMutation.mutate({ email });
+                        }
+                      }}
+                      className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#0A2540]/20 focus:border-[#0A2540] transition-all"
+                      required
+                    />
+                    {checkEmailMutation.isPending && (
+                      <p className="text-sm text-slate-400 mt-2">Checking availability...</p>
+                    )}
+                    {existingAccountInfo?.exists && !isLogin && (
+                      <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-lg">
+                        <p className="text-sm text-red-700 font-medium">
+                          This email is already registered.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsLogin(true);
+                            setStep("form");
+                            setLoginIdentifier(signupEmail);
+                            setExistingAccountInfo(null);
+                          }}
+                          className="text-sm text-red-600 hover:text-red-800 underline font-medium mt-1"
+                        >
+                          Sign in instead
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Username</label>
+                    <Input
+                      type="text"
+                      placeholder="Choose a username"
+                      value={signupUsername}
+                      onChange={(e) => setSignupUsername(e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#0A2540]/20 focus:border-[#0A2540] transition-all"
                       required
                     />
                   </div>
                   <div>
-                    <Input
-                      type="text"
-                      placeholder="Choose username"
-                      value={signupUsername}
-                      onChange={(e) => setSignupUsername(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0033A0] focus:border-transparent"
-                      required
-                    />
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
+                    <div className="relative">
+                      <Input
+                        type={showSignupPassword ? "text" : "password"}
+                        placeholder="Create a password (8+ characters)"
+                        value={signupPassword}
+                        onChange={(e) => setSignupPassword(e.target.value)}
+                        className="w-full px-4 py-3 pr-12 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#0A2540]/20 focus:border-[#0A2540] transition-all"
+                        required
+                        minLength={8}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSignupPassword(!showSignupPassword)}
+                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        {showSignupPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                      </button>
+                    </div>
                   </div>
-                  <div className="relative">
-                    <Input
-                      type={showSignupPassword ? "text" : "password"}
-                      placeholder="Create password"
-                      value={signupPassword}
-                      onChange={(e) => setSignupPassword(e.target.value)}
-                      className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0033A0] focus:border-transparent"
-                      required
-                      minLength={8}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowSignupPassword(!showSignupPassword)}
-                      className="absolute right-3 top-3 text-gray-500 hover:text-[#0033A0]"
-                    >
-                      {showSignupPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                    </button>
-                  </div>
+                  {turnstile.widget}
                   <Button
                     type="submit"
-                    disabled={isLoading}
-                    className="w-full bg-[#FFA500] hover:bg-[#FF8C00] text-white py-3 rounded-lg font-semibold text-lg transition-all"
+                    disabled={isLoading || !turnstile.isReady}
+                    className="w-full bg-[#C9A227] hover:bg-[#B8922A] text-white py-3.5 rounded-lg font-semibold transition-all shadow-sm"
                   >
                     {isLoading ? (
                       <>
@@ -553,13 +807,13 @@ export default function OTPLogin() {
                     )}
                   </Button>
 
-                  <p className="text-xs text-gray-600 text-center mt-4">
-                    Clicking <strong>create account</strong> means that you agree to our{" "}
-                    <a href="/legal/terms-of-service" target="_blank" rel="noopener noreferrer" className="text-[#0033A0] hover:underline">
-                      terms of services
-                    </a> and{" "}
-                    <a href="/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-[#0033A0] hover:underline">
-                      privacy policy
+                  <p className="text-xs text-slate-500 text-center">
+                    By creating an account, you agree to our{" "}
+                    <a href="/legal/terms-of-service" target="_blank" rel="noopener noreferrer" className="text-[#0A2540] hover:underline">
+                      Terms of Service
+                    </a>{" "}and{" "}
+                    <a href="/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-[#0A2540] hover:underline">
+                      Privacy Policy
                     </a>.
                   </p>
 
@@ -569,55 +823,61 @@ export default function OTPLogin() {
             </div>
           </div>
         ) : isResetMode && resetStep === "newPassword" ? (
-          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden p-8">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200/60 overflow-hidden p-8">
             <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-[#0033A0] mb-2">Create New Password</h2>
-              <p className="text-gray-600">
+              <h2 className="text-2xl font-bold text-[#0A2540] mb-2">Create New Password</h2>
+              <p className="text-slate-500">
                 Enter a new secure password for your account
               </p>
             </div>
 
-            <form onSubmit={handleUpdatePassword} className="space-y-4">
-              <div className="relative">
-                <Input
-                  type={showNewPassword ? "text" : "password"}
-                  placeholder="Enter new password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0033A0] focus:border-transparent"
-                  minLength={8}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNewPassword(!showNewPassword)}
-                  className="absolute right-3 top-3 text-gray-500 hover:text-[#0033A0]"
-                >
-                  {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
+            <form onSubmit={handleUpdatePassword} className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">New Password</label>
+                <div className="relative">
+                  <Input
+                    type={showNewPassword ? "text" : "password"}
+                    placeholder="Enter new password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-4 py-3 pr-12 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#0A2540]/20 focus:border-[#0A2540] transition-all"
+                    minLength={8}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
               </div>
 
-              <div className="relative">
-                <Input
-                  type={showConfirmPassword ? "text" : "password"}
-                  placeholder="Confirm new password"
-                  value={confirmNewPassword}
-                  onChange={(e) => setConfirmNewPassword(e.target.value)}
-                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0033A0] focus:border-transparent"
-                  minLength={8}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-3 text-gray-500 hover:text-[#0033A0]"
-                >
-                  {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Confirm Password</label>
+                <div className="relative">
+                  <Input
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Confirm new password"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    className="w-full px-4 py-3 pr-12 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#0A2540]/20 focus:border-[#0A2540] transition-all"
+                    minLength={8}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-xs text-blue-900">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                <p className="text-xs text-slate-600">
                   <strong>Password Requirements:</strong>
                   <ul className="mt-2 list-disc list-inside space-y-1">
                     <li>At least 8 characters long</li>
@@ -629,7 +889,7 @@ export default function OTPLogin() {
               <Button
                 type="submit"
                 disabled={updatePasswordMutation.isPending}
-                className="w-full bg-[#0033A0] hover:bg-[#002080] text-white py-3 rounded-lg font-semibold text-lg transition-all"
+                className="w-full bg-[#0A2540] hover:bg-[#0A2540]/90 text-white py-3.5 rounded-lg font-semibold transition-all shadow-sm"
               >
                 {updatePasswordMutation.isPending ? (
                   <>
@@ -658,26 +918,26 @@ export default function OTPLogin() {
             </form>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden p-8">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200/60 overflow-hidden p-8">
             <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-[#0033A0] mb-2">Enter Verification Code</h2>
-              <p className="text-gray-600">
-                We sent a code to <strong>{pendingIdentifier}</strong>
+              <h2 className="text-2xl font-bold text-[#0A2540] mb-2">Enter Verification Code</h2>
+              <p className="text-slate-500">
+                We sent a code to <strong className="text-slate-700">{pendingIdentifier}</strong>
               </p>
             </div>
 
-            <form onSubmit={handleVerifyCode} className="space-y-4">
+            <form onSubmit={handleVerifyCode} className="space-y-5">
               <div>
                 <Input
                   type="text"
                   placeholder="000000"
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg text-center text-2xl tracking-widest font-mono focus:ring-2 focus:ring-[#0033A0] focus:border-transparent"
+                  className="w-full px-4 py-4 border border-slate-200 rounded-lg text-center text-2xl tracking-widest font-mono focus:ring-2 focus:ring-[#0A2540]/20 focus:border-[#0A2540] transition-all"
                   maxLength={6}
                   required
                 />
-                <p className="text-sm text-gray-500 text-center mt-2">
+                <p className="text-sm text-slate-500 text-center mt-2">
                   Check your email for the 6-digit code. It expires in 10 minutes.
                 </p>
               </div>
@@ -685,7 +945,7 @@ export default function OTPLogin() {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-[#0033A0] hover:bg-[#002080] text-white py-3 rounded-lg font-semibold text-lg transition-all"
+                className="w-full bg-[#0A2540] hover:bg-[#0A2540]/90 text-white py-3.5 rounded-lg font-semibold transition-all shadow-sm"
               >
                 {isLoading ? (
                   <>
@@ -697,21 +957,21 @@ export default function OTPLogin() {
                 )}
               </Button>
 
-              <div className="flex gap-2">
+              <div className="flex gap-3">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setStep("form")}
-                  className="flex-1"
+                  className="flex-1 border-slate-200 hover:bg-slate-50"
                 >
-                   Back
+                  ← Back
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={handleResendCode}
                   disabled={isLoading}
-                  className="flex-1"
+                  className="flex-1 border-slate-200 hover:bg-slate-50"
                 >
                   Resend Code
                 </Button>
@@ -720,10 +980,10 @@ export default function OTPLogin() {
           </div>
         )}
 
-        <div className="mt-6 text-center text-sm text-gray-600">
+        <div className="mt-6 text-center text-sm text-slate-500">
           <p>
             <Link href="/">
-              <a className="text-[#0033A0] hover:underline font-medium">
+              <a className="text-[#0A2540] hover:underline font-medium">
                 ← Back to Home
               </a>
             </Link>
@@ -731,33 +991,32 @@ export default function OTPLogin() {
         </div>
 
         <div className="mt-6 text-center">
-          <p className="text-sm font-semibold text-gray-700 mb-3">Trusted by leading lending platforms</p>
+          <p className="text-sm font-medium text-slate-600 mb-3">Trusted by leading lending platforms</p>
           <div className="flex justify-center">
-            <img src="/ssl-seal.png" alt="SSL Certificate - Secure Connection" className="h-24 w-auto" />
+            <img src="/ssl-seal.png" alt="SSL Certificate - Secure Connection" className="h-20 w-auto opacity-80" />
           </div>
         </div>
 
         <div className="mt-4 space-y-2">
-          <div className="text-center text-xs text-gray-600">
-            <a href="/legal/terms-of-service" target="_blank" rel="noopener noreferrer" className="text-[#0033A0] hover:underline mx-2">
+          <div className="text-center text-xs text-slate-500">
+            <a href="/legal/terms-of-service" target="_blank" rel="noopener noreferrer" className="text-[#0A2540] hover:underline mx-2">
               Terms of Service
             </a>
-            <span className="text-gray-400">•</span>
-            <a href="/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-[#0033A0] hover:underline mx-2">
+            <span className="text-slate-300">•</span>
+            <a href="/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-[#0A2540] hover:underline mx-2">
               Privacy Policy
             </a>
-            <span className="text-gray-400">•</span>
-            <a href="mailto:support@amerilendloan.com" className="text-[#0033A0] hover:underline mx-2">
+            <span className="text-slate-300">•</span>
+            <a href={`mailto:${COMPANY_SUPPORT_EMAIL}`} className="text-[#0A2540] hover:underline mx-2">
               Support
             </a>
           </div>
-          <div className="text-center text-xs text-gray-500">
+          <div className="text-center text-xs text-slate-400">
             <p className="flex items-center justify-center gap-2">
               <span>🔒 Protected by 256-bit SSL encryption</span>
-              <span className="text-gray-400">•</span>
-              <span>⚠️ After 5 failed attempts, account will be temporarily locked</span>
             </p>
           </div>
+        </div>
         </div>
       </div>
     </div>

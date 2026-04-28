@@ -38,16 +38,16 @@ export default function NotificationCenter() {
     // Navigate based on notification type
     switch (notification.type) {
       case "loan_status":
-        setLocation("/dashboard#applications");
+        setLocation("/dashboard");
         break;
       case "payment":
-        setLocation("/dashboard#payments");
+        setLocation("/payment-history");
         break;
       case "message":
-        setLocation("/dashboard#messages");
+        setLocation("/support");
         break;
       case "document":
-        setLocation("/dashboard#documents");
+        setLocation("/e-signatures");
         break;
       default:
         setLocation("/dashboard");
@@ -233,7 +233,7 @@ export default function NotificationCenter() {
               Enable auto-pay in the Auto-Pay tab to automatically process your loan payments and avoid late fees.
             </p>
             <Button size="sm" variant="outline" className="border-blue-600 text-blue-600" asChild>
-              <a href="/dashboard#auto-pay">Set Up Auto-Pay</a>
+              <a href="/payment-preferences">Set Up Auto-Pay</a>
             </Button>
           </div>
         </CardContent>

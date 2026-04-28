@@ -8,17 +8,120 @@
       content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="%VITE_APP_LOGO%" />
     <link rel="apple-touch-icon" href="%VITE_APP_LOGO%" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0A2540" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="description" content="AmeriLend — Personal loans made easy. Apply online in minutes with no application fee. Fast approvals, transparent terms, and same-day funding." />
+    <meta property="og:title" content="AmeriLend — Personal Loans Made Easy" />
+    <meta property="og:description" content="Stress-free personal loans with fast approvals, no application fee, and same-day funding. See your offers in minutes." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/images/logo-new.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="keywords" content="personal loans, online loans, fast approval, no fee loans, same-day funding, AmeriLend" />
+    <meta name="author" content="AmeriLend, LLC" />
+    <link rel="canonical" href="https://amerilendloan.com/" data-default="true" />
+    <link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml" />
+    <meta property="og:url" content="https://amerilendloan.com/" data-default="true" />
+    <meta property="og:site_name" content="AmeriLend" />
+    <meta name="twitter:site" content="@amerilend" />
     <title>%VITE_APP_TITLE%</title>
-    <!-- Add Google Fonts here, example:
+    <!-- Organization Schema (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FinancialService",
+      "name": "AmeriLend",
+      "legalName": "AmeriLend, LLC",
+      "url": "https://amerilendloan.com",
+      "logo": "https://amerilendloan.com/images/logo-new.jpg",
+      "description": "Personal loans made easy. Apply online in minutes with no application fee. Fast approvals, transparent terms, and same-day funding.",
+      "telephone": "+1-945-212-1609",
+      "email": "support@amerilendloan.com",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "12707 High Bluff Dr, Suite 200",
+        "addressLocality": "San Diego",
+        "addressRegion": "CA",
+        "postalCode": "92130",
+        "addressCountry": "US"
+      },
+      "sameAs": [
+        "https://facebook.com/amerilend",
+        "https://twitter.com/amerilend",
+        "https://instagram.com/amerilend",
+        "https://linkedin.com/company/amerilend"
+      ],
+      "areaServed": {
+        "@type": "Country",
+        "name": "United States"
+      },
+      "serviceType": "Personal Loans",
+      "currenciesAccepted": "USD",
+      "priceRange": "$500-$15,000",
+      "foundingDate": "2019",
+      "numberOfEmployees": {
+        "@type": "QuantitativeValue",
+        "minValue": 50,
+        "maxValue": 200
+      },
+      "hasOfferCatalog": {
+        "@type": "OfferCatalog",
+        "name": "Personal Loan Products",
+        "itemListElement": [
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "LoanOrCredit",
+              "name": "Personal Loan",
+              "amount": {
+                "@type": "MonetaryAmount",
+                "minValue": 500,
+                "maxValue": 15000,
+                "currency": "USD"
+              },
+              "annualPercentageRate": {
+                "@type": "QuantitativeValue",
+                "minValue": 5.99,
+                "maxValue": 35.99,
+                "unitText": "PERCENT"
+              },
+              "loanTerm": {
+                "@type": "QuantitativeValue",
+                "minValue": 6,
+                "maxValue": 36,
+                "unitText": "MON"
+              }
+            }
+          }
+        ]
+      }
+    }
+    </script>
+    <!-- Google Fonts - Inter for clean currency symbols and numerals -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    -->
   </head>
 
   <body>
+    <!-- Skip to main content (accessibility) -->
+    <a href="#root" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-white focus:text-[#0A2540] focus:px-4 focus:py-2 focus:rounded focus:shadow-lg focus:font-semibold">Skip to main content</a>
+    <!-- Hidden Google Translate element (controlled by our custom LanguageSelector) -->
+    <div id="google_translate_element" style="display:none"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Google Translate API -->
+    <script>
+      function googleTranslateElementInit() {
+        new google.translate.TranslateElement({
+          pageLanguage: 'en',
+          autoDisplay: false,
+          layout: google.translate.TranslateElement.InlineLayout.SIMPLE
+        }, 'google_translate_element');
+      }
+    </script>
+    <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
     <!-- Analytics script - only loaded if VITE_ANALYTICS_ENDPOINT is configured -->
     <script>
       if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {

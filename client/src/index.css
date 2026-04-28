@@ -3,6 +3,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ── Hide Google Translate default top bar ── */
+.goog-te-banner-frame { display: none !important; }
+body { top: 0 !important; }
+.skiptranslate { display: none !important; }
+/* Keep our own LanguageSelector visible */
+.notranslate { display: block !important; }
+
+/* Professional Financial Institution Design System */
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -43,7 +51,8 @@
 }
 
 :root {
-  --primary: 221 100% 31%; /* Deep Blue #0033A0 matching OppLoans */
+  /* Premium Financial Brand Colors */
+  --primary: 217 91% 22%; /* Deep Navy #0A2540 - sophisticated trust */
   --primary-foreground: 0 0% 100%;
   --sidebar-primary: var(--color-blue-700);
   --sidebar-primary-foreground: var(--color-blue-50);
@@ -52,74 +61,103 @@
   --chart-3: var(--color-blue-600);
   --chart-4: var(--color-blue-700);
   --chart-5: var(--color-blue-800);
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
+  --radius: 0.5rem;
+  --background: oklch(0.995 0.001 280);
+  --foreground: oklch(0.2 0.02 260);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
+  --card-foreground: oklch(0.2 0.02 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.98 0.001 286.375);
-  --secondary-foreground: oklch(0.4 0.015 65);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.65 0.18 145); /* Green for success states */
+  --popover-foreground: oklch(0.2 0.02 260);
+  --secondary: oklch(0.97 0.003 260);
+  --secondary-foreground: oklch(0.35 0.02 260);
+  --muted: oklch(0.96 0.002 260);
+  --muted-foreground: oklch(0.5 0.01 260);
+  --accent: oklch(0.55 0.16 160); /* Refined green for success */
   --accent-foreground: oklch(1 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+  --border: oklch(0.9 0.006 260);
+  --input: oklch(0.92 0.004 260);
+  --ring: oklch(0.5 0.18 250);
+  --sidebar: oklch(0.99 0 0);
+  --sidebar-foreground: oklch(0.2 0.02 260);
+  --sidebar-accent: oklch(0.96 0.002 260);
+  --sidebar-accent-foreground: oklch(0.15 0.02 260);
+  --sidebar-border: oklch(0.9 0.006 260);
+  --sidebar-ring: oklch(0.5 0.18 250);
+  
+  /* Custom Brand Colors */
+  --brand-navy: #0A2540;
+  --brand-blue: #0066CC;
+  --brand-gold: #C9A227;
+  --brand-gold-light: #E8D48A;
+  --brand-green: #00875A;
+  --brand-slate: #425466;
 }
 
 .dark {
-  --primary: var(--color-blue-700);
+  --primary: var(--color-blue-500);
   --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
+  --sidebar-primary: var(--color-blue-400);
   --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
+  --background: oklch(0.12 0.008 260);
+  --foreground: oklch(0.92 0.006 260);
+  --card: oklch(0.16 0.01 260);
+  --card-foreground: oklch(0.92 0.006 260);
+  --popover: oklch(0.16 0.01 260);
+  --popover-foreground: oklch(0.92 0.006 260);
+  --secondary: oklch(0.2 0.01 260);
+  --secondary-foreground: oklch(0.8 0.006 260);
+  --muted: oklch(0.22 0.01 260);
+  --muted-foreground: oklch(0.65 0.01 260);
+  --accent: oklch(0.22 0.01 260);
+  --accent-foreground: oklch(0.95 0.006 260);
+  --destructive: oklch(0.65 0.2 22);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
+  --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
+  --ring: oklch(0.55 0.2 250);
   --chart-1: var(--color-blue-300);
   --chart-2: var(--color-blue-500);
   --chart-3: var(--color-blue-600);
   --chart-4: var(--color-blue-700);
   --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  --sidebar: oklch(0.16 0.01 260);
+  --sidebar-foreground: oklch(0.92 0.006 260);
+  --sidebar-accent: oklch(0.22 0.01 260);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.55 0.2 250);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
   }
+  
+  /* Refined Typography */
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.02em;
+    font-weight: 600;
+  }
+  
+  h1 { font-weight: 700; }
+  h2 { font-weight: 650; }
+  
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
   [type="button"]:not(:disabled),
@@ -136,23 +174,13 @@
 @layer components {
   /**
    * Custom container utility that centers content and adds responsive padding.
-   *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
-   * Usage: <div className="container">...</div>
-   *
-   * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
    */
   .container {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
-    padding-right: 1rem;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
   }
 
   .flex {
@@ -162,27 +190,27 @@
 
   @media (min-width: 640px) {
     .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
-      padding-right: 1.5rem;
+      padding-left: 2rem;
+      padding-right: 2rem;
     }
   }
 
   @media (min-width: 1024px) {
     .container {
-      padding-left: 2rem; /* 32px - desktop padding */
-      padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
+      padding-left: 2.5rem;
+      padding-right: 2.5rem;
+      max-width: 1280px;
     }
   }
 
   /* Hide scrollbar for testimonials */
   .hide-scrollbar {
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE/Edge */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
   
   .hide-scrollbar::-webkit-scrollbar {
-    display: none; /* Chrome/Safari/Opera */
+    display: none;
   }
 
   /* Logo blend mode */
@@ -193,5 +221,122 @@
   /* Logo filter for enhanced appearance */
   .logo-enhanced {
     filter: contrast(1.1) brightness(1.05);
+  }
+  
+  /* Professional Card Styles */
+  .card-premium {
+    @apply bg-white rounded-xl border border-slate-200/60 shadow-sm;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+    transition: all 0.2s ease;
+  }
+  
+  .card-premium:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+    transform: translateY(-1px);
+  }
+  
+  /* Subtle gradient backgrounds */
+  .bg-gradient-premium {
+    background: linear-gradient(135deg, #0A2540 0%, #0D3158 50%, #0A2540 100%);
+  }
+  
+  .bg-gradient-hero {
+    background: linear-gradient(165deg, #0A2540 0%, #103A5C 40%, #0D4A72 70%, #0A2540 100%);
+  }
+  
+  /* Premium button styles */
+  .btn-premium {
+    @apply relative overflow-hidden font-medium tracking-wide;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .btn-premium::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  
+  .btn-premium:hover::before {
+    opacity: 1;
+  }
+  
+  /* Gold accent button */
+  .btn-gold {
+    background: linear-gradient(135deg, #C9A227 0%, #D4AF37 50%, #C9A227 100%);
+    color: #0A2540;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(201, 162, 39, 0.3);
+  }
+  
+  .btn-gold:hover {
+    background: linear-gradient(135deg, #B8922A 0%, #C9A227 50%, #B8922A 100%);
+    box-shadow: 0 4px 16px rgba(201, 162, 39, 0.4);
+    transform: translateY(-1px);
+  }
+  
+  /* Section separators */
+  .section-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(10, 37, 64, 0.1) 50%, transparent 100%);
+  }
+  
+  /* Text styles */
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  /* Professional input focus */
+  .input-premium:focus {
+    border-color: #0066CC;
+    box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+    outline: none;
+  }
+  
+  /* Subtle pattern overlay */
+  .pattern-dots {
+    background-image: radial-gradient(rgba(255,255,255,0.08) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  
+  /* Glass effect */
+  .glass {
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    backdrop-filter: blur(12px) saturate(180%);
+    background: rgba(255, 255, 255, 0.8);
+  }
+  
+  .glass-dark {
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    backdrop-filter: blur(12px) saturate(180%);
+    background: rgba(10, 37, 64, 0.9);
+  }
+  
+  /* Animated underline */
+  .link-underline {
+    position: relative;
+  }
+  
+  .link-underline::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: currentColor;
+    transition: width 0.25s ease;
+  }
+  
+  .link-underline:hover::after {
+    width: 100%;
+  }
+  
+  /* Stat card animation */
+  .stat-number {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
   }
 }

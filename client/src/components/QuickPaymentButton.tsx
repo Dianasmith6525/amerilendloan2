@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,21 +9,12 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { CreditCard, Bitcoin, Loader2, Copy, Check, Zap } from "lucide-react";
+import { Bitcoin, Loader2, Copy, Check, Zap } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { getPersistentIdempotencyKey } from "@/lib/idempotency";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
-
-// Declare Accept.js types
-declare global {
-  interface Window {
-    Accept?: {
-      dispatchData: (secureData: any, callback: (response: any) => void) => void;
-    };
-  }
-}
+import StripePaymentForm from "@/components/StripePaymentForm";
 
 interface QuickPaymentButtonProps {
   applicationId: number;
@@ -37,22 +28,15 @@ export function QuickPaymentButton({
   onPaymentComplete 
 }: QuickPaymentButtonProps) {
   const [open, setOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "crypto">("card");
+  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "crypto">("stripe");
   const [processing, setProcessing] = useState(false);
-  
-  // Card payment fields
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvc, setCardCvc] = useState("");
-  const [cardName, setCardName] = useState("");
   
   // Crypto payment fields
   const [selectedCrypto, setSelectedCrypto] = useState<"BTC" | "ETH" | "USDT" | "USDC">("USDT");
   const [addressCopied, setAddressCopied] = useState(false);
+  const cryptoIdempotencyKeyRef = useRef(getPersistentIdempotencyKey(applicationId, "crypto"));
 
   const utils = trpc.useUtils();
-
-  const { data: authorizeNetConfig } = trpc.payments.getAuthorizeNetConfig.useQuery();
   
   const { data: cryptoConversion } = trpc.payments.convertToCrypto.useQuery(
     { usdCents: processingFeeAmount, currency: selectedCrypto },
@@ -74,12 +58,6 @@ export function QuickPaymentButton({
       await utils.loans.myLoans.invalidate();
       await utils.loans.getById.invalidate({ id: applicationId });
       
-      // Reset form
-      setCardNumber("");
-      setCardExpiry("");
-      setCardCvc("");
-      setCardName("");
-      
       onPaymentComplete?.();
     },
     onError: (error) => {
@@ -88,76 +66,15 @@ export function QuickPaymentButton({
     },
   });
 
-  // Load Authorize.Net Accept.js script
-  useEffect(() => {
-    if (open && paymentMethod === "card" && authorizeNetConfig && !window.Accept) {
-      const script = document.createElement("script");
-      script.src = authorizeNetConfig.environment === "production"
-        ? "https://js.authorize.net/v1/Accept.js"
-        : "https://jstest.authorize.net/v1/Accept.js";
-      script.async = true;
-      document.body.appendChild(script);
-      
-      return () => {
-        document.body.removeChild(script);
-      };
-    }
-  }, [open, paymentMethod, authorizeNetConfig]);
-
-  const handleCardPayment = async () => {
-    if (!authorizeNetConfig) {
-      toast.error("Payment configuration error");
-      return;
-    }
+  const handleStripeSuccess = async () => {
+    toast.success("Payment successful! Processing fee paid.");
+    setProcessing(false);
+    setOpen(false);
     
-    if (!cardNumber || !cardExpiry || !cardCvc || !cardName) {
-      toast.error("Please fill in all card details");
-      return;
-    }
-
-    setProcessing(true);
-
-    const [expMonth, expYear] = cardExpiry.split("/").map(s => s.trim());
+    await utils.loans.myLoans.invalidate();
+    await utils.loans.getById.invalidate({ id: applicationId });
     
-    const secureData = {
-      authData: {
-        clientKey: authorizeNetConfig.clientKey,
-        apiLoginID: authorizeNetConfig.apiLoginId,
-      },
-      cardData: {
-        cardNumber: cardNumber.replace(/\s/g, ""),
-        month: expMonth,
-        year: expYear.length === 2 ? `20${expYear}` : expYear,
-        cardCode: cardCvc,
-      },
-    };
-
-    if (!window.Accept) {
-      toast.error("Payment system not ready. Please try again.");
-      setProcessing(false);
-      return;
-    }
-
-    window.Accept.dispatchData(secureData, async (response) => {
-      if (response.messages.resultCode === "Error") {
-        toast.error(response.messages.message[0].text);
-        setProcessing(false);
-        return;
-      }
-
-      try {
-        await createPaymentMutation.mutateAsync({
-          loanApplicationId: applicationId,
-          paymentMethod: "card",
-          opaqueData: {
-            dataDescriptor: response.opaqueData.dataDescriptor,
-            dataValue: response.opaqueData.dataValue,
-          },
-        });
-      } catch (error) {
-        console.error("Payment error:", error);
-      }
-    });
+    onPaymentComplete?.();
   };
 
   const handleCryptoPayment = async () => {
@@ -173,6 +90,7 @@ export function QuickPaymentButton({
         loanApplicationId: applicationId,
         paymentMethod: "crypto",
         cryptoCurrency: selectedCrypto,
+        idempotencyKey: cryptoIdempotencyKeyRef.current,
       });
     } catch (error) {
       console.error("Crypto payment error:", error);
@@ -184,20 +102,6 @@ export function QuickPaymentButton({
     setAddressCopied(true);
     toast.success(`${label} copied to clipboard`);
     setTimeout(() => setAddressCopied(false), 2000);
-  };
-
-  const formatCardNumber = (value: string) => {
-    const cleaned = value.replace(/\s/g, "");
-    const chunks = cleaned.match(/.{1,4}/g) || [];
-    return chunks.join(" ");
-  };
-
-  const formatExpiry = (value: string) => {
-    const cleaned = value.replace(/\D/g, "");
-    if (cleaned.length >= 2) {
-      return `${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}`;
-    }
-    return cleaned;
   };
 
   return (
@@ -220,11 +124,10 @@ export function QuickPaymentButton({
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "card" | "crypto")}>
+          <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "stripe" | "crypto")}>
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="card" className="flex items-center gap-2">
-                <CreditCard className="w-4 h-4" />
-                Credit/Debit Card
+              <TabsTrigger value="stripe" className="flex items-center gap-2">
+                💳 Card Payment (Stripe)
               </TabsTrigger>
               <TabsTrigger value="crypto" className="flex items-center gap-2">
                 <Bitcoin className="w-4 h-4" />
@@ -232,84 +135,23 @@ export function QuickPaymentButton({
               </TabsTrigger>
             </TabsList>
 
-            {/* Card Payment Tab */}
-            <TabsContent value="card" className="space-y-4 mt-6">
+            {/* Stripe Card Payment Tab */}
+            <TabsContent value="stripe" className="space-y-4 mt-6">
               <Card>
-                <CardContent className="pt-6 space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="cardName">Cardholder Name</Label>
-                    <Input
-                      id="cardName"
-                      placeholder="John Doe"
-                      value={cardName}
-                      onChange={(e) => setCardName(e.target.value)}
-                      disabled={processing}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="cardNumber">Card Number</Label>
-                    <Input
-                      id="cardNumber"
-                      placeholder="1234 5678 9012 3456"
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                      maxLength={19}
-                      disabled={processing}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="cardExpiry">Expiry (MM/YY)</Label>
-                      <Input
-                        id="cardExpiry"
-                        placeholder="12/25"
-                        value={cardExpiry}
-                        onChange={(e) => setCardExpiry(formatExpiry(e.target.value))}
-                        maxLength={5}
-                        disabled={processing}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="cardCvc">CVV</Label>
-                      <Input
-                        id="cardCvc"
-                        placeholder="123"
-                        value={cardCvc}
-                        onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, ""))}
-                        maxLength={4}
-                        disabled={processing}
-                        type="password"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t">
+                <CardContent className="pt-6">
+                  <div className="mb-4">
                     <div className="flex justify-between items-center mb-4">
                       <span className="text-sm text-muted-foreground">Processing Fee</span>
                       <span className="text-xl font-bold">{formatCurrency(processingFeeAmount)}</span>
                     </div>
-
-                    <Button
-                      onClick={handleCardPayment}
-                      disabled={processing || !cardNumber || !cardExpiry || !cardCvc || !cardName}
-                      className="w-full"
-                      size="lg"
-                    >
-                      {processing ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Processing Payment...
-                        </>
-                      ) : (
-                        <>
-                          Pay {formatCurrency(processingFeeAmount)}
-                        </>
-                      )}
-                    </Button>
                   </div>
+                  <StripePaymentForm
+                    loanApplicationId={applicationId}
+                    amount={processingFeeAmount}
+                    onSuccess={handleStripeSuccess}
+                    onError={(msg) => toast.error(msg)}
+                    onProcessing={setProcessing}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -319,7 +161,7 @@ export function QuickPaymentButton({
               <Card>
                 <CardContent className="pt-6 space-y-4">
                   <div className="space-y-2">
-                    <Label>Select Cryptocurrency</Label>
+                    <p className="text-sm font-medium">Select Cryptocurrency</p>
                     <div className="grid grid-cols-2 gap-2">
                       {(["BTC", "ETH", "USDT", "USDC"] as const).map((crypto) => (
                         <Button

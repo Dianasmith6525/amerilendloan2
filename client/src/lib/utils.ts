@@ -5,12 +5,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount: number | undefined): string {
-  if (amount === undefined || amount === null) return "$0.00";
+/**
+ * Format an amount stored in **cents** (integer) as a USD currency string.
+ * All monetary values in the database are stored in cents, so this helper
+ * divides by 100 before formatting.
+ */
+export function formatCurrency(cents: number | undefined): string {
+  if (cents === undefined || cents === null) return "$0.00";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-  }).format(amount);
+  }).format(cents / 100);
 }
 
 export function formatDate(date: string | Date | undefined): string {
